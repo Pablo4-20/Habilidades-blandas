@@ -21,6 +21,12 @@ class AuthController extends Controller
         }
 
         $user = User::where('email', $request->email)->firstOrFail();
+// 2. 🔒 NUEVO: Validar Verificación de Correo
+        if ($user->email_verified_at === null) {
+            return response()->json([
+                'message' => 'Tu cuenta no ha sido verificada. Por favor revisa tu correo y activa tu cuenta.'
+            ], 403); // 403 = Forbidden (Prohibido)
+        }
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([

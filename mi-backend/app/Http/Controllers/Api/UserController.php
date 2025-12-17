@@ -52,9 +52,17 @@ class UserController extends Controller
     // 3. Eliminar usuario
     public function destroy($id)
     {
+        // 🔒 SEGURIDAD: Evitar auto-eliminación
+        if (auth()->id() == $id) {
+            return response()->json([
+                'message' => 'No puedes eliminar tu propia cuenta de administrador.'
+            ], 403);
+        }
+
         $user = User::findOrFail($id);
         $user->delete();
-        return response()->json(['message' => 'Usuario eliminado']);
+        
+        return response()->json(['message' => 'Usuario eliminado correctamente']);
     }
     // Importación Masiva de Usuarios (CSV)
 // --- CARGA MASIVA INTELIGENTE (USUARIOS) ---

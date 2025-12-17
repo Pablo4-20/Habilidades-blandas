@@ -16,6 +16,7 @@ import {
 } from '@heroicons/react/24/outline';
 
 const GestionUsuarios = () => {
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
     // --- ESTADOS ---
     const [activeTab, setActiveTab] = useState('administrativo');
     const [dataList, setDataList] = useState([]); 
@@ -343,8 +344,10 @@ const GestionUsuarios = () => {
                                 <td className="px-6 py-4 text-right">
                                     <div className="flex items-center justify-end gap-2">
                                         <button onClick={() => handleEditar(item)} className="text-gray-400 hover:text-amber-600 p-2 hover:bg-amber-50 rounded-full transition"><PencilSquareIcon className="h-5 w-5" /></button>
+                                         {item.id !== currentUser.id && (       
                                         <button onClick={() => handleEliminar(item.id)} className="text-gray-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-full transition"><TrashIcon className="h-5 w-5" /></button>
-                                    </div>
+                                        )}
+                                        </div>
                                 </td>
                             </tr>
                         ))}

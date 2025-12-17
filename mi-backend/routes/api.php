@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\ReporteController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\PeriodoAcademicoController;
 use App\Http\Controllers\Api\VerificationController;
+use App\Http\Controllers\Api\NewPasswordController;
 
 Route::middleware('auth:sanctum')->group(function () {
     // ... tus otras rutas ...
@@ -27,6 +28,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
 // 1. LOGIN (Público)
 Route::post('/login', [AuthController::class, 'login']);
+
+Route::post('/forgot-password', [NewPasswordController::class, 'forgotPassword']);
+Route::post('/reset-password', [NewPasswordController::class, 'resetPassword']);
 
 Route::get('/email/verify/{id}/{hash}', [VerificationController::class, 'verify'])
     ->name('verification.verify'); // Este nombre es OBLIGATORIO para Laravel

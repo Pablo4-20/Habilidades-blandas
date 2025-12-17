@@ -5,13 +5,17 @@ import DashboardHome from './components/DashboardHome';
 import PlanificacionDocente from './components/PlanificacionDocente';
 import GestionUsuarios from './components/GestionUsuarios';
 import GestionHabilidades from './components/GestionHabilidades';
-import GestionAsignaturas from './components/GestionAsignaturas'; // Si lo creamos antes
+import GestionAsignaturas from './components/GestionAsignaturas'; 
 import AsignarMaterias from './components/AsignarMaterias';
-import EvaluacionDocente from './components/EvaluacionDocente'; // <--- ¡ESTA LÍNEA FALTABA!
+import EvaluacionDocente from './components/EvaluacionDocente';
 import RoleGuard from './components/RoleGuard';
 import ReportesDocente from './components/ReportesDocente';
 import ReportesCoordinador from './components/ReportesCoordinador';
 import GestionPeriodos from './components/GestionPeriodos';
+
+// 👇 IMPORTS FALTANTES (Esto solucionará tu error)
+import RecuperarPassword from './components/RecuperarPassword';
+import RestablecerPassword from './components/RestablecerPassword';
 
 // --- Rutas de Protección ---
 const ProtectedRoute = ({ children }) => {
@@ -30,20 +34,37 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Login */}
+        {/* --- ZONA PÚBLICA --- */}
+        
+        {/* Login (Ruta Raíz) */}
         <Route path="/" element={
             <PublicRoute>
                 <Login />
             </PublicRoute>
         } />
-{/* --- AGREGA ESTO: Opción B: Ruta explícita /login --- */}
+
+        {/* Login (Ruta Explícita) */}
         <Route path="/login" element={
             <PublicRoute>
                 <Login />
             </PublicRoute>
         } />
 
-        {/* Dashboard */}
+        {/* 👇 RUTAS DE RECUPERACIÓN DE CONTRASEÑA */}
+        <Route path="/recuperar-password" element={
+            <PublicRoute>
+                <RecuperarPassword />
+            </PublicRoute>
+        } />
+        
+        <Route path="/reset-password/:token" element={
+            <PublicRoute>
+                <RestablecerPassword />
+            </PublicRoute>
+        } />
+
+
+        {/* --- ZONA PRIVADA (DASHBOARD) --- */}
         <Route path="/dashboard" element={
             <ProtectedRoute>
                 <DashboardLayout />
@@ -71,8 +92,6 @@ function App() {
                 <Route path="asignaciones" element={<AsignarMaterias />} />
                 <Route path="reportes" element={<ReportesCoordinador />} />
             </Route>
-
-
         </Route>
       </Routes>
     </BrowserRouter>

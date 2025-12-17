@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../services/api';
-// 👇 CORRECCIÓN 1: Agregado useLocation aquí
-import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom'; 
-// 👇 CORRECCIÓN 2: Importar SweetAlert (asegúrate de haber instalado: npm install sweetalert2)
+// 👇 Importamos Link para la navegación a recuperar contraseña
+import { Link, useNavigate, useLocation } from 'react-router-dom'; 
 import Swal from 'sweetalert2'; 
 
 const Login = () => {
@@ -12,10 +11,11 @@ const Login = () => {
     const navigate = useNavigate();
     const location = useLocation(); 
 
+    // --- EFECTO: Mensajes de Verificación (Desde el Correo) ---
     useEffect(() => {
         const queryParams = new URLSearchParams(location.search);
         
-        // Caso 1: Verificación Exitosa
+        // Caso 1: Verificación Exitosa (?verified=true)
         if (queryParams.get('verified') === 'true' || queryParams.get('verified') === '1') {
             Swal.fire({
                 title: '¡Cuenta Activada!',
@@ -29,18 +29,19 @@ const Login = () => {
             window.history.replaceState({}, document.title, window.location.pathname);
         }
 
-        // Caso 2: Enlace Inválido o Expirado
+        // Caso 2: Enlace Inválido o Expirado (?error=invalid_link)
         if (queryParams.get('error') === 'invalid_link') {
             Swal.fire({
                 title: 'Enlace Inválido',
                 text: 'El enlace de verificación es incorrecto o ya ha expirado.',
                 icon: 'error',
-                confirmButtonColor: '#DC2626' // Red-600
+                confirmButtonColor: '#DC2626'
             });
             window.history.replaceState({}, document.title, window.location.pathname);
         }
     }, [location]);
 
+    // --- FUNCIÓN: Iniciar Sesión ---
     const handleLogin = async (e) => {
         e.preventDefault();
         setError('');
@@ -48,17 +49,38 @@ const Login = () => {
         try {
             const response = await api.post('/login', { email, password });
             
-            // Guardar sesión (token y datos del usuario)
+            // Guardar sesión
             localStorage.setItem('token', response.data.access_token);
-            // Asegurarse de guardar el objeto user como string
             localStorage.setItem('user', JSON.stringify(response.data.user));
 
-            // Redirección centralizada al único dashboard
+            // Redirección al Dashboard
             navigate('/dashboard'); 
 
         } catch (err) {
-            console.error(err); // Útil para ver el error real en consola
-            setError('Credenciales incorrectas. Verifique sus datos.');
+            console.error(err); 
+
+            if (err.response) {
+                // CASO 1: Cuenta no verificada (403)
+                if (err.response.status === 403) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Cuenta no verificada',
+                        text: 'Debes activar tu cuenta desde el enlace que enviamos a tu correo electrónico.',
+                        confirmButtonText: 'Entendido',
+                        confirmButtonColor: '#F59E0B' // Amber-500
+                    });
+                } 
+                // CASO 2: Contraseña incorrecta (401)
+                else if (err.response.status === 401) {
+                    setError('Credenciales incorrectas. Verifique sus datos.');
+                } 
+                // CASO 3: Otros errores
+                else {
+                    setError('Error de conexión o servidor. Intente más tarde.');
+                }
+            } else {
+                setError('No se pudo conectar con el servidor.');
+            }
         }
     };
 
@@ -72,7 +94,7 @@ const Login = () => {
                     <p className="text-gray-500 text-sm mt-1">Sistema de Habilidades Blandas - UEB</p>
                 </div>
 
-                {/* Mensaje de error */}
+                {/* Mensaje de error local (rojo pequeño) */}
                 {error && (
                     <div className="mb-4 p-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg text-center" role="alert">
                         {error}
@@ -80,7 +102,7 @@ const Login = () => {
                 )}
 
                 <form onSubmit={handleLogin} className="space-y-6">
-                    {/* Correo */}
+                    {/* Input Correo */}
                     <div>
                         <label className="block text-sm font-bold text-gray-700 mb-2">Correo Institucional</label>
                         <input 
@@ -93,7 +115,7 @@ const Login = () => {
                         />
                     </div>
 
-                    {/* Contraseña */}
+                    {/* Input Contraseña */}
                     <div>
                         <label className="block text-sm font-bold text-gray-700 mb-2">Contraseña</label>
                         <input 
@@ -104,9 +126,16 @@ const Login = () => {
                             placeholder="••••••••"
                             required
                         />
+                        
+                        {/* 👇 ENLACE NUEVO: Recuperar Contraseña */}
+                        <div className="flex justify-end mt-2">
+                            <Link to="/recuperar-password" className="text-sm text-blue-600 hover:text-blue-800 hover:underline font-medium">
+                                ¿Olvidaste tu contraseña?
+                            </Link>
+                        </div>
                     </div>
 
-                    {/* Botón */}
+                    {/* Botón Ingresar */}
                     <button 
                         type="submit" 
                         className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-md hover:shadow-lg transition duration-300 ease-in-out"
