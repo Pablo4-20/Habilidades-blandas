@@ -24,7 +24,8 @@ class User extends Authenticatable implements MustVerifyEmail
         'apellidos',
         'email',
         'password',
-        'rol', // Asegúrate de que 'rol' esté aquí también
+        'rol',
+        'must_change_password',
     ];
 
     /**

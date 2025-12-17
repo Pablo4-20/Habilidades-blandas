@@ -12,6 +12,7 @@ import RoleGuard from './components/RoleGuard';
 import ReportesDocente from './components/ReportesDocente';
 import ReportesCoordinador from './components/ReportesCoordinador';
 import GestionPeriodos from './components/GestionPeriodos';
+import CambiarPasswordInicial from './components/CambiarPasswordInicial';
 
 // 👇 IMPORTS FALTANTES (Esto solucionará tu error)
 import RecuperarPassword from './components/RecuperarPassword';
@@ -62,7 +63,12 @@ function App() {
                 <RestablecerPassword />
             </PublicRoute>
         } />
-
+        
+        <Route path="/primer-cambio-password" element={
+        <ProtectedRoute>
+            <CambiarPasswordInicial />
+        </ProtectedRoute>
+    } />
 
         {/* --- ZONA PRIVADA (DASHBOARD) --- */}
         <Route path="/dashboard" element={

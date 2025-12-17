@@ -39,10 +39,11 @@ class UserController extends Controller
         $user = User::create([
             'cedula' => $request->cedula,
             'nombres' => $request->nombres, 
-        'apellidos' => $request->apellidos, 
+             'apellidos' => $request->apellidos, 
             'email' => $request->email,
             'password' => Hash::make($request->password ?? 'password'), // Contraseña default: password
-            'rol' => $request->rol
+            'rol' => $request->rol,
+            'must_change_password' => true
         ]);
 
         event(new Registered($user));
@@ -114,7 +115,8 @@ class UserController extends Controller
                 'apellidos' => $apellidosFinal,
                 'email'     => $emailFinal,
                 'password'  => bcrypt(trim($row[4])), 
-                'rol'       => $rolFinal
+                'rol'       => $rolFinal,
+                'must_change_password' => true
             ];
 
             // --- 4. GUARDADO ---

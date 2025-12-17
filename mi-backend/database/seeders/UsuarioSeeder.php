@@ -14,12 +14,16 @@ class UsuarioSeeder extends Seeder
     DB::table('users')->updateOrInsert(
         ['email' => 'admin@ueb.edu.ec'],
         [
-            'cedula' => '0200000001',
-            'nombres' => 'Administrador', // Separado
-            'apellidos' => 'Sistema',     // Separado
+            'cedula' => '2134535673',
+            'nombres' => 'Admin', // Separado
+            'apellidos' => 'sistema',     // Separado
             'password' => Hash::make('password'),
             'rol' => 'admin',
-            'created_at' => now(), 'updated_at' => now(),
+            'email_verified_at' => now(),
+            'must_change_password' => false,
+
+            'created_at' => now(), 
+            'updated_at' => now(),
         ]
     );
 

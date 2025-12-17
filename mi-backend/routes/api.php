@@ -20,7 +20,7 @@ use App\Http\Controllers\Api\NewPasswordController;
 
 Route::middleware('auth:sanctum')->group(function () {
     // ... tus otras rutas ...
-
+    Route::post('/change-initial-password', [AuthController::class, 'changeInitialPassword']);
     // Rutas para el Coordinador
     Route::get('/reportes/filtros', [CoordinadorController::class, 'filtrosReporte']);
     Route::get('/reportes/general', [CoordinadorController::class, 'reporteGeneral']);

@@ -53,6 +53,12 @@ const Login = () => {
             localStorage.setItem('token', response.data.access_token);
             localStorage.setItem('user', JSON.stringify(response.data.user));
 
+            // Verificamos si el usuario debe cambiar su contraseña
+            if (response.data.require_password_change) {
+                navigate('/primer-cambio-password');
+            } else {
+                navigate('/dashboard'); 
+            }
             // Redirección al Dashboard
             navigate('/dashboard'); 
 
