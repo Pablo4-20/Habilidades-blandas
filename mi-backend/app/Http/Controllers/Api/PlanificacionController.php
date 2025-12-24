@@ -11,15 +11,18 @@ use Illuminate\Support\Facades\DB;
 
 class PlanificacionController extends Controller
 {
-    // Verificar habilidades y si ya existe planificación previa (EDICIÓN)
+    /**
+     * GET /api/planificacion/verificar/{asignatura_id}
+     * Muestra al docente si ya planificó y le da el catálogo global de habilidades para elegir.
+     */
     public function verificar(Request $request, $asignatura_id)
     {
         try {
             $user = $request->user();
-            $periodo = $request->query('periodo');
-            $parcialSolicitado = $request->query('parcial');
+            $periodo = $request->query('periodo'); // Ej: "2025-1"
+            $parcialSolicitado = $request->query('parcial'); // "1" o "2"
 
-            // 1. Obtener Asignación
+            // 1. Validar asignación docente (Filtro por periodo si se envía)
             $queryAsignacion = Asignacion::where('asignatura_id', $asignatura_id)
                 ->where('docente_id', $user->id);
 
@@ -32,82 +35,77 @@ class PlanificacionController extends Controller
             if (!$asignacion) {
                 return response()->json([
                     'tiene_asignacion' => false, 
-                    'message' => 'No tienes asignada esta materia en el periodo indicado.'
+                    'message' => 'No tienes asignada esta materia en el periodo seleccionado.'
                 ]);
             }
 
-            // 2. OBTENER HABILIDADES (CORREGIDO)
-            // Usamos 'with' para traer el nombre del catálogo y mapeamos para que el frontend lo entienda
-            $habilidades = HabilidadBlanda::with('catalogo')
-                ->where('asignatura_id', $asignatura_id)
-                ->get()
-                ->map(function($habilidad) {
-                    return [
-                        'id' => $habilidad->id, // ID de la asignación (importante para guardar)
-                        // 👇 AQUÍ RESCATAMOS EL NOMBRE Y DEFINICIÓN DEL CATÁLOGO
-                        'nombre' => $habilidad->catalogo ? $habilidad->catalogo->nombre : 'Sin Nombre',
-                        'definicion' => $habilidad->catalogo ? $habilidad->catalogo->definicion : '',
-                        'asignatura_id' => $habilidad->asignatura_id
-                    ];
-                });
+            // 2. Traer Catálogo Global (CAMBIO CRUCIAL: Todas las habilidades disponibles)
+            $catalogoHabilidades = HabilidadBlanda::select('id', 'nombre', 'descripcion')->get();
 
-            if ($habilidades->isEmpty()) {
-                return response()->json(['tiene_asignacion' => false, 'message' => 'Sin habilidades asignadas.']);
-            }
-
-            // 3. BUSCAR PLANIFICACIÓN
-            $query = Planificacion::with('detalles')
+            // 3. Buscar si YA existe planificación previa (Modo Edición)
+            $queryPlan = Planificacion::with('detalles')
                 ->where('asignatura_id', $asignatura_id)
                 ->where('docente_id', $user->id)
                 ->where('periodo_academico', $asignacion->periodo);
 
             if ($parcialSolicitado) {
-                $query->where('parcial', $parcialSolicitado);
+                $queryPlan->where('parcial', $parcialSolicitado);
             } else {
-                $query->latest();
+                $queryPlan->latest();
             }
 
-            $planDocente = $query->first();
+            $planDocente = $queryPlan->first();
 
-            $actividadesGuardadas = [];
-            $esEdicion = false;
-            $parcialGuardado = null;
+            // 4. Preparar respuesta para el Frontend
+            $datosRespuesta = [
+                'tiene_asignacion' => true,
+                'periodo_detectado' => $asignacion->periodo,
+                'catalogo_habilidades' => $catalogoHabilidades, // Menú completo de opciones
+                'es_edicion' => false,
+                'parcial_guardado' => null,
+                'habilidades_seleccionadas' => [], // IDs de las habilidades que el docente eligió antes
+                'actividades_guardadas' => []      // Texto de las actividades por habilidad
+            ];
 
             if ($planDocente) {
-                $esEdicion = true;
-                $parcialGuardado = $planDocente->parcial;
+                $datosRespuesta['es_edicion'] = true;
+                $datosRespuesta['parcial_guardado'] = $planDocente->parcial;
+                
+                // Reconstruir lo que guardó el docente
                 foreach ($planDocente->detalles as $detalle) {
-                    // Guardamos las actividades seleccionadas
-                    $actividadesGuardadas[$detalle->habilidad_blanda_id] = explode("\n", $detalle->actividades);
+                    // Guardamos el ID para que el checkbox aparezca marcado
+                    $datosRespuesta['habilidades_seleccionadas'][] = $detalle->habilidad_blanda_id;
+                    
+                    // Guardamos la actividad asociada
+                    $datosRespuesta['actividades_guardadas'][$detalle->habilidad_blanda_id] = $detalle->actividades;
                 }
             }
 
-            return response()->json([
-                'tiene_asignacion' => true,
-                'habilidades' => $habilidades,
-                'es_edicion' => $esEdicion,
-                'actividades_guardadas' => $actividadesGuardadas,
-                'parcial_guardado' => $parcialGuardado,
-                'periodo_detectado' => $asignacion->periodo
-            ]);
+            return response()->json($datosRespuesta);
 
         } catch (\Exception $e) {
             return response()->json(['message' => 'Error: ' . $e->getMessage()], 500);
         }
     }
 
-    // Guardar o Actualizar (Se mantiene igual, solo asegúrate de tener los imports correctos)
-   public function store(Request $request)
+    /**
+     * POST /api/planificacion
+     * Guarda la selección del docente (Habilidades + Actividades).
+     */
+    public function store(Request $request)
     {
+        // 1. Validación
         $request->validate([
             'asignatura_id' => 'required',
             'docente_id' => 'required',
             'parcial' => 'required',
             'periodo_academico' => 'required',
-            'detalles' => 'required|array', 
+            'detalles' => 'required|array', // Array de { habilidad_blanda_id, actividades }
         ]);
 
         return DB::transaction(function () use ($request) {
+            // 2. Guardar o Actualizar la Cabecera (Planificación)
+            // Clave única: Asignatura + Parcial + Periodo
             $planificacion = Planificacion::updateOrCreate(
                 [
                     'asignatura_id' => $request->asignatura_id,
@@ -115,21 +113,28 @@ class PlanificacionController extends Controller
                     'periodo_academico' => $request->periodo_academico
                 ],
                 [
-                    'docente_id' => $request->docente_id 
+                    'docente_id' => $request->docente_id
                 ]
             );
 
-            // Reiniciamos detalles para evitar duplicados
+            // 3. Guardar los Detalles
+            // Estrategia: Borrar previos e insertar nuevos (limpieza total para evitar duplicados)
             $planificacion->detalles()->delete();
 
             foreach ($request->detalles as $detalle) {
+                // Si no viene ID de habilidad, saltamos
+                if (empty($detalle['habilidad_blanda_id'])) continue;
+
                 $planificacion->detalles()->create([
                     'habilidad_blanda_id' => $detalle['habilidad_blanda_id'],
-                    'actividades' => $detalle['actividades']
+                    // Si el front envía array de actividades, lo convertimos a texto; si es texto, se queda igual.
+                    'actividades' => is_array($detalle['actividades']) 
+                                     ? implode("\n", $detalle['actividades']) 
+                                     : $detalle['actividades']
                 ]);
             }
 
-            return response()->json(['message' => 'Guardado exitosamente'], 200);
+            return response()->json(['message' => 'Planificación guardada exitosamente'], 200);
         });
     }
 }

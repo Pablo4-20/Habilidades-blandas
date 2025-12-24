@@ -1,214 +1,194 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import api from '../services/api';
 import Swal from 'sweetalert2';
-import CustomSelect from './ui/CustomSelect'; 
+import * as XLSX from 'xlsx'; 
 import { 
     MagnifyingGlassIcon, PlusIcon, PencilSquareIcon, TrashIcon,
-    SparklesIcon, DocumentTextIcon, CloudArrowUpIcon, BookOpenIcon, FunnelIcon,
-    CheckBadgeIcon, XMarkIcon
+    SparklesIcon, CloudArrowUpIcon, XMarkIcon, DocumentTextIcon,
+    LightBulbIcon, ArrowDownTrayIcon
 } from '@heroicons/react/24/outline';
 
-// --- CATÁLOGO DE REFERENCIA ---
-const CATALOGO_GUIA = {
-    'Adaptabilidad': 'Capacidad de ajustarse de manera efectiva a cambios y nuevos desafíos.',
-    'Aprender a Aprender': 'Capacidad de gestionar y optimizar el propio proceso de aprendizaje.',
-    'Asertividad': 'Expresar opiniones y sentimientos de forma clara, directa y respetuosa.',
-    'Creatividad': 'Capacidad de generar ideas originales y soluciones innovadoras.',
-    'Pensamiento Crítico': 'Analizar y evaluar información de manera lógica, objetiva y racional.',
-    'Liderazgo': 'Capacidad de influir, motivar e inspirar a otros para metas comunes.',
-    'Toma de Decisiones': 'Seleccionar la mejor opción entre diversas alternativas.',
-    'Trabajo en Equipo': 'Colaborar efectivamente con otros para alcanzar un objetivo común.',
-    'Comunicación Efectiva': 'Transmitir ideas, pensamientos y necesidades de manera clara.',
-    'Resolución de Problemas': 'Identificar y abordar desafíos de manera efectiva y lógica.',
-    'Gestión del Tiempo': 'Planificar y priorizar tareas para optimizar recursos y plazos.'
-};
-
 const GestionHabilidades = () => {
+    // --- ESTADOS ---
     const [habilidades, setHabilidades] = useState([]);
-    const [asignaturas, setAsignaturas] = useState([]); 
     const [loading, setLoading] = useState(false);
     const [busqueda, setBusqueda] = useState('');
-    const [filtroAsignatura, setFiltroAsignatura] = useState('');
 
     const [showModal, setShowModal] = useState(false);
     const [showImportModal, setShowImportModal] = useState(false);
-    const [fileToUpload, setFileToUpload] = useState(null);
-
+    
     // Formulario
-    const [form, setForm] = useState({ 
-        asignatura_id: '', 
-        selected_skills: [] 
-    });
+    const [isEditing, setIsEditing] = useState(false);
+    const [form, setForm] = useState({ id: null, nombre: '', descripcion: '' });
+
+    // Archivos
+    const [fileToUpload, setFileToUpload] = useState(null);
+    const [fileName, setFileName] = useState('');
+    const fileInputRef = useRef(null);
 
     useEffect(() => { fetchData(); }, []);
 
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [resHab, resAsig] = await Promise.all([
-                api.get('/habilidades'),
-                api.get('/asignaturas')
-            ]);
-            setHabilidades(Array.isArray(resHab.data) ? resHab.data : []);
-            setAsignaturas(Array.isArray(resAsig.data) ? resAsig.data : []);
-        } catch (error) { setHabilidades([]); } finally { setLoading(false); }
-    };
-
-    // --- AGRUPACIÓN CORREGIDA ---
-    const datosAgrupados = habilidades.reduce((acc, curr) => {
-        const term = busqueda.toLowerCase();
-        // Validación extra para evitar errores si asignatura es null
-        const nombreAsignatura = curr.asignatura?.nombre || 'Sin Asignatura';
-        
-        const matchText = curr.nombre.toLowerCase().includes(term) || nombreAsignatura.toLowerCase().includes(term);
-        // Conversión a String para asegurar comparación correcta
-        const matchAsig = filtroAsignatura ? String(curr.asignatura_id) === String(filtroAsignatura) : true;
-
-        if (matchText && matchAsig) {
-            const idMateria = curr.asignatura_id || 'sin-id';
-            
-            if (!acc[idMateria]) {
-                acc[idMateria] = {
-                    idGrupo: idMateria, 
-                    asignatura: curr.asignatura,
-                    skills: []
-                };
-            }
-            acc[idMateria].skills.push(curr);
+            const res = await api.get('/habilidades-blandas');
+            setHabilidades(Array.isArray(res.data) ? res.data : []);
+        } catch (error) { 
+            console.error(error);
+            setHabilidades([]); 
+        } finally { 
+            setLoading(false); 
         }
-        return acc;
-    }, {});
-
-    const listaAgrupada = Object.values(datosAgrupados);
-
-    // --- ACCIONES ---
-    const toggleSkill = (skillName) => {
-        setForm(prev => {
-            const current = prev.selected_skills;
-            if (current.includes(skillName)) {
-                return { ...prev, selected_skills: current.filter(s => s !== skillName) };
-            } else {
-                return { ...prev, selected_skills: [...current, skillName] };
-            }
-        });
     };
 
-    const openModal = (materiaId = '', skillsExistentes = []) => {
-        if (materiaId) {
-            const skillsNames = skillsExistentes.map(s => s.nombre);
-            setForm({
-                asignatura_id: materiaId,
-                selected_skills: skillsNames
-            });
+    // --- FILTRADO ---
+    const filteredData = habilidades.filter(item => 
+        item.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
+        (item.descripcion && item.descripcion.toLowerCase().includes(busqueda.toLowerCase()))
+    );
+
+    // --- ACCIONES DEL FORMULARIO ---
+    const openModal = (item = null) => {
+        if (item) {
+            setIsEditing(true);
+            setForm({ id: item.id, nombre: item.nombre, descripcion: item.descripcion || '' });
         } else {
-            setForm({ asignatura_id: '', selected_skills: [] });
+            setIsEditing(false);
+            setForm({ id: null, nombre: '', descripcion: '' });
         }
         setShowModal(true);
     };
 
-   const handleGuardar = async (e) => {
+    const handleGuardar = async (e) => {
         e.preventDefault();
-        
-        if(!form.asignatura_id) return Swal.fire('Error', 'Selecciona una asignatura.', 'warning');
-        if(form.selected_skills.length === 0) return Swal.fire('Error', 'Selecciona al menos una habilidad.', 'warning');
-
         try {
-            const payload = {
-                asignatura_id: form.asignatura_id,
-                habilidades: form.selected_skills.map(name => ({
-                    nombre: name,
-                    definicion: CATALOGO_GUIA[name]
-                }))
-            };
-            
-            await api.post('/habilidades', payload);
-            
-            Swal.fire({
-                title: '¡Guardado!',
-                text: 'Las habilidades se han actualizado correctamente.',
-                icon: 'success',
-                timer: 2000,
-                showConfirmButton: false
-            });
-
+            if (isEditing) {
+                await api.put(`/habilidades-blandas/${form.id}`, form);
+                Swal.fire({ title: 'Actualizado', icon: 'success', timer: 1500, showConfirmButton: false });
+            } else {
+                await api.post('/habilidades-blandas', form);
+                Swal.fire({ title: 'Creado', text: 'Habilidad agregada al catálogo', icon: 'success', timer: 1500, showConfirmButton: false });
+            }
             setShowModal(false);
-            fetchData(); 
-            
-        } catch (error) { 
+            fetchData();
+        } catch (error) {
             console.error(error);
-            Swal.fire('Error', 'No se pudo guardar la configuración.', 'error'); 
+            Swal.fire('Error', 'No se pudo guardar la habilidad.', 'error');
         }
     };
 
-    const handleEliminarHabilidad = (id, nombre) => {
+    const handleEliminar = (id) => {
         Swal.fire({
-            title: `¿Quitar ${nombre}?`, 
-            text: "Se eliminará solo esta habilidad.", 
-            icon: 'warning', 
-            showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Sí, quitar', cancelButtonText: 'Cancelar'
-        }).then(async (result) => {
-            if (result.isConfirmed) {
-                await api.delete(`/habilidades/${id}`);
-                fetchData();
-                Swal.fire('Eliminado', '', 'success');
-            }
-        });
-    };
-
-    const handleEliminarGrupo = (nombreAsignatura, skills) => {
-        Swal.fire({
-            title: '¿Eliminar Grupo?',
-            text: `Se eliminarán TODAS las habilidades asignadas a: ${nombreAsignatura}`,
+            title: '¿Eliminar del catálogo?',
+            text: "Esta habilidad dejará de estar disponible.",
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#EF4444',
-            confirmButtonText: 'Sí, eliminar todo'
+            confirmButtonText: 'Sí, eliminar'
         }).then(async (result) => {
             if (result.isConfirmed) {
                 try {
-                    await Promise.all(skills.map(s => api.delete(`/habilidades/${s.id}`)));
+                    await api.delete(`/habilidades-blandas/${id}`);
                     fetchData();
-                    Swal.fire('Grupo Eliminado', 'Se han quitado todas las asignaciones.', 'success');
+                    Swal.fire('Eliminado', '', 'success');
                 } catch (error) {
-                    Swal.fire('Error', 'No se pudo completar la eliminación.', 'error');
+                    Swal.fire('Error', 'No se pudo eliminar.', 'error');
                 }
             }
         });
     };
 
-    const handleImportar = async (e) => {
-        if (e) e.preventDefault();
-        if (!fileToUpload) return Swal.fire('Atención', 'Seleccione CSV.', 'warning');
-        const formData = new FormData();
-        formData.append('file', fileToUpload);
+    // --- LÓGICA IMPORTACIÓN (EXCEL/CSV) ---
+    const downloadTemplate = () => {
+        const data = [
+            { Nombre: "Liderazgo", Descripcion: "Capacidad de guiar y motivar al equipo." },
+            { Nombre: "Pensamiento Crítico", Descripcion: "Análisis objetivo para tomar decisiones." }
+        ];
+        const worksheet = XLSX.utils.json_to_sheet(data);
+        const wscols = [{wch: 30}, {wch: 60}];
+        worksheet['!cols'] = wscols;
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Catálogo Habilidades");
+        XLSX.writeFile(workbook, "Plantilla_Habilidades.xlsx");
+    };
+
+    const handleFileSelect = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            setFileToUpload(file);
+            setFileName(file.name);
+        }
+    };
+
+    const handleClickUploadArea = () => {
+        fileInputRef.current.click();
+    };
+
+    const handleImportar = async () => {
+        if (!fileToUpload) return Swal.fire('Atención', 'Seleccione un archivo.', 'warning');
+        Swal.showLoading();
+
         try {
-            Swal.fire({ title: 'Procesando...', didOpen: () => Swal.showLoading() });
-            const res = await api.post('/habilidades/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-            
-            if (res.data.warning) {
-                Swal.fire({
-                    title: 'Importación Parcial',
-                    text: res.data.message,
-                    input: 'textarea',
-                    inputValue: res.data.warning,
-                    icon: 'warning',
-                    confirmButtonText: 'Entendido'
-                });
+            if (fileToUpload.name.endsWith('.xlsx') || fileToUpload.name.endsWith('.xls')) {
+                const reader = new FileReader();
+                reader.onload = async (evt) => {
+                    const bstr = evt.target.result;
+                    const workbook = XLSX.read(bstr, { type: 'binary' });
+                    const wsname = workbook.SheetNames[0];
+                    const ws = workbook.Sheets[wsname];
+                    const csvData = XLSX.utils.sheet_to_csv(ws);
+                    const blob = new Blob([csvData], { type: 'text/csv' });
+                    const convertedFile = new File([blob], "converted.csv", { type: "text/csv" });
+                    await enviarArchivoAlBackend(convertedFile);
+                };
+                reader.readAsBinaryString(fileToUpload);
             } else {
-                Swal.fire('¡Éxito!', res.data.message, 'success');
+                await enviarArchivoAlBackend(fileToUpload);
             }
+        } catch (error) {
+            console.error(error);
+            Swal.fire('Error', 'Error al procesar el archivo.', 'error');
+        }
+    };
+
+    const enviarArchivoAlBackend = async (file) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        try {
+            const res = await api.post('/habilidades-blandas/import', formData, { 
+                headers: { 'Content-Type': 'multipart/form-data' } 
+            });
+            
+            const { message, errores } = res.data;
+            
+            let htmlContent = `<p class="text-green-600 font-bold mb-2">${message}</p>`;
+
+            if (errores && errores.length > 0) {
+                htmlContent += `
+                    <div class="mt-2 p-3 bg-red-50 border border-red-200 rounded text-left text-sm max-h-40 overflow-y-auto">
+                        <p class="font-bold text-red-600 mb-1">Errores:</p>
+                        <ul class="list-disc pl-4 text-red-500">
+                            ${errores.map(err => `<li>${err}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+
+            Swal.fire({
+                title: 'Resumen de Importación',
+                html: htmlContent,
+                icon: (errores && errores.length > 0) ? 'warning' : 'success'
+            });
 
             setShowImportModal(false);
             setFileToUpload(null);
+            setFileName('');
             fetchData();
-        } catch (error) { Swal.fire('Error', 'Error al procesar el archivo.', 'error'); }
+        } catch (error) {
+            Swal.fire('Error', 'Falló la conexión con el servidor.', 'error');
+        }
     };
-
-    const opcionesAsignaturas = asignaturas.map(a => ({
-        value: a.id,
-        label: a.nombre,
-        subtext: `${a.carrera} (${a.unidad_curricular})`
-    }));
 
     return (
         <div className="space-y-6 animate-fade-in">
@@ -216,243 +196,163 @@ const GestionHabilidades = () => {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                     <h2 className="text-2xl font-bold text-gray-900">Catálogo de Habilidades</h2>
-                    <p className="text-gray-500 text-sm mt-1">Gestión de competencias agrupadas por asignatura</p>
+                    <p className="text-gray-500 text-sm mt-1">
+                        Banco global de habilidades blandas disponibles para los docentes.
+                    </p>
                 </div>
                 <div className="flex gap-3">
-                    <button type="button" onClick={() => setShowImportModal(true)} className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-full font-bold shadow-md transition text-sm">
-                        <DocumentTextIcon className="h-5 w-5" /> Carga Masiva
+                    <button onClick={() => setShowImportModal(true)} className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-lg font-medium shadow-sm transition text-sm">
+                        <CloudArrowUpIcon className="h-5 w-5" /> Carga Masiva
                     </button>
-                    <button type="button" onClick={() => openModal()} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-full font-bold shadow-md transition text-sm">
-                        <PlusIcon className="h-5 w-5" /> Nueva Asignacion de Habilidad
+                    {/* BOTÓN AZUL AHORA */}
+                    <button onClick={() => openModal()} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg font-medium shadow-sm transition text-sm">
+                        <PlusIcon className="h-5 w-5" /> Nueva Habilidad
                     </button>
                 </div>
             </div>
 
-            {/* FILTROS */}
-            <div className="flex flex-col md:flex-row gap-4 bg-gray-50 p-4 rounded-xl border border-gray-200">
-                <div className="relative flex-1">
+            {/* BARRA DE BÚSQUEDA */}
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                <div className="relative">
                     <MagnifyingGlassIcon className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-                    <input type="text" className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-100"
-                        placeholder="Buscar materia o habilidad..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
-                </div>
-                
-                {/* 👇 SOLUCIÓN: Botón de limpiar separado para asegurar que funcione */}
-                <div className="w-full md:w-72 flex gap-2 items-center">
-                    <div className="flex-1">
-                        <CustomSelect 
-                            placeholder="Filtrar por Materia" 
-                            options={opcionesAsignaturas} 
-                            value={filtroAsignatura} 
-                            onChange={setFiltroAsignatura} 
-                            searchable={true} 
-                        />
-                    </div>
-                    {/* Botón rojo explícito si hay filtro activo */}
-                    {filtroAsignatura && (
-                        <button 
-                            onClick={() => setFiltroAsignatura('')}
-                            className="p-2.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition shadow-sm border border-red-100"
-                            title="Borrar filtro"
-                        >
-                            <XMarkIcon className="h-5 w-5" />
-                        </button>
-                    )}
+                    <input type="text" className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-100"
+                        placeholder="Buscar habilidad por nombre o descripción..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
                 </div>
             </div>
 
-            {/* TABLA AGRUPADA */}
+            {/* TABLA DE HABILIDADES (AHORA EN LUGAR DE CARDS) */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 <table className="min-w-full divide-y divide-gray-100">
                     <thead className="bg-gray-50">
                         <tr>
-                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-1/3">Asignatura</th>
-                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-2/3">Habilidades Asignadas</th>
-                            <th className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Acciones</th>
+                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-1/4">Nombre</th>
+                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-1/2">Descripción</th>
+                            <th className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider w-1/4">Acciones</th>
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-50">
-                        {loading ? <tr><td colSpan="3" className="text-center py-10">Cargando...</td></tr> : 
-                         listaAgrupada.length === 0 ? <tr><td colSpan="3" className="text-center py-10 text-gray-400"><FunnelIcon className="h-10 w-10 mx-auto mb-2 opacity-20"/>Sin datos.</td></tr> :
-                         listaAgrupada.map((grupo) => (
-                            <tr key={grupo.idGrupo} className="hover:bg-gray-50 transition group">
-                                <td className="px-6 py-4 align-top">
-                                    <div className="flex items-start gap-3">
-                                        <div className="p-2 bg-blue-50 rounded-lg text-blue-600 mt-1">
-                                            <BookOpenIcon className="h-5 w-5"/>
-                                        </div>
-                                        <div>
-                                            <h4 className="font-bold text-gray-900 text-sm">
-                                                {grupo.asignatura?.nombre || 'Materia Desconocida'}
-                                            </h4>
-                                            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full border border-gray-200 mt-1 inline-block">
-                                                {grupo.asignatura?.carrera || 'Sin carrera'}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </td>
-
-                                <td className="px-6 py-4 align-top">
-                                    <div className="flex flex-wrap gap-2">
-                                        {grupo.skills.map(skill => (
-                                            <div key={skill.id} className="flex items-center gap-1 pl-3 pr-1 py-1.5 rounded-full bg-purple-50 text-purple-700 border border-purple-100 text-sm font-medium transition hover:shadow-sm hover:bg-purple-100">
-                                                <SparklesIcon className="h-3 w-3"/>
-                                                {skill.nombre}
-                                                <button 
-                                                    onClick={() => handleEliminarHabilidad(skill.id, skill.nombre)}
-                                                    className="ml-2 p-0.5 rounded-full text-purple-400 hover:bg-red-100 hover:text-red-600 transition"
-                                                    title="Quitar esta habilidad"
-                                                >
-                                                    <XMarkIcon className="h-4 w-4"/>
-                                                </button>
+                        {loading ? (
+                            <tr><td colSpan="3" className="text-center py-10 text-gray-500">Cargando catálogo...</td></tr>
+                        ) : filteredData.length === 0 ? (
+                            <tr><td colSpan="3" className="text-center py-12 text-gray-400">No se encontraron habilidades.</td></tr>
+                        ) : (
+                            filteredData.map((item) => (
+                                <tr key={item.id} className="hover:bg-gray-50 transition">
+                                    <td className="px-6 py-4 align-top">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+                                                <SparklesIcon className="h-5 w-5" />
                                             </div>
-                                        ))}
-                                    </div>
-                                    <p className="text-[10px] text-gray-400 mt-2 italic pl-1">* Actividades a definir por docente.</p>
-                                </td>
-
-                                <td className="px-6 py-4 align-top text-right">
-                                    <div className="flex justify-end gap-2">
-                                        <button 
-                                            onClick={() => grupo.asignatura ? openModal(grupo.asignatura.id, grupo.skills) : Swal.fire('Error', 'Datos de asignatura incompletos', 'error')}
-                                            className="text-blue-400 hover:text-blue-600 p-2 hover:bg-blue-50 rounded-full transition" 
-                                            title="Editar Grupo"
-                                        >
-                                            <PencilSquareIcon className="h-5 w-5" />
-                                        </button>
-                                        
-                                        <button 
-                                            onClick={() => handleEliminarGrupo(grupo.asignatura?.nombre || 'Grupo', grupo.skills)}
-                                            className="text-gray-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-full transition" 
-                                            title="Eliminar todas las habilidades"
-                                        >
-                                            <TrashIcon className="h-5 w-5" />
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
+                                            <span className="font-bold text-gray-800">{item.nombre}</span>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 align-top">
+                                        <p className="text-sm text-gray-600 line-clamp-2">
+                                            {item.descripcion || 'Sin descripción definida.'}
+                                        </p>
+                                    </td>
+                                    <td className="px-6 py-4 align-top text-right">
+                                        <div className="flex justify-end gap-2">
+                                            <button onClick={() => openModal(item)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-full transition" title="Editar">
+                                                <PencilSquareIcon className="h-5 w-5"/>
+                                            </button>
+                                            <button onClick={() => handleEliminar(item.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full transition" title="Eliminar">
+                                                <TrashIcon className="h-5 w-5"/>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))
+                        )}
                     </tbody>
                 </table>
             </div>
 
-            {/* MODAL EDITAR / CREAR */}
+            {/* MODAL CREAR/EDITAR (AZUL) */}
             {showModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-4 animate-fade-in">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6 flex flex-col max-h-[90vh]">
-                        <h3 className="text-xl font-bold mb-4 text-gray-800 border-b pb-2">
-                            {form.asignatura_id && form.selected_skills.length > 0 ? 'Editar Habilidades' : 'Nueva Asignación'}
-                        </h3>
-                        <div className="space-y-5 overflow-y-auto flex-1 pr-2">
-                            <CustomSelect 
-                                label="Asignatura"
-                                options={opcionesAsignaturas}
-                                value={form.asignatura_id}
-                                onChange={(val) => setForm({...form, asignatura_id: val})}
-                                placeholder="Escribe para buscar asignatura..."
-                                searchable={true}
-                                icon={BookOpenIcon}
-                                disabled={listaAgrupada.some(g => g.asignatura?.id === form.asignatura_id && form.selected_skills.length > 0)}
-                            />
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm transition-all animate-fade-in">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all scale-100">
+                        {/* Cabecera Azul */}
+                        <div className="px-8 py-6 bg-gradient-to-r from-blue-700 to-indigo-800 flex justify-between items-center">
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-3 flex items-center gap-2">
-                                    <SparklesIcon className="h-4 w-4 text-blue-600"/>
-                                    Seleccione las Habilidades
-                                </label>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    {Object.keys(CATALOGO_GUIA).map((skillName) => (
-                                        <div key={skillName} 
-                                            onClick={() => toggleSkill(skillName)}
-                                            className={`
-                                                cursor-pointer p-3 rounded-xl border transition-all duration-200 flex items-start gap-3
-                                                ${form.selected_skills.includes(skillName) 
-                                                    ? 'bg-blue-50 border-blue-500 shadow-sm ring-1 ring-blue-500' 
-                                                    : 'bg-white border-gray-200 hover:border-blue-300 hover:bg-gray-50'}
-                                            `}
-                                        >
-                                            <div className={`
-                                                w-5 h-5 rounded border flex items-center justify-center mt-0.5 transition-colors
-                                                ${form.selected_skills.includes(skillName) ? 'bg-blue-600 border-blue-600' : 'border-gray-300 bg-white'}
-                                            `}>
-                                                {form.selected_skills.includes(skillName) && <CheckBadgeIcon className="h-4 w-4 text-white"/>}
-                                            </div>
-                                            <div>
-                                                <p className={`text-sm font-bold ${form.selected_skills.includes(skillName) ? 'text-blue-800' : 'text-gray-700'}`}>{skillName}</p>
-                                                <p className="text-[10px] text-gray-500 leading-tight mt-1">{CATALOGO_GUIA[skillName]}</p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
+                                <h3 className="text-xl font-bold text-white tracking-wide">{isEditing ? 'Editar Habilidad' : 'Nueva Habilidad'}</h3>
+                                <p className="text-blue-100 text-sm mt-1">Definición para el catálogo global</p>
                             </div>
+                            <button onClick={() => setShowModal(false)} className="p-2 bg-white/10 rounded-full text-white hover:bg-white/20 transition-colors">
+                                <XMarkIcon className="h-6 w-6" />
+                            </button>
                         </div>
-                        <div className="flex gap-3 pt-4 border-t mt-4 bg-white">
-                            <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-3 bg-gray-100 rounded-xl font-bold text-gray-600 hover:bg-gray-200 transition">Cancelar</button>
-                            <button type="button" onClick={handleGuardar} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition shadow-lg">Guardar Cambios</button>
-                        </div>
+                        <form onSubmit={handleGuardar} className="p-8 space-y-6">
+                            <div className="space-y-2">
+                                <label className="text-sm font-semibold text-gray-700 flex items-center gap-2"><LightBulbIcon className="h-4 w-4 text-blue-600" /> Nombre</label>
+                                <input type="text" required placeholder="Ej: Trabajo en Equipo" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-700 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all outline-none"
+                                    value={form.nombre} onChange={e => setForm({...form, nombre: e.target.value})} />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-semibold text-gray-700 flex items-center gap-2"><DocumentTextIcon className="h-4 w-4 text-blue-600" /> Descripción</label>
+                                <textarea required placeholder="Describe brevemente en qué consiste..." rows="4" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-700 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all outline-none resize-none"
+                                    value={form.descripcion} onChange={e => setForm({...form, descripcion: e.target.value})} />
+                            </div>
+                            <div className="pt-4 flex gap-4">
+                                <button type="button" onClick={() => setShowModal(false)} className="flex-1 px-4 py-3 rounded-xl border border-gray-200 text-gray-700 font-medium hover:bg-gray-50 transition-all">Cancelar</button>
+                                {/* Botón Guardar Azul */}
+                                <button type="submit" className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold shadow-lg shadow-blue-500/30 hover:shadow-blue-500/40 hover:-translate-y-0.5 transition-all">
+                                    {isEditing ? 'Guardar' : 'Agregar al Catálogo'}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}
 
-            {/* MODAL IMPORTAR */}
+            {/* MODAL IMPORTAR (Drag & Drop) */}
             {showImportModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-4 animate-fade-in">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 text-center">
-                        <CloudArrowUpIcon className="h-12 w-12 text-green-600 mx-auto mb-4 bg-green-50 p-2 rounded-full"/>
-                        <h3 className="text-xl font-bold mb-2">Carga Masiva</h3>
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-8 text-center relative overflow-hidden">
                         
-                        <div className="bg-slate-100 p-4 rounded-lg text-left mb-6 border border-slate-200">
-                            <p className="text-xs font-bold text-slate-500 uppercase mb-2">Estructura del CSV:</p>
-                            <div className="bg-white border border-slate-300 rounded overflow-hidden mb-2">
-                                <table className="w-full text-xs text-left">
-                                    <thead className="bg-slate-50 text-slate-600 font-bold border-b">
-                                        <tr>
-                                            <th className="p-1 border-r">Asignatura</th>
-                                            <th className="p-1 border-r">Nombre Habilidad</th>
-                                            <th className="p-1">Definición</th>
-                                        </tr>
+                        <div className="mx-auto w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mb-4 border border-green-100">
+                            <CloudArrowUpIcon className="h-10 w-10 text-green-600" />
+                        </div>
+
+                        <h3 className="text-2xl font-bold text-gray-900 mb-2">Carga Masiva de Habilidades</h3>
+                        
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6 mt-4 text-left">
+                            <div className="flex justify-between items-center mb-3">
+                                <h4 className="text-xs font-bold text-slate-500 uppercase">Estructura Excel/CSV:</h4>
+                                <button onClick={downloadTemplate} className="text-xs flex items-center gap-1 text-green-700 hover:text-green-800 font-semibold bg-white px-3 py-1.5 rounded-lg border border-green-200 shadow-sm">
+                                    <ArrowDownTrayIcon className="h-3 w-3" /> Descargar Plantilla
+                                </button>
+                            </div>
+                            <div className="overflow-hidden rounded-lg border border-slate-300 shadow-sm">
+                                <table className="min-w-full text-xs text-left">
+                                    <thead className="bg-slate-200 text-slate-700 font-bold">
+                                        <tr><th className="px-3 py-2 border-r border-slate-300">Nombre</th><th className="px-3 py-2">Descripcion</th></tr>
                                     </thead>
-                                    <tbody className="text-slate-500 font-mono">
-                                        <tr>
-                                            <td className="p-1 border-r border-b">Matemática</td>
-                                            <td className="p-1 border-r border-b">Liderazgo</td>
-                                            <td className="p-1 border-b">Capacidad de...</td>
-                                        </tr>
+                                    <tbody className="bg-white text-slate-600">
+                                        <tr><td className="px-3 py-2 border-r">Liderazgo</td><td className="px-3 py-2">Capacidad de...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
-                            <p className="text-[10px] text-gray-400">
-                                * El nombre de la asignatura debe ser exacto.<br/>
-                                * Las actividades se dejarán vacías para el docente.
-                            </p>
                         </div>
 
-                        <label className="block w-full cursor-pointer bg-green-50 border-2 border-dashed border-green-200 hover:bg-green-100 transition rounded-xl p-4 text-center mb-6">
-                            <span className="text-sm font-bold text-green-700 block">
-                                {fileToUpload ? fileToUpload.name : "Clic aquí para buscar archivo .CSV"}
-                            </span>
-                            <span className="text-xs text-green-600 mt-1">Soporta separadores coma (,) y punto y coma (;)</span>
-                            <input 
-                                type="file" 
-                                accept=".csv,.txt" 
-                                className="hidden" 
-                                onChange={(e) => setFileToUpload(e.target.files[0])} 
-                            />
-                        </label>
-                        
-                        <div className="flex gap-3">
-                            <button 
-                                type="button" 
-                                onClick={() => setShowImportModal(false)} 
-                                className="flex-1 py-2 bg-gray-100 rounded-lg font-bold hover:bg-gray-200 transition"
-                            >
-                                Cancelar
-                            </button>
-                            <button 
-                                type="button" 
-                                onClick={handleImportar} 
-                                className="flex-1 py-2 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 transition shadow-lg"
-                            >
-                                Subir Archivo
-                            </button>
+                        <div onClick={handleClickUploadArea} className="border-2 border-dashed border-green-300 bg-green-50/50 rounded-xl p-8 cursor-pointer hover:bg-green-50 transition-colors group mb-6">
+                            <input type="file" ref={fileInputRef} accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" onChange={handleFileSelect} className="hidden" />
+                            {fileName ? (
+                                <div className="flex flex-col items-center">
+                                    <DocumentTextIcon className="h-10 w-10 text-green-600 mb-2" />
+                                    <span className="text-green-800 font-semibold break-all">{fileName}</span>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center">
+                                    <p className="text-green-700 font-bold text-lg">Clic aquí para buscar archivo</p>
+                                    <p className="text-sm text-green-600/70 mt-1">Soporta Excel (.xlsx) y CSV</p>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex gap-4">
+                            <button onClick={() => {setShowImportModal(false); setFileToUpload(null); setFileName('');}} className="flex-1 py-3 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200">Cancelar</button>
+                            <button onClick={handleImportar} className={`flex-1 py-3 text-white font-bold rounded-xl shadow-lg ${fileToUpload ? 'bg-gradient-to-r from-green-600 to-emerald-600' : 'bg-gray-300 cursor-not-allowed'}`} disabled={!fileToUpload}>Subir Archivo</button>
                         </div>
                     </div>
                 </div>

@@ -21,23 +21,33 @@ class PeriodoAcademicoController extends Controller
             ->get();
     }
 
-    public function store(Request $request)
+   public function store(Request $request)
     {
-        // 1. Validamos solo las fechas (ya no pedimos nombre)
+        // 1. RESTRICCIÓN: Verificar si ya existe un periodo activo
+        // Buscamos si existe alguna fila donde la columna 'activo' sea true (1)
+        $existeActivo = PeriodoAcademico::where('activo', true)->exists();
+
+        if ($existeActivo) {
+            return response()->json([
+                'message' => 'No se puede crear un nuevo periodo. Ya existe un periodo académico ACTIVO en curso. Por favor, finalice el anterior primero.'
+            ], 422); // Retornamos Error 422 (Unprocessable Entity)
+        }
+
+        // 2. Validamos solo las fechas
         $request->validate([
             'fecha_inicio' => 'required|date',
             'fecha_fin' => 'required|date|after:fecha_inicio',
         ]);
 
-        // 2. Generamos el nombre automáticamente en Español
+        // 3. Generamos el nombre automáticamente en Español
         $nombreGenerado = $this->generarNombrePeriodo($request->fecha_inicio, $request->fecha_fin);
 
-        // 3. Guardamos
+        // 4. Guardamos (Nace activo por defecto)
         $periodo = PeriodoAcademico::create([
             'nombre' => $nombreGenerado,
             'fecha_inicio' => $request->fecha_inicio,
             'fecha_fin' => $request->fecha_fin,
-            'activo' => true
+            'activo' => true 
         ]);
 
         return response()->json([

@@ -14,12 +14,9 @@ class Planificacion extends Model
     protected $fillable = [
         'asignatura_id',
         'docente_id',
-        'habilidad_id',
         'parcial',
         'periodo_academico',
-        'fecha_inicio',
-        'fecha_fin',
-        'habilidad_blanda_id'
+        // 'observaciones', // Descomenta solo si agregaste la columna observaciones
     ];
 
     // ✅ RELACIÓN CON ASIGNATURA
@@ -34,16 +31,11 @@ class Planificacion extends Model
         return $this->belongsTo(User::class, 'docente_id');
     }
 
-    // ✅ RELACIÓN CON HABILIDAD (con manejo de nulls)
-    public function habilidad()
-    {
-        return $this->belongsTo(HabilidadBlanda::class, 'habilidad_id')->withDefault([
-            'nombre' => 'Sin habilidad asignada',
-            'descripcion' => ''
-        ]);
-    }
+    // ❌ ELIMINADO: public function habilidad()
+    // Motivo: Ahora una planificación tiene MUCHAS habilidades, no una sola.
+    // Usamos la relación 'detalles' para acceder a ellas.
 
-    // ✅ RELACIÓN CON DETALLES (hasMany - ESTA FALTABA)
+    // ✅ RELACIÓN CON DETALLES (Aquí están las habilidades y actividades)
     public function detalles()
     {
         return $this->hasMany(DetallePlanificacion::class, 'planificacion_id');
@@ -55,7 +47,7 @@ class Planificacion extends Model
         return $this->hasMany(Evaluacion::class, 'planificacion_id');
     }
 
-    // ✅ RELACIÓN CON REPORTE (si existe)
+    // ✅ RELACIÓN CON REPORTE
     public function reporte()
     {
         return $this->hasOne(Reporte::class, 'planificacion_id');

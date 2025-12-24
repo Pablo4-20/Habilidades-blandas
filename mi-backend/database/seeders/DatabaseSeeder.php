@@ -9,10 +9,23 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call([
-            UsuarioSeeder::class,        // 1. Usuarios
-            AsignaturaSeeder::class,     // 2. Asignaturas (CRUCIAL: Debe ir antes de habilidades)
-            HabilidadBlandaSeeder::class,// 3. Habilidades (Usa asignaturas)
-            EstudianteSeeder::class,     // 4. Estudiantes
+            // 1. Catálogos Maestros (Deben crearse primero)
+            CarreraSeeder::class,
+            CicloSeeder::class,
+            UnidadCurricularSeeder::class,
+
+            // 2. Usuarios y Habilidades Globales
+            UsuarioSeeder::class,
+            HabilidadBlandaSeeder::class, // Ahora es global y no depende de materias
+
+            // 3. Estudiantes
+            EstudianteSeeder::class,
+
+            // 4. Asignaturas
+            // IMPORTANTE: Lo dejamos comentado temporalmente.
+            // Si lo ejecutas ahora fallará porque tu seeder antiguo intenta guardar
+            // texto (ej: "Software") en campos que ahora son IDs numéricos.
+             AsignaturaSeeder::class, 
         ]);
     }
 }

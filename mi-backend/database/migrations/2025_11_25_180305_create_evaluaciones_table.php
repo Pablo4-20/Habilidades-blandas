@@ -14,11 +14,11 @@ return new class extends Migration
             $table->foreignId('planificacion_id')->constrained('planificaciones')->onDelete('cascade');
             $table->foreignId('estudiante_id')->constrained('estudiantes')->onDelete('cascade');
             
-            // --- AGREGADO DIRECTAMENTE AQUÍ ---
-            // Agregamos la columna de habilidad blanda desde el inicio
+            // --- CORRECCIÓN AQUÍ ---
+            // Cambiamos 'habilidad_blandas' (viejo) por 'habilidades_blandas' (nuevo)
             $table->foreignId('habilidad_blanda_id')
                   ->nullable()
-                  ->constrained('habilidad_blandas')
+                  ->constrained('habilidades_blandas') // <--- CAMBIO CRUCIAL
                   ->onDelete('cascade'); 
 
             $table->enum('parcial', ['1', '2']);
@@ -27,8 +27,7 @@ return new class extends Migration
             
             $table->timestamps();
             
-            // --- REGLA ÚNICA CORREGIDA ---
-            // Permitimos guardar (Plan + Estudiante + Parcial + HABILIDAD)
+            // Regla única
             $table->unique(
                 ['planificacion_id', 'estudiante_id', 'habilidad_blanda_id', 'parcial'], 
                 'unica_evaluacion_por_habilidad'

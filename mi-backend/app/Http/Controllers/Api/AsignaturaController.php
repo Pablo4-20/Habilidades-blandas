@@ -3,66 +3,49 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Asignatura;
 use Illuminate\Http\Request;
+use App\Models\Asignatura;
+use App\Models\Carrera;
+use App\Models\Ciclo;
+use App\Models\UnidadCurricular;
 
 class AsignaturaController extends Controller
 {
     public function index() {
-        return Asignatura::all();
+        return Asignatura::with(['carrera', 'ciclo', 'unidadCurricular'])
+            ->orderBy('carrera_id', 'asc')
+            ->orderBy('unidad_curricular_id', 'asc')
+            ->orderBy('ciclo_id', 'asc')
+            ->orderBy('nombre', 'asc')
+            ->get();
     }
 
-    // --- CREACIÓN MANUAL (CON CONTROL DE DUPLICADOS) ---
     public function store(Request $request) {
         $request->validate([
             'nombre' => 'required',
-            'carrera' => 'required',
-            'ciclo' => 'required',
-            'unidad_curricular' => 'required'
+            'carrera_id' => 'required',
+            'ciclo_id' => 'required',
+            'unidad_curricular_id' => 'required'
         ]);
-
-        // 👇 1. Formateamos el nombre antes de cualquier búsqueda o guardado
         $nombreFormateado = $this->formatearTexto($request->nombre);
-
-        // Verificar si ya existe (usando el nombre ya formateado)
+        
         $existe = Asignatura::where('nombre', $nombreFormateado)
-                            ->where('carrera', $request->carrera)
+                            ->where('carrera_id', $request->carrera_id)
                             ->exists();
 
-        if ($existe) {
-            return response()->json([
-                'message' => "La asignatura '{$nombreFormateado}' ya existe en la carrera de {$request->carrera}."
-            ], 422); 
-        }
+        if ($existe) return response()->json(['message' => "La asignatura ya existe."], 422);
 
-        // Preparamos los datos con el nombre corregido
         $data = $request->all();
         $data['nombre'] = $nombreFormateado;
-
         $asignatura = Asignatura::create($data);
         return response()->json($asignatura, 201);
     }
 
     public function update(Request $request, $id) {
         $asignatura = Asignatura::findOrFail($id);
-        
-        // 👇 2. Formateamos al editar
         $nombreFormateado = $this->formatearTexto($request->nombre);
-
-        // Verificar duplicado al editar
-        $existe = Asignatura::where('nombre', $nombreFormateado)
-                            ->where('carrera', $request->carrera)
-                            ->where('id', '!=', $id) 
-                            ->exists();
-
-        if ($existe) {
-            return response()->json(['message' => 'Ya existe otra asignatura con ese nombre y carrera.'], 422);
-        }
-
-        // Actualizamos con el nombre corregido
         $data = $request->all();
         $data['nombre'] = $nombreFormateado;
-
         $asignatura->update($data);
         return response()->json($asignatura);
     }
@@ -72,85 +55,126 @@ class AsignaturaController extends Controller
         return response()->json(['message' => 'Eliminado']);
     }
 
-    // --- CARGA MASIVA INTELIGENTE (NO DUPLICA) ---
+    // --- IMPORTACIÓN CORREGIDA (Ignora filas vacías) ---
     public function import(Request $request) {
         $request->validate(['file' => 'required|file']);
         
         $file = $request->file('file');
-        
         $contenido = file_get_contents($file->getRealPath());
-        $primerLinea = explode(PHP_EOL, $contenido)[0] ?? '';
-        $separador = str_contains($primerLinea, ';') ? ';' : ',';
 
-        $data = array_map(function($linea) use ($separador) {
-            return str_getcsv($linea, $separador);
-        }, file($file->getRealPath()));
+        // 1. DIVIDIR LÍNEAS (Universal)
+        $lines = preg_split("/\r\n|\n|\r/", $contenido);
+        
+        // 2. DETECTAR SEPARADOR
+        $separador = ',';
+        foreach ($lines as $linea) {
+            if (trim($linea) !== '') {
+                if (substr_count($linea, ';') > substr_count($linea, ',')) {
+                    $separador = ';';
+                }
+                break;
+            }
+        }
 
-        array_shift($data); // Eliminamos encabezados
-
-        $count = 0;
+        $creados = 0;
         $actualizados = 0;
+        $errores = [];
 
-        foreach ($data as $row) {
-            if (empty($row) || count($row) < 4) continue;
+        foreach ($lines as $index => $linea) {
+            // Ignorar líneas totalmente vacías
+            if (trim($linea) === '') continue;
 
-            // 👇 3. Formateamos el nombre desde el CSV
-            $nombre = $this->formatearTexto(trim($row[0]));
-            $carrera = trim($row[1]);
+            $row = str_getcsv($linea, $separador);
+            
+            // --- CORRECCIÓN CLAVE: Si la columna Nombre (0) está vacía, saltamos la fila ---
+            if (!isset($row[0]) || trim($row[0]) === '') continue;
 
-            // MAGIC METHOD: updateOrCreate
+            // Ignorar cabecera si dice "Nombre"
+            if (strtolower(trim($row[0])) === 'nombre') continue;
+
+            // Verificar columnas mínimas
+            if (count($row) < 4) {
+                // Solo reportar error si la fila parece tener datos pero está incompleta
+                $errores[] = "Fila " . ($index + 1) . ": Formato incompleto (menos de 4 columnas).";
+                continue;
+            }
+
+            // 1. PROCESAMIENTO
+            $nombre = $this->formatearTexto($row[0]);
+            $carreraNombre = $this->formatearTexto($row[1]); 
+            $cicloRaw = trim($row[2]);
+            $cicloNombre = $this->convertirCicloARomano($cicloRaw); 
+            $unidadNombre = $this->formatearTexto($row[3]); 
+
+            // 2. BÚSQUEDA DE IDs
+            $carrera = Carrera::where('nombre', 'LIKE', "%$carreraNombre%")->first();
+            $ciclo = Ciclo::where('nombre', $cicloNombre)->first();
+            $unidad = UnidadCurricular::where('nombre', 'LIKE', "%$unidadNombre%")->first();
+
+            // 3. REPORTE DE ERRORES EXACTOS
+            if (!$carrera) {
+                $errores[] = "Fila " . ($index + 1) . ": Carrera '$carreraNombre' no existe (Asignatura: $nombre).";
+                continue;
+            }
+            if (!$ciclo) {
+                $errores[] = "Fila " . ($index + 1) . ": Ciclo '$cicloNombre' inválido para '$nombre'.";
+                continue;
+            }
+            if (!$unidad) {
+                $errores[] = "Fila " . ($index + 1) . ": Unidad '$unidadNombre' no encontrada.";
+                continue;
+            }
+
+            // 4. GUARDAR
             $asignatura = Asignatura::updateOrCreate(
                 [
                     'nombre' => $nombre, 
-                    'carrera' => $carrera
+                    'carrera_id' => $carrera->id
                 ], 
                 [
-                    'ciclo' => trim($row[2]),
-                    'unidad_curricular' => trim($row[3])
+                    'ciclo_id' => $ciclo->id,
+                    'unidad_curricular_id' => $unidad->id
                 ]
             );
 
             if ($asignatura->wasRecentlyCreated) {
-                $count++;
+                $creados++;
             } else {
                 $actualizados++;
             }
         }
 
         return response()->json([
-            'message' => "Proceso terminado: $count materias nuevas creadas, $actualizados actualizadas."
+            'message' => "Proceso finalizado.",
+            'creados' => $creados,
+            'actualizados' => $actualizados,
+            'errores' => $errores
         ]);
     }
 
-    // 👇👇 FUNCIÓN PRIVADA PARA FORMATO TÍTULO Y ROMANOS 👇👇
-    private function formatearTexto($texto)
-    {
-        // 1. Convertir a Título (Primera mayúscula)
-        $texto = mb_convert_case($texto, MB_CASE_TITLE, "UTF-8");
+    // --- FUNCIONES AUXILIARES ---
+    private function formatearTexto($texto) {
+        if (!$texto) return '';
+        $texto = mb_convert_case(trim($texto), MB_CASE_TITLE, "UTF-8");
+        
+        $palabras = explode(' ', $texto);
+        $nuevasPalabras = array_map(function($palabra) {
+            $numeros = ['1'=>'I','2'=>'II','3'=>'III','4'=>'IV','5'=>'V','6'=>'VI','7'=>'VII','8'=>'VIII','9'=>'IX','10'=>'X'];
+            $correcciones = ['Ii'=>'II','Iii'=>'III','Iv'=>'IV','Vi'=>'VI','Vii'=>'VII','Viii'=>'VIII','Ix'=>'IX','Xi'=>'XI'];
+            
+            $cleanPalabra = rtrim($palabra, '.,;'); // Limpiar puntuación
 
-        // 2. Corregir Números Romanos comunes en materias
-        $romanos = [
-            'Ii'   => 'II',
-            'Iii'  => 'III',
-            'Iv'   => 'IV',
-            'Vi'   => 'VI',
-            'Vii'  => 'VII',
-            'Viii' => 'VIII',
-            'Ix'   => 'IX',
-            'Xi'   => 'XI',
-            'Xii'  => 'XII',
-            'Xiii' => 'XIII',
-            'Xiv'  => 'XIV',
-            'Xv'   => 'XV',
-            'Xx'   => 'XX',
-            'Xxi'  => 'XXI'
-        ];
+            if (isset($numeros[$cleanPalabra])) return $numeros[$cleanPalabra];
+            if (isset($correcciones[$cleanPalabra])) return $correcciones[$cleanPalabra];
+            return $palabra;
+        }, $palabras);
+        return implode(' ', $nuevasPalabras);
+    }
 
-        foreach ($romanos as $incorrecto => $correcto) {
-            // Reemplazar solo palabras exactas (\b)
-            $texto = preg_replace("/\b$incorrecto\b/u", $correcto, $texto);
-        }
-
-        return $texto;
+    private function convertirCicloARomano($input) {
+        $input = trim($input);
+        $mapa = ['1'=>'I','01'=>'I','2'=>'II','02'=>'II','3'=>'III','03'=>'III','4'=>'IV','04'=>'IV','5'=>'V','05'=>'V','6'=>'VI','06'=>'VI','7'=>'VII','07'=>'VII','8'=>'VIII','08'=>'VIII','9'=>'IX','09'=>'IX','10'=>'X'];
+        if (isset($mapa[$input])) return $mapa[$input];
+        return strtoupper($input);
     }
 }

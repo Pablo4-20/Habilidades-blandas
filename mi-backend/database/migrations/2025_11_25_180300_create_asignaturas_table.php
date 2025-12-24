@@ -13,12 +13,17 @@ return new class extends Migration
 {
     Schema::create('asignaturas', function (Blueprint $table) {
         $table->id();
-        $table->string('nombre');   // Ej: Programación Web II [cite: 46]
-        $table->string('carrera');  // Software [cite: 47]
-        $table->string('ciclo');    // IV, V, VI [cite: 40]
+        $table->string('nombre'); // Solo el nombre, ej: Programación Web II
+        
+        // Relaciones con los nuevos catálogos
+        $table->foreignId('carrera_id')->constrained('carreras');
+        $table->foreignId('ciclo_id')->constrained('ciclos');
+        $table->foreignId('unidad_curricular_id')->constrained('unidades_curriculares');
+
         $table->timestamps();
 
-        $table->unique(['nombre', 'carrera'], 'unique_asignatura_carrera');
+        // Evitar duplicar la misma materia en la misma carrera
+        $table->unique(['nombre', 'carrera_id']);
     });
 }
 

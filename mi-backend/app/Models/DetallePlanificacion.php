@@ -9,7 +9,7 @@ class DetallePlanificacion extends Model
 {
     use HasFactory;
 
-    protected $table = 'detalle_planificaciones'; 
+    protected $table = 'detalle_planificaciones';
 
     protected $fillable = [
         'planificacion_id',
@@ -17,21 +17,19 @@ class DetallePlanificacion extends Model
         'actividades'
     ];
 
-    // ✅ RELACIÓN INVERSA CON PLANIFICACIÓN
+    /**
+     * Relación con la Planificación (Padre)
+     */
     public function planificacion()
     {
-        return $this->belongsTo(Planificacion::class, 'planificacion_id');
+        return $this->belongsTo(Planificacion::class);
     }
 
-    // ✅ RELACIÓN ORIGINAL (No la borres por si otro reporte la usa)
+    /**
+     * Relación con la Habilidad Blanda (Catálogo Global)
+     * Nombre estándar: habilidadBlanda
+     */
     public function habilidadBlanda()
-    {
-        return $this->belongsTo(HabilidadBlanda::class, 'habilidad_blanda_id');
-    }
-
-    // ✅ SOLUCIÓN: AGREGA ESTA FUNCIÓN (Es un alias)
-    // Esto hace que cuando el controlador llame a ->with('habilidad'), funcione.
-    public function habilidad()
     {
         return $this->belongsTo(HabilidadBlanda::class, 'habilidad_blanda_id');
     }

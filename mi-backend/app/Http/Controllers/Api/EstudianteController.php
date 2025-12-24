@@ -17,7 +17,7 @@ class EstudianteController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'cedula' => 'required|unique:estudiantes,cedula',
+            'cedula' => ['required', 'unique:users,cedula', new ValidaCedula],
             'nombres' => 'required',
             'apellidos' => 'required',
             'email' => 'required|email|unique:estudiantes,email',
@@ -38,7 +38,7 @@ class EstudianteController extends Controller
         $estudiante = Estudiante::findOrFail($id);
         
         $request->validate([
-            'cedula' => 'required|unique:estudiantes,cedula,' . $id,
+           'cedula' => ['required', 'unique:users,cedula', new ValidaCedula],
             'email' => 'required|email|unique:estudiantes,email,' . $id,
         ]);
 

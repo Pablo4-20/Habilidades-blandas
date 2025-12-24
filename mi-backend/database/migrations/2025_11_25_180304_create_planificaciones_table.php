@@ -6,34 +6,28 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
-public function up(): void
+    public function up(): void
     {
         Schema::create('planificaciones', function (Blueprint $table) {
             $table->id();
+            
+            // Relaciones
             $table->foreignId('docente_id')->constrained('users');
             $table->foreignId('asignatura_id')->constrained('asignaturas');
-            //$table->foreignId('habilidad_blanda_id')->constrained('habilidades_blandas');
-            $table->string('periodo_academico');
             
-            // --- CAMBIO: Agregamos el Parcial ---
+            // Datos del periodo
+            $table->string('periodo_academico');
             $table->enum('parcial', ['1', '2']); 
 
             $table->timestamps();
 
-            // --- REGLA DE ORO: Una materia no puede repetir parcial ---
-            // Esto impedirá a nivel de base de datos que se guarde duplicado
+            // Regla para evitar duplicados (Materia + Periodo + Parcial)
             $table->unique(['asignatura_id', 'parcial', 'periodo_academico'], 'unica_plan_parcial');
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
-        Schema::dropIfExists('planificacions');
+        Schema::dropIfExists('planificaciones');
     }
 };
