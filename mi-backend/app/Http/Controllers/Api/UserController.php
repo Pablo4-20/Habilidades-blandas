@@ -159,7 +159,7 @@ public function update(Request $request, string $id)
 
     $request->validate([
         // unique:users,cedula,ID -> Ignora el ID actual para que no de error si no cambia su propia cédula
-       'cedula' => ['required', 'unique:users,cedula', new ValidaCedula], 
+       'cedula' => ['required', 'unique:users,cedula'. $user->id, new ValidaCedula], 
         'nombres' => 'required|string',
         'apellidos' => 'required|string',
         'email' => ['required', 'email', 'unique:users,email,' . $user->id, 
