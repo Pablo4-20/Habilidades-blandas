@@ -14,8 +14,7 @@ class Evaluacion extends Model
     protected $fillable = [
         'planificacion_id',
         'estudiante_id',
-        'habilidad_blanda_id', // <--- ¡AGREGA ESTA LÍNEA!
-        'parcial',
+        'habilidad_blanda_id', 
         'nivel',
         //'fecha_evaluacion'
     ];

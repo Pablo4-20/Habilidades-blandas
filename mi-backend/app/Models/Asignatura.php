@@ -31,7 +31,7 @@ class Asignatura extends Model
         return $this->belongsTo(UnidadCurricular::class);
     }
 
-    // Relaciones existentes (déjalas si las usas)
+    
     public function asignaciones()
     {
         return $this->hasMany(Asignacion::class);

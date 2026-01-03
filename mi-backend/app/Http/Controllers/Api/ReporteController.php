@@ -70,7 +70,6 @@ class ReporteController extends Controller
         $request->validate(['asignatura_id' => 'required']);
         $user = $request->user();
 
-        // CORRECCIÓN 1: Cargamos 'detalles.habilidad.catalogo' para llegar al nombre real
         $planes = Planificacion::with(['asignatura', 'docente', 'detalles.habilidad.catalogo'])
             ->where('asignatura_id', $request->asignatura_id)
             ->where('docente_id', $user->id)
@@ -112,9 +111,8 @@ class ReporteController extends Controller
 
             $reporteDB = Reporte::where('planificacion_id', $plan->id)->first();
 
-            // CORRECCIÓN 2: Extraer nombres desde el catálogo
+           
             $nombresHabilidades = $plan->detalles->map(function($d) {
-                // detalle -> habilidad -> catalogo -> nombre
                 return ($d->habilidad && $d->habilidad->catalogo) 
                     ? $d->habilidad->catalogo->nombre 
                     : null;
@@ -175,7 +173,7 @@ class ReporteController extends Controller
 
         // 3. Procesar datos para el reporte
         $reporte = $asignaciones->map(function($asig) {
-            // CORRECCIÓN 3: Cargar relación profunda 'detalles.habilidad.catalogo'
+            
             $plan = Planificacion::with('detalles.habilidad.catalogo') 
                 ->where('docente_id', $asig->docente_id)
                 ->where('asignatura_id', $asig->asignatura_id)
@@ -188,7 +186,7 @@ class ReporteController extends Controller
             $habilidadTexto = '---'; 
 
             if ($plan) {
-                // CORRECCIÓN 4: Acceder al nombre a través del catálogo
+               
                 $nombres = $plan->detalles->map(function($detalle) {
                     return ($detalle->habilidad && $detalle->habilidad->catalogo) 
                         ? $detalle->habilidad->catalogo->nombre 

@@ -52,12 +52,12 @@ class DocenteController extends Controller
         })->filter()->values();
     }
 
-    // 2. MIS HABILIDADES (CORREGIDO: detalles.habilidad)
+    // 2. MIS HABILIDADES 
     public function misHabilidades($asignatura_id, Request $request)
     {
         $user = $request->user();
         
-        // CORRECCIÓN AQUÍ: Usamos 'detalles.habilidad'
+       
         $plan = Planificacion::with('detalles.habilidad') 
             ->where('docente_id', $user->id)
             ->where('asignatura_id', $asignatura_id)
@@ -202,12 +202,10 @@ class DocenteController extends Controller
                     ->where('periodo', $request->periodo)
                     ->first();
                 
-                // Si no hay asignación estricta, permitimos continuar si el docente ya tiene planificación,
-                // o lanzamos error si prefieres ser estricto. Por ahora, seguimos.
+                
 
                 // 2. BUSCAR O CREAR PLANIFICACIÓN
-                // SOLUCIÓN: Separamos el array de búsqueda del array de valores adicionales.
-                // Buscamos SOLO por la clave única de la BD (Asignatura + Periodo + Parcial)
+                
                 $plan = Planificacion::firstOrCreate(
                     [
                         'asignatura_id' => $request->asignatura_id,
@@ -227,7 +225,7 @@ class DocenteController extends Controller
                             [
                                 'planificacion_id' => $plan->id,
                                 'estudiante_id' => $nota['estudiante_id'],
-                                'habilidad_blanda_id' => $request->habilidad_blanda_id, // Asegúrate de que este ID sea válido
+                                'habilidad_blanda_id' => $request->habilidad_blanda_id, 
                                 'parcial' => $request->parcial
                             ],
                             [
@@ -241,14 +239,14 @@ class DocenteController extends Controller
             return response()->json(['message' => 'Notas guardadas correctamente'], 200);
 
         } catch (\Exception $e) {
-            // Loguear el error real para depuración si es necesario
+           
             \Illuminate\Support\Facades\Log::error('Error guardando notas: ' . $e->getMessage());
             return response()->json(['message' => 'Error al guardar: ' . $e->getMessage()], 500);
         }
     }
 
     // ==========================================
-    //  6. PDF DATA (CORREGIDO: detalles.habilidad)
+    //  6. PDF DATA (
     // ==========================================
     public function pdfData(Request $request)
     {
@@ -283,7 +281,6 @@ class DocenteController extends Controller
             ->get();
 
         // 3. Planificaciones 
-        // CORRECCIÓN AQUÍ: Usamos 'detalles.habilidad' (Con punto)
         $planes = Planificacion::with(['detalles.habilidad'])
             ->where('asignatura_id', $request->asignatura_id)
             ->where('docente_id', $user->id)
@@ -293,7 +290,7 @@ class DocenteController extends Controller
         $reportes = [];
 
         foreach ($planes as $plan) {
-            // Iteramos sobre los DETALLES, no sobre el plan directamente para sacar habilidades
+           
             foreach ($plan->detalles as $detalle) {
                 
                 $evaluaciones = Evaluacion::where('planificacion_id', $plan->id)
@@ -327,7 +324,6 @@ class DocenteController extends Controller
                 $reportes[] = [
                     'planificacion_id' => $plan->id . '_' . $detalle->habilidad_blanda_id, 
                     'real_plan_id' => $plan->id, 
-                    // Accedemos a la habilidad a través del detalle
                     'habilidad' => $detalle->habilidad ? $detalle->habilidad->nombre : 'Sin Nombre',
                     'parcial_asignado' => (string)$plan->parcial,
                     'conclusion' => $conclusion,

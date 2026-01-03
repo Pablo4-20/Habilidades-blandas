@@ -23,11 +23,11 @@ class AuthController extends Controller
 
         $user = User::where('email', $request->email)->firstOrFail();
         
-        // 2. 🔒 NUEVO: Validar Verificación de Correo
+        // 2.  Validar Verificación de Correo
         if ($user->email_verified_at === null) {
             return response()->json([
                 'message' => 'Tu cuenta no ha sido verificada. Por favor revisa tu correo y activa tu cuenta.'
-            ], 403); // 403 = Forbidden (Prohibido)
+            ], 403); 
         }
         $token = $user->createToken('auth_token')->plainTextToken;
 
@@ -51,7 +51,7 @@ class AuthController extends Controller
 
         $user->update([
             'password' => Hash::make($request->password),
-            'must_change_password' => false // Desactivamos la obligación
+            'must_change_password' => false 
         ]);
 
         return response()->json(['message' => 'Contraseña actualizada correctamente.']);

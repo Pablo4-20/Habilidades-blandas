@@ -23,7 +23,7 @@ const CambiarPasswordInicial = () => {
             
             // Actualizamos localStorage para que no pida cambio de nuevo
             const user = JSON.parse(localStorage.getItem('user'));
-            user.must_change_password = 0; // o false
+            user.must_change_password = 0; 
             localStorage.setItem('user', JSON.stringify(user));
 
             navigate('/dashboard');

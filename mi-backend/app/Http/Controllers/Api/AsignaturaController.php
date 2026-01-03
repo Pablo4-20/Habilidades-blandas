@@ -55,7 +55,7 @@ class AsignaturaController extends Controller
         return response()->json(['message' => 'Eliminado']);
     }
 
-    // --- IMPORTACIÓN CORREGIDA (Ignora filas vacías) ---
+    
     public function import(Request $request) {
         $request->validate(['file' => 'required|file']);
         
@@ -86,7 +86,7 @@ class AsignaturaController extends Controller
 
             $row = str_getcsv($linea, $separador);
             
-            // --- CORRECCIÓN CLAVE: Si la columna Nombre (0) está vacía, saltamos la fila ---
+            // Ignorar filas sin nombre
             if (!isset($row[0]) || trim($row[0]) === '') continue;
 
             // Ignorar cabecera si dice "Nombre"

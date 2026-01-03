@@ -9,7 +9,7 @@ class Estudiante extends Model
 {
     use HasFactory;
 
-    // ESTA ES LA PARTE QUE FALTA: Definir qué campos se pueden guardar
+    
     protected $fillable = [
         'cedula',
         'nombres',

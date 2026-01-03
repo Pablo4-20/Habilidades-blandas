@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB; // <--- ESTO ES OBLIGATORIO
+use Illuminate\Support\Facades\DB; 
 
 class CoordinadorController extends Controller
 {
@@ -91,7 +91,7 @@ class CoordinadorController extends Controller
             ]);
 
         } catch (\Exception $e) {
-            // Este mensaje aparecerá en la pestaña Network -> Response si algo falla
+          
             return response()->json(['message' => 'Error CRÍTICO: ' . $e->getMessage()], 500);
         }
     }

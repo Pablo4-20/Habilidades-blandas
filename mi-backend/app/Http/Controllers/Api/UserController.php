@@ -29,8 +29,7 @@ class UserController extends Controller
             'apellidos' => 'required|string', 
             'email' => ['required', 'email','unique:users,email','regex:/^.+@(ueb\.edu\.ec|mailes\.ueb\.edu\.ec)$/i'
             ],
-            'rol' => 'required|in:admin,coordinador,docente,estudiante', // Validamos los roles permitidos
-            // La contraseña será opcional, si no envían, se pone una por defecto
+            'rol' => 'required|in:admin,coordinador,docente,estudiante', 
         ], [
             'email.regex' => 'El correo debe pertenecer al dominio ueb.edu.ec o mailes.ueb.edu.ec'
         ]);
@@ -45,7 +44,7 @@ class UserController extends Controller
             'nombres' => mb_convert_case($request->nombres, MB_CASE_TITLE, "UTF-8"), 
             'apellidos' => mb_convert_case($request->apellidos, MB_CASE_TITLE, "UTF-8"),
             'email' => $request->email,
-            'password' => Hash::make($request->password ?? 'password'), // Contraseña default: password
+            'password' => Hash::make($request->password ?? 'password'), 
             'rol' => $request->rol,
             'must_change_password' => true
         ]);
@@ -57,7 +56,7 @@ class UserController extends Controller
     // 3. Eliminar usuario
     public function destroy($id)
     {
-        // 🔒 SEGURIDAD: Evitar auto-eliminación
+        //  SEGURIDAD: Evitar auto-eliminación
         if (auth()->id() == $id) {
             return response()->json([
                 'message' => 'No puedes eliminar tu propia cuenta de administrador.'

@@ -11,16 +11,13 @@ use Illuminate\Support\Facades\DB;
 
 class PlanificacionController extends Controller
 {
-    /**
-     * GET /api/planificacion/verificar/{asignatura_id}
-     * Muestra al docente si ya planificó y le da el catálogo global de habilidades para elegir.
-     */
+   
     public function verificar(Request $request, $asignatura_id)
     {
         try {
             $user = $request->user();
-            $periodo = $request->query('periodo'); // Ej: "2025-1"
-            $parcialSolicitado = $request->query('parcial'); // "1" o "2"
+            $periodo = $request->query('periodo'); 
+            $parcialSolicitado = $request->query('parcial'); 
 
             // 1. Validar asignación docente (Filtro por periodo si se envía)
             $queryAsignacion = Asignacion::where('asignatura_id', $asignatura_id)
@@ -39,7 +36,7 @@ class PlanificacionController extends Controller
                 ]);
             }
 
-            // 2. Traer Catálogo Global (CAMBIO CRUCIAL: Todas las habilidades disponibles)
+            // 2. Traer Catálogo Global de Habilidades Blandas
             $catalogoHabilidades = HabilidadBlanda::select('id', 'nombre', 'descripcion')->get();
 
             // 3. Buscar si YA existe planificación previa (Modo Edición)
@@ -60,11 +57,11 @@ class PlanificacionController extends Controller
             $datosRespuesta = [
                 'tiene_asignacion' => true,
                 'periodo_detectado' => $asignacion->periodo,
-                'catalogo_habilidades' => $catalogoHabilidades, // Menú completo de opciones
+                'catalogo_habilidades' => $catalogoHabilidades, 
                 'es_edicion' => false,
                 'parcial_guardado' => null,
-                'habilidades_seleccionadas' => [], // IDs de las habilidades que el docente eligió antes
-                'actividades_guardadas' => []      // Texto de las actividades por habilidad
+                'habilidades_seleccionadas' => [], 
+                'actividades_guardadas' => []      
             ];
 
             if ($planDocente) {
@@ -88,10 +85,7 @@ class PlanificacionController extends Controller
         }
     }
 
-    /**
-     * POST /api/planificacion
-     * Guarda la selección del docente (Habilidades + Actividades).
-     */
+    
     public function store(Request $request)
     {
         // 1. Validación
@@ -100,7 +94,7 @@ class PlanificacionController extends Controller
             'docente_id' => 'required',
             'parcial' => 'required',
             'periodo_academico' => 'required',
-            'detalles' => 'required|array', // Array de { habilidad_blanda_id, actividades }
+            'detalles' => 'required|array', 
         ]);
 
         return DB::transaction(function () use ($request) {
@@ -118,7 +112,6 @@ class PlanificacionController extends Controller
             );
 
             // 3. Guardar los Detalles
-            // Estrategia: Borrar previos e insertar nuevos (limpieza total para evitar duplicados)
             $planificacion->detalles()->delete();
 
             foreach ($request->detalles as $detalle) {
@@ -127,7 +120,7 @@ class PlanificacionController extends Controller
 
                 $planificacion->detalles()->create([
                     'habilidad_blanda_id' => $detalle['habilidad_blanda_id'],
-                    // Si el front envía array de actividades, lo convertimos a texto; si es texto, se queda igual.
+                    
                     'actividades' => is_array($detalle['actividades']) 
                                      ? implode("\n", $detalle['actividades']) 
                                      : $detalle['actividades']

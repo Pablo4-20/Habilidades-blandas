@@ -78,7 +78,7 @@ public function import(Request $request)
             try {
                 // --- 1. NORMALIZACIÓN DE DATOS ---
                 
-                // Cédula: Rellenar con ceros
+                
                 $cedulaCSV = trim($row[0]);
                 $cedulaFinal = str_pad($cedulaCSV, 10, '0', STR_PAD_LEFT);
 
@@ -91,17 +91,17 @@ public function import(Request $request)
                 $nombresFinal   = mb_convert_case(trim($row[1]), MB_CASE_TITLE, "UTF-8");
                 $apellidosFinal = mb_convert_case(trim($row[2]), MB_CASE_TITLE, "UTF-8");
                 
-                // Email: Siempre minúsculas
+                
                 $emailFinal = strtolower(trim($row[3]));
 
-                // Carrera: Estandarización estricta
+                
                 $carreraRaw = trim($row[4]);
                 $carreraFinal = 'Software'; 
                 if (preg_match('/ti|tecnolog|t\.i/i', $carreraRaw)) {
                     $carreraFinal = 'TI';
                 }
 
-                // Ciclo: Mayúsculas (ej: "vi" -> "VI")
+              
                 $cicloFinal = strtoupper(trim($row[5]));
 
 

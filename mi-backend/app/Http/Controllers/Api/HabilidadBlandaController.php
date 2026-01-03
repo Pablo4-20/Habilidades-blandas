@@ -18,7 +18,7 @@ class HabilidadBlandaController extends Controller
     // 2. CREAR (POST)
     public function store(Request $request)
     {
-        // Validación simple: Nombre obligatorio y único
+        
         $request->validate([
             'nombre' => 'required|unique:habilidades_blandas,nombre',
             'descripcion' => 'nullable|string'
@@ -70,11 +70,11 @@ class HabilidadBlandaController extends Controller
             $contenido = mb_convert_encoding($contenido, 'UTF-8', 'ISO-8859-1');
         }
 
-        // Dividir líneas
+      
         $lines = preg_split("/\r\n|\n|\r/", $contenido);
         $separador = ',';
 
-        // Detectar separador
+        
         foreach ($lines as $linea) {
             if (trim($linea) !== '') {
                 if (substr_count($linea, ';') > substr_count($linea, ',')) $separador = ';';

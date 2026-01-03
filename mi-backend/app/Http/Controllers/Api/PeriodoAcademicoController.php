@@ -30,7 +30,7 @@ class PeriodoAcademicoController extends Controller
         if ($existeActivo) {
             return response()->json([
                 'message' => 'No se puede crear un nuevo periodo. Ya existe un periodo académico ACTIVO en curso. Por favor, finalice el anterior primero.'
-            ], 422); // Retornamos Error 422 (Unprocessable Entity)
+            ], 422); 
         }
 
         // 2. Validamos solo las fechas
@@ -70,9 +70,9 @@ class PeriodoAcademicoController extends Controller
         $periodo->delete();
         return response()->json(['message' => 'Periodo eliminado']);
     }
-    // ... otros métodos ...
+   
 
-    // NUEVO MÉTODO PARA ACTUALIZAR
+    // MÉTODO PARA ACTUALIZAR
     public function update(Request $request, $id)
     {
         $request->validate([
@@ -82,7 +82,7 @@ class PeriodoAcademicoController extends Controller
 
         $periodo = PeriodoAcademico::findOrFail($id);
         
-        // Regeneramos el nombre por si cambiaron las fechas
+        
         $nombreGenerado = $this->generarNombrePeriodo($request->fecha_inicio, $request->fecha_fin);
 
         $periodo->update([
@@ -97,7 +97,7 @@ class PeriodoAcademicoController extends Controller
         ]);
     }
 
-    // ... helper privado ...
+    
 
     // --- HELPER PRIVADO PARA TRADUCIR MESES ---
     private function generarNombrePeriodo($inicio, $fin)

@@ -4,10 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-// --- IMPORTACIONES OBLIGATORIAS ---
 use App\Models\Asignacion;
-use App\Models\User;        // <--- SI FALTA ESTO, NO CARGAN DOCENTES
-use App\Models\Asignatura;  // <--- SI FALTA ESTO, NO CARGAN MATERIAS
+use App\Models\User;        
+use App\Models\Asignatura;  
 
 class AsignacionController extends Controller
 {
@@ -42,7 +41,7 @@ class AsignacionController extends Controller
             'paralelo' => 'required|string|max:2'
         ]);
 
-        // VALIDACIÓN CORREGIDA:
+       
         // Verificamos si ESTA materia en ESTE paralelo ya tiene dueño (sin importar quién sea)
         $asignacionExistente = Asignacion::with('docente') // Traemos al docente para mostrar quién la tiene
             ->where('asignatura_id', $request->asignatura_id)
@@ -55,13 +54,13 @@ class AsignacionController extends Controller
             $nombreProfe = $asignacionExistente->docente->name;
             return response()->json([
                 'message' => "Esta materia ya está asignada al docente: $nombreProfe"
-            ], 422); // Código 422 para error de validación
+            ], 422); 
         }
 
         $asignacion = Asignacion::create($request->all());
         return response()->json(['message' => 'Carga asignada correctamente', 'data' => $asignacion]);
     }
-// --- ACTUALIZAR ASIGNACIÓN (MÉTODO FALTANTE) ---
+
     public function update(Request $request, $id)
     {
         // 1. Buscamos la asignación
@@ -84,7 +83,7 @@ class AsignacionController extends Controller
         $existeDuplicado = Asignacion::where('asignatura_id', $request->asignatura_id)
             ->where('periodo', $request->periodo)
             ->where('paralelo', $request->paralelo)
-            ->where('id', '!=', $id) // Importante: Ignorar el registro que estamos editando
+            ->where('id', '!=', $id) 
             ->exists();
 
         if ($existeDuplicado) {

@@ -10,8 +10,8 @@ use App\Models\Asignatura;
 use App\Models\Asignacion;
 use App\Models\Planificacion;
 use App\Models\Evaluacion;
-use App\Models\HabilidadBlanda; // Agregué el use explícito para limpieza
-use App\Models\Reporte;         // Agregué el use explícito para limpieza
+use App\Models\HabilidadBlanda; 
+use App\Models\Reporte;         
 
 class DashboardController extends Controller
 {
@@ -33,12 +33,10 @@ class DashboardController extends Controller
             // Progreso de la carrera
             $totalAsignaciones = Asignacion::count();
             
-            // --- CORRECCIÓN AQUÍ ---
-            // En lugar de contar todas las filas (que duplica por parciales),
-            // contamos cuántas asignaturas ÚNICAS tienen al menos una planificación.
+          
             $materiasPlanificadas = Planificacion::distinct('asignatura_id')->count('asignatura_id');
 
-            // Calcular porcentaje (Máximo será 100%)
+            
             $cumplimiento = $totalAsignaciones > 0 ? round(($materiasPlanificadas / $totalAsignaciones) * 100) : 0;
             
             // Seguro extra por si acaso la BD tiene datos sucios antiguos
@@ -46,16 +44,16 @@ class DashboardController extends Controller
 
             $data = [
                 'asignaciones' => $totalAsignaciones,
-                'planificaciones' => $materiasPlanificadas, // Mostramos materias cubiertas, no filas totales
+                'planificaciones' => $materiasPlanificadas, 
                 'cumplimiento' => $cumplimiento,
                 'reportes' => Reporte::count()
             ];
         } 
         elseif ($rol === 'docente') {
-            // Mis datos personales
+            // Mis materias asignadas
             $misMaterias = Asignacion::where('docente_id', $user->id)->count();
-            
-            // Aquí también podrías aplicar distinct si quieres que cuente materias y no parciales
+
+            // Mis planes creados
             $misPlanes = Planificacion::where('docente_id', $user->id)
                             ->distinct('asignatura_id')
                             ->count('asignatura_id');
