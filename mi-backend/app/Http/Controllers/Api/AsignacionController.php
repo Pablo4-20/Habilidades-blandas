@@ -10,20 +10,26 @@ use App\Models\Asignatura;
 
 class AsignacionController extends Controller
 {
-    // 1. Listar asignaciones
+    // 1. Listar asignaciones (TABLA)
     public function index()
     {
-        return Asignacion::with(['docente', 'asignatura'])
+        // CAMBIO AQUÍ: Agregamos .carrera y .ciclo
+        return Asignacion::with([
+                'docente', 
+                'asignatura.carrera', 
+                'asignatura.ciclo'
+            ])
             ->orderBy('id', 'desc')
             ->get();
     }
 
-    // 2. Datos para los selectores
+    // 2. Datos para los selectores (FORMULARIO)
     public function datosAuxiliares()
     {
-        // Traemos usuarios que sean 'docente' y todas las asignaturas
         $docentes = User::where('rol', 'docente')->get();
-        $asignaturas = Asignatura::all();
+        
+        // CAMBIO AQUÍ: Usamos with() en lugar de all()
+        $asignaturas = Asignatura::with(['carrera', 'ciclo'])->get();
 
         return response()->json([
             'docentes' => $docentes,
@@ -31,7 +37,7 @@ class AsignacionController extends Controller
         ]);
     }
 
-    // 3. Guardar asignación
+    // ... (Mantén el resto de métodos store, update y destroy igual) ...
     public function store(Request $request)
     {
         $request->validate([
@@ -41,17 +47,14 @@ class AsignacionController extends Controller
             'paralelo' => 'required|string|max:2'
         ]);
 
-       
-        // Verificamos si ESTA materia en ESTE paralelo ya tiene dueño (sin importar quién sea)
-        $asignacionExistente = Asignacion::with('docente') // Traemos al docente para mostrar quién la tiene
+        $asignacionExistente = Asignacion::with('docente')
             ->where('asignatura_id', $request->asignatura_id)
             ->where('periodo', $request->periodo)
             ->where('paralelo', $request->paralelo)
             ->first();
 
         if ($asignacionExistente) {
-            // Si ya existe, avisamos quién la tiene asignada
-            $nombreProfe = $asignacionExistente->docente->name;
+            $nombreProfe = $asignacionExistente->docente->nombres ?? 'Otro docente'; 
             return response()->json([
                 'message' => "Esta materia ya está asignada al docente: $nombreProfe"
             ], 422); 
@@ -63,52 +66,28 @@ class AsignacionController extends Controller
 
     public function update(Request $request, $id)
     {
-        // 1. Buscamos la asignación
         $asignacion = Asignacion::find($id);
+        if (!$asignacion) return response()->json(['message' => 'No encontrada'], 404);
 
-        if (!$asignacion) {
-            return response()->json(['message' => 'Asignación no encontrada'], 404);
-        }
-
-        // 2. Validamos los datos
         $request->validate([
-            'docente_id' => 'required|exists:users,id',
-            'asignatura_id' => 'required|exists:asignaturas,id',
-            'paralelo' => 'required',
-            'periodo' => 'required'
+            'docente_id' => 'required', 'asignatura_id' => 'required', 'paralelo' => 'required', 'periodo' => 'required'
         ]);
 
-        // 3. Verificamos duplicados (EXCLUYENDO la actual)
-        // "No puede haber otra asignación de la misma materia, en el mismo periodo y paralelo"
         $existeDuplicado = Asignacion::where('asignatura_id', $request->asignatura_id)
             ->where('periodo', $request->periodo)
             ->where('paralelo', $request->paralelo)
             ->where('id', '!=', $id) 
             ->exists();
 
-        if ($existeDuplicado) {
-            return response()->json([
-                'message' => 'Conflicto: Esta materia ya está asignada en este periodo y paralelo.'
-            ], 422);
-        }
+        if ($existeDuplicado) return response()->json(['message' => 'Conflicto: Materia ya asignada en este horario.'], 422);
 
-        // 4. Guardamos los cambios
-        $asignacion->update([
-            'docente_id' => $request->docente_id,
-            'asignatura_id' => $request->asignatura_id,
-            'paralelo' => $request->paralelo,
-            'periodo' => $request->periodo
-        ]);
-
-        return response()->json([
-            'message' => 'Asignación actualizada correctamente.',
-            'data' => $asignacion
-        ]);
+        $asignacion->update($request->all());
+        return response()->json(['message' => 'Actualizado.', 'data' => $asignacion]);
     }
-    // 4. Eliminar
+
     public function destroy($id)
     {
         Asignacion::destroy($id);
-        return response()->json(['message' => 'Asignación eliminada']);
+        return response()->json(['message' => 'Eliminado']);
     }
 }

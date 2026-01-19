@@ -266,7 +266,7 @@ class DocenteController extends Controller
             ->first();
 
         $info = [
-            'facultad' => 'FACULTAD DE CIENCIAS DE LA EDUCACIÓN', 
+            'facultad' => 'FACULTAD DE CIENCIAS ADMINISTRATIVAS, GESTIÓN EMPRESARIAL E INFORMÁTICA', 
             'carrera' => $asignatura->carrera,
             'docente' => $user->name ?? $user->email, 
             'periodo' => $request->periodo, 

@@ -5,22 +5,21 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { 
     PresentationChartLineIcon, PrinterIcon, FunnelIcon,
-    CheckCircleIcon, XCircleIcon, ClockIcon, CalendarDaysIcon
+    CheckCircleIcon, XCircleIcon, ClockIcon, CalendarDaysIcon, ExclamationCircleIcon
 } from '@heroicons/react/24/outline';
 import logoIzq from '../assets/facultad.png'; 
 import logoDer from '../assets/software.png';
 
 const ReportesCoordinador = () => {
+    // --- ESTADOS ---
     const [reporteData, setReporteData] = useState([]);
     const [periodos, setPeriodos] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [periodosLoaded, setPeriodosLoaded] = useState(false);
     
     // --- FILTROS ---
     const [filtroCarrera, setFiltroCarrera] = useState('Todas');
     const [filtroPeriodo, setFiltroPeriodo] = useState('');
 
-    // Opciones estáticas carrera
     const opcionesCarrera = [
         { value: 'Todas', label: 'Todas las Carreras' },
         { value: 'Software', label: 'Software' },
@@ -29,27 +28,31 @@ const ReportesCoordinador = () => {
 
     // 1. CARGA INICIAL (PERIODOS)
     useEffect(() => {
-        cargarPeriodos();
+        const fetchInicial = async () => {
+            try {
+                const res = await api.get('/periodos'); 
+                const lista = Array.isArray(res.data) ? res.data : [];
+                setPeriodos(lista);
+
+                const activo = lista.find(p => p.activo === 1 || p.activo === true);
+                if (activo) {
+                    setFiltroPeriodo(activo.nombre);
+                } else if (lista.length > 0) {
+                    setFiltroPeriodo(lista[0].nombre);
+                }
+            } catch (error) {
+                console.error("Error al cargar periodos:", error);
+            }
+        };
+        fetchInicial();
     }, []);
 
-    // 2. CARGA DE REPORTE
+    // 2. CARGA DEL REPORTE
     useEffect(() => {
-        if (periodosLoaded) { 
+        if (filtroPeriodo) {
             cargarReporte();
         }
-    }, [filtroCarrera, filtroPeriodo, periodosLoaded]);
-
-    const cargarPeriodos = async () => {
-        try {
-            const res = await api.get('/periodos/activos'); 
-            const lista = Array.isArray(res.data) ? res.data : [];
-            setPeriodos(lista);
-            setPeriodosLoaded(true); 
-        } catch (error) {
-            console.error("Error cargando periodos:", error);
-            setPeriodosLoaded(true); 
-        }
-    };
+    }, [filtroCarrera, filtroPeriodo]);
 
     const cargarReporte = async () => {
         setLoading(true);
@@ -69,13 +72,7 @@ const ReportesCoordinador = () => {
         }
     };
 
-    // --- LÓGICA DE ORDENAMIENTO (ROMANOS) ---
-    const ordenCiclos = {
-        'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5, 
-        'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10
-    };
-
-    // --- GENERAR PDF ---
+    // --- PDF ---
     const descargarPDF = () => {
         const doc = new jsPDF('l'); 
         const pageWidth = doc.internal.pageSize.getWidth();
@@ -87,227 +84,213 @@ const ReportesCoordinador = () => {
             return acc;
         }, {});
 
-        const ciclosOrdenados = Object.keys(gruposPorCiclo).sort((a, b) => {
-            return (ordenCiclos[a] || 99) - (ordenCiclos[b] || 99);
-        });
+        const ordenCiclos = { 'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5, 'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10 };
+        const ciclosOrdenados = Object.keys(gruposPorCiclo).sort((a, b) => (ordenCiclos[a] || 99) - (ordenCiclos[b] || 99));
 
-        if (ciclosOrdenados.length === 0) {
-            alert("No hay datos para generar el reporte.");
-            return;
-        }
+        if (ciclosOrdenados.length === 0) return alert("No hay datos para exportar.");
 
         const dibujarEncabezado = () => {
-            const imgWidth = 25; const imgHeight = 25; 
-            const marginTop = 5; const marginLeft = 15; 
-            const xLogoDer = pageWidth - marginLeft - imgWidth;
+            const imgW = 25; const imgH = 25; 
+            try { doc.addImage(logoIzq, 'PNG', 15, 5, imgW, imgH); } catch (e) {}
+            try { doc.addImage(logoDer, 'PNG', pageWidth - 40, 5, imgW, imgH); } catch (e) {}
 
-            try { doc.addImage(logoIzq, 'PNG', marginLeft, marginTop, imgWidth, imgHeight); } catch (e) {}
-            try { doc.addImage(logoDer, 'PNG', xLogoDer, marginTop, imgWidth, imgHeight); } catch (e) {}
-
-            doc.setFontSize(14);
-            doc.setTextColor(40, 53, 147);
+            doc.setFontSize(14); doc.setTextColor(40, 53, 147);
             doc.text("UNIVERSIDAD ESTATAL DE BOLIVAR", pageWidth / 2, 15, { align: "center" });
-            
-            doc.setFontSize(10);
-            doc.setTextColor(0);
+            doc.setFontSize(10); doc.setTextColor(0);
             doc.text("REPORTE DE CUMPLIMIENTO - HABILIDADES BLANDAS", pageWidth / 2, 25, { align: "center" });
-            
-            doc.setFontSize(9);
-            doc.setTextColor(100);
-            const textoPeriodo = filtroPeriodo ? `Periodo: ${filtroPeriodo}` : "Periodo: Todos (Histórico)";
-            doc.text(`${textoPeriodo}  |  Carrera: ${filtroCarrera}`, pageWidth / 2, 32, { align: "center" });
+            doc.setFontSize(9); doc.setTextColor(100);
+            doc.text(`Periodo: ${filtroPeriodo} | Carrera: ${filtroCarrera}`, pageWidth / 2, 32, { align: "center" });
         };
 
         ciclosOrdenados.forEach((ciclo, index) => {
             if (index > 0) doc.addPage();
             dibujarEncabezado();
+            
+            doc.setFontSize(12); doc.setTextColor(220, 38, 38);
+            doc.text(`CICLO: ${ciclo}`, 15, 45);
 
-            doc.setFontSize(12);
-            doc.setTextColor(220, 38, 38);
-            doc.text(`CICLO ACADÉMICO: ${ciclo}`, 15, 45);
-
-            const cuerpo = gruposPorCiclo[ciclo].map(r => [
-                r.carrera,
-                r.asignatura,
-                r.docente,
-                r.habilidad,
-                r.estado,
-                r.progreso + '%'
+            const body = gruposPorCiclo[ciclo].map(r => [
+                r.asignatura, r.docente, r.habilidad, r.estado, r.progreso + '%'
             ]);
 
             autoTable(doc, {
                 startY: 48,
-                head: [['Carrera', 'Asignatura', 'Docente', 'Habilidad', 'Estado', 'Avance']],
-                body: cuerpo,
+                head: [['Asignatura', 'Docente', 'Habilidad', 'Estado', 'Avance']],
+                body: body,
                 theme: 'grid',
                 headStyles: { fillColor: [41, 128, 185], halign: 'center' },
-                styles: { fontSize: 8, halign: 'center' },
-                columnStyles: { 
-                    1: { halign: 'left', cellWidth: 50 },
-                    2: { halign: 'left', cellWidth: 50 },
-                    3: { halign: 'left' } 
-                },
-                didDrawPage: (data) => {
-                    const pageCount = doc.internal.getNumberOfPages();
-                    doc.setFontSize(8);
-                    doc.setTextColor(150);
-                    doc.text(`Página ${pageCount}`, pageWidth - 20, doc.internal.pageSize.getHeight() - 10);
-                }
+                styles: { fontSize: 9, halign: 'center' },
+                columnStyles: { 0: { halign: 'left' }, 1: { halign: 'left' } }
             });
         });
-
-        doc.save(`Reporte_${filtroCarrera}_${filtroPeriodo || 'General'}.pdf`);
+        
+        doc.save(`Reporte_Habilidades_${filtroPeriodo}.pdf`);
     };
 
+    // --- HELPERS ---
     const getBadgeColor = (estado) => {
-        switch(estado) {
-            case 'Completado': return 'bg-green-100 text-green-700 border-green-200';
-            case 'En Proceso': return 'bg-blue-100 text-blue-700 border-blue-200';
-            case 'Planificado': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-            default: return 'bg-red-50 text-red-600 border-red-100';
-        }
+        if (estado === 'Completado') return 'bg-green-100 text-green-700 border-green-200';
+        if (estado === 'En Proceso' || estado === 'Planificado') return 'bg-blue-100 text-blue-700 border-blue-200';
+        return 'bg-red-50 text-red-600 border-red-100';
     };
 
     const getIcon = (estado) => {
-        switch(estado) {
-            case 'Completado': return <CheckCircleIcon className="h-4 w-4"/>;
-            case 'Sin Planificar': return <XCircleIcon className="h-4 w-4"/>;
-            default: return <ClockIcon className="h-4 w-4"/>;
-        }
+        if (estado === 'Completado') return <CheckCircleIcon className="h-4 w-4"/>;
+        if (estado === 'En Proceso' || estado === 'Planificado') return <ClockIcon className="h-4 w-4"/>;
+        return <ExclamationCircleIcon className="h-4 w-4"/>;
     };
 
-    const opcionesPeriodos = [
-        { value: '', label: 'Todos los Periodos' },
-        ...periodos.map(p => ({ value: p.nombre, label: p.nombre }))
-    ];
+    const opcionesPeriodos = periodos.map(p => ({ 
+        value: p.nombre, 
+        label: p.nombre, 
+        subtext: p.activo ? 'Activo' : '' 
+    }));
+
+    // --- CÁLCULOS ESTADÍSTICOS  ---
+    const total = reporteData.length;
+    const completados = reporteData.filter(r => r.estado === 'Completado').length;
+    // Agrupamos 'En Proceso' y 'Planificado' en la tarjeta azul
+    const enProceso = reporteData.filter(r => r.estado === 'En Proceso' || r.estado === 'Planificado').length;
+    const pendientes = reporteData.filter(r => r.estado === 'Sin Planificar').length;
 
     return (
         <div className="space-y-6 animate-fade-in">
-            {/* CABECERA */}
+            {/* Header */}
             <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
                 <div>
                     <h2 className="text-2xl font-bold text-gray-900">Reportes Generales</h2>
-                    <p className="text-gray-500 text-sm mt-1">Monitoreo del cumplimiento por carrera y asignatura.</p>
+                    <p className="text-gray-500 text-sm">Monitoreo de cumplimiento por periodo académico.</p>
                 </div>
-                <button 
-                    onClick={descargarPDF} 
-                    disabled={reporteData.length === 0} 
-                    className="bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 px-6 rounded-xl shadow-lg shadow-red-100 transition flex items-center gap-2 transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    <PrinterIcon className="h-5 w-5"/> Exportar PDF por Ciclos
+                <button onClick={descargarPDF} disabled={total === 0} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 px-6 rounded-xl shadow-lg flex items-center gap-2 transform active:scale-95 disabled:opacity-50">
+                    <PrinterIcon className="h-5 w-5"/> Exportar PDF
                 </button>
             </div>
 
-            {/* ZONA DE FILTROS */}
+            {/* Filtros y Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 
-                {/* COLUMNA 1: FILTROS */}
+                {/* Filtros */}
                 <div className="md:col-span-1 space-y-4">
                     <div className="bg-white p-1 rounded-2xl shadow-sm border border-gray-100">
-                        <CustomSelect 
-                            label="Filtrar por Carrera"
-                            icon={FunnelIcon}
-                            options={opcionesCarrera}
-                            value={filtroCarrera}
-                            onChange={setFiltroCarrera}
-                        />
+                        <CustomSelect label="Carrera" icon={FunnelIcon} options={opcionesCarrera} value={filtroCarrera} onChange={setFiltroCarrera} />
                     </div>
-                    
                     <div className="bg-white p-1 rounded-2xl shadow-sm border border-gray-100">
-                        <CustomSelect 
-                            label="Filtrar por Periodo"
-                            icon={CalendarDaysIcon}
-                            options={opcionesPeriodos}
-                            value={filtroPeriodo}
-                            onChange={setFiltroPeriodo}
-                            placeholder="Todos los periodos"
-                        />
+                        <CustomSelect label="Periodo" icon={CalendarDaysIcon} options={opcionesPeriodos} value={filtroPeriodo} onChange={setFiltroPeriodo} placeholder="Cargando..." />
                     </div>
                 </div>
-                
-                {/* COLUMNA 2: RESUMEN (TARJETAS) */}
-                <div className="md:col-span-3 grid grid-cols-3 gap-4 h-full">
-                    {/* COMPLETADOS */}
-                    <div className="bg-white p-4 rounded-2xl shadow-sm border border-l-4 border-l-green-500 border-gray-100 flex flex-col justify-center">
-                        <p className="text-xs font-bold text-gray-400 uppercase">Completados</p>
-                        <p className="text-2xl font-bold text-green-600">
-                            {reporteData.filter(r => r.estado === 'Completado').length}
-                        </p>
+
+                {/* 3 TARJETAS DE RESUMEN */}
+                <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-4 h-full">
+                    
+                    {/* 1. COMPLETADOS (Verde) */}
+                    <div className="bg-white p-5 rounded-2xl border-l-4 border-green-500 shadow-sm flex flex-col justify-center">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Completados</p>
+                                <p className="text-3xl font-bold text-green-600 mt-1">{completados}</p>
+                            </div>
+                            <div className="p-2 bg-green-50 rounded-lg text-green-600">
+                                <CheckCircleIcon className="h-6 w-6"/>
+                            </div>
+                        </div>
+                        <div className="w-full bg-gray-100 rounded-full h-1.5 mt-4">
+                            <div className="bg-green-500 h-1.5 rounded-full transition-all" style={{ width: `${total > 0 ? (completados/total)*100 : 0}%` }}></div>
+                        </div>
                     </div>
 
-                    {/* EN PROCESO (AHORA INCLUYE PLANIFICADOS) */}
-                    <div className="bg-white p-4 rounded-2xl shadow-sm border border-l-4 border-l-blue-500 border-gray-100 flex flex-col justify-center">
-                        <p className="text-xs font-bold text-gray-400 uppercase">En Proceso</p>
-                        <p className="text-2xl font-bold text-blue-600">
-                            {/* CAMBIO AQUÍ: Sumamos 'En Proceso' + 'Planificado' */}
-                            {reporteData.filter(r => r.estado === 'En Proceso' || r.estado === 'Planificado').length}
-                        </p>
+                    {/* 2. EN PROCESO (Azul) */}
+                    <div className="bg-white p-5 rounded-2xl border-l-4 border-blue-500 shadow-sm flex flex-col justify-center">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">En Proceso</p>
+                                <p className="text-3xl font-bold text-blue-600 mt-1">{enProceso}</p>
+                            </div>
+                            <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
+                                <ClockIcon className="h-6 w-6"/>
+                            </div>
+                        </div>
+                        <div className="w-full bg-gray-100 rounded-full h-1.5 mt-4">
+                            <div className="bg-blue-500 h-1.5 rounded-full transition-all" style={{ width: `${total > 0 ? (enProceso/total)*100 : 0}%` }}></div>
+                        </div>
                     </div>
 
-                    {/* SIN PLANIFICAR */}
-                    <div className="bg-white p-4 rounded-2xl shadow-sm border border-l-4 border-l-red-400 border-gray-100 flex flex-col justify-center">
-                        <p className="text-xs font-bold text-gray-400 uppercase">Sin Planificar</p>
-                        <p className="text-2xl font-bold text-red-500">
-                            {reporteData.filter(r => r.estado === 'Sin Planificar').length}
-                        </p>
+                    {/* 3. PENDIENTES (Rojo) */}
+                    <div className="bg-white p-5 rounded-2xl border-l-4 border-red-500 shadow-sm flex flex-col justify-center">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Sin Planificar</p>
+                                <p className="text-3xl font-bold text-red-600 mt-1">{pendientes}</p>
+                            </div>
+                            <div className="p-2 bg-red-50 rounded-lg text-red-600">
+                                <ExclamationCircleIcon className="h-6 w-6"/>
+                            </div>
+                        </div>
+                        <div className="w-full bg-gray-100 rounded-full h-1.5 mt-4">
+                            <div className="bg-red-500 h-1.5 rounded-full transition-all" style={{ width: `${total > 0 ? (pendientes/total)*100 : 0}%` }}></div>
+                        </div>
                     </div>
+
                 </div>
             </div>
 
-            {/* TABLA DE CUMPLIMIENTO */}
+            {/* Tabla */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="p-5 border-b border-gray-100 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <PresentationChartLineIcon className="h-5 w-5 text-gray-500"/>
-                        <h3 className="font-bold text-gray-800">Matriz de Cumplimiento</h3>
-                    </div>
-                    {filtroPeriodo && (
-                        <span className="text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-full border border-blue-100 font-bold">
-                            Periodo: {filtroPeriodo}
-                        </span>
-                    )}
+                <div className="p-5 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                    <h3 className="font-bold text-gray-700 flex items-center gap-2">
+                        <PresentationChartLineIcon className="h-5 w-5 text-blue-600"/> Detalle de Cumplimiento
+                    </h3>
+                    {filtroPeriodo && <span className="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded-full font-bold">{filtroPeriodo}</span>}
                 </div>
                 
-                <table className="min-w-full divide-y divide-gray-100">
-                    <thead className="bg-gray-50">
-                        <tr>
-                            <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Asignatura / Carrera</th>
-                            <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Docente</th>
-                            <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Habilidad</th>
-                            <th className="px-6 py-3 text-center text-xs font-bold text-gray-500 uppercase">Estado</th>
-                            <th className="px-6 py-3 text-center text-xs font-bold text-gray-500 uppercase">Avance</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-50">
-                        {loading ? (
-                            <tr><td colSpan="5" className="text-center py-10 text-gray-400">Cargando datos...</td></tr>
-                        ) : reporteData.length === 0 ? (
-                            <tr><td colSpan="5" className="text-center py-10 text-gray-400">No hay datos para el periodo y carrera seleccionados.</td></tr>
-                        ) : reporteData.map((item) => (
-                            <tr key={item.id} className="hover:bg-gray-50 transition">
-                                <td className="px-6 py-4">
-                                    <p className="text-sm font-bold text-gray-800">{item.asignatura}</p>
-                                    <p className="text-xs text-gray-500">{item.carrera} - Ciclo {item.ciclo}</p>
-                                </td>
-                                <td className="px-6 py-4 text-sm text-gray-700">{item.docente}</td>
-                                <td className="px-6 py-4 text-sm text-gray-600 italic">{item.habilidad}</td>
-                                <td className="px-6 py-4 text-center">
-                                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${getBadgeColor(item.estado)}`}>
-                                        {getIcon(item.estado)} {item.estado}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-full bg-gray-200 rounded-full h-2">
-                                            <div className={`h-2 rounded-full ${item.progreso === 100 ? 'bg-green-500' : 'bg-blue-500'}`} style={{ width: `${item.progreso}%` }}></div>
-                                        </div>
-                                        <span className="text-xs font-bold text-gray-600 w-8">{item.progreso}%</span>
-                                    </div>
-                                </td>
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-100">
+                        <thead className="bg-white">
+                            <tr>
+                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Asignatura</th>
+                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Docente</th>
+                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Habilidad</th>
+                                <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase">Estado</th>
+                                <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase">Avance</th>
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-50">
+                            {loading ? <tr><td colSpan="5" className="text-center py-12 text-gray-400">Cargando...</td></tr> : 
+                             reporteData.length === 0 ? <tr><td colSpan="5" className="text-center py-12 text-gray-400 italic">No se encontraron datos.</td></tr> :
+                             reporteData.map((r, i) => (
+                                <tr key={`${r.id}-${i}`} className="hover:bg-blue-50/30 transition">
+                                    <td className="px-6 py-4 align-top">
+                                        <div className="font-bold text-gray-800 text-sm">{r.asignatura}</div>
+                                        <div className="text-xs text-gray-500 mt-1 flex gap-2">
+                                            <span className="bg-gray-100 px-2 py-0.5 rounded">{r.carrera}</span>
+                                            <span className="bg-gray-100 px-2 py-0.5 rounded">{r.ciclo}</span>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 align-top text-sm text-gray-700 font-medium">{r.docente}</td>
+                                    <td className="px-6 py-4 align-top text-sm">
+                                        {r.habilidad === 'No definida' || r.habilidad === 'Sin seleccionar' ? (
+                                            <span className="text-gray-400 italic font-light">{r.habilidad}</span>
+                                        ) : (
+                                            <span className="text-blue-600 font-medium">{r.habilidad}</span>
+                                        )}
+                                    </td>
+                                    <td className="px-6 py-4 align-top text-center">
+                                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${getBadgeColor(r.estado)}`}>
+                                            {getIcon(r.estado)} {r.estado}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 align-top">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                                                <div className={`h-2 rounded-full ${r.progreso === 100 ? 'bg-green-500' : 'bg-blue-500'}`} style={{width: `${r.progreso}%`}}></div>
+                                            </div>
+                                            <span className="text-xs font-bold text-gray-600 w-8 text-right">{r.progreso}%</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     );
