@@ -89,10 +89,11 @@ Route::middleware('auth:sanctum')->group(function () {
 Route::post('/matriculas/import', [MatriculaController::class, 'import']);
 
     // --- DOCENTE ---
+   Route::get('/docente/mis-cursos', [DocenteController::class, 'misCursos']);
+    Route::get('/docente/curso/{asignaturaId}/estudiantes', [DocenteController::class, 'misEstudiantes']);
     Route::get('/docente/asignaturas', [DocenteController::class, 'misAsignaturas']);
     Route::get('/docente/estudiantes/{asignatura}', [DocenteController::class, 'verEstudiantes']);
     Route::get('/docente/habilidades/{asignatura}', [DocenteController::class, 'misHabilidades']);
-
     // Planificación
     Route::get('/planificaciones/verificar/{asignatura_id}', [PlanificacionController::class, 'verificar']);
     Route::post('/planificaciones', [PlanificacionController::class, 'store']);
@@ -106,4 +107,6 @@ Route::post('/matriculas/import', [MatriculaController::class, 'import']);
     Route::post('/reportes/pdf-data', [DocenteController::class, 'pdfData']);
     Route::post('/reportes/pdf-data-general', [DocenteController::class, 'pdfDataGeneral']);
     Route::post('/reportes/guardar-todo', [DocenteController::class, 'guardarConclusionesMasivas']);
+    Route::post('/docente/agregar-estudiante', [DocenteController::class, 'agregarEstudianteManual']);
+    
 });

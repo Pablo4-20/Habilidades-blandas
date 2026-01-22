@@ -15,6 +15,8 @@ import GestionPeriodos from './components/GestionPeriodos';
 import CambiarPasswordInicial from './components/CambiarPasswordInicial';
 import FichaResumen from './components/FichaResumen';
 import Matriculacion from './components/Matriculacion'; 
+// 👇 IMPORTAR EL NUEVO COMPONENTE
+import MisCursos from './components/MisCursos'; 
 
 import RecuperarPassword from './components/RecuperarPassword';
 import RestablecerPassword from './components/RestablecerPassword';
@@ -37,54 +39,24 @@ function App() {
     <BrowserRouter>
       <Routes>
         {/* --- ZONA PÚBLICA --- */}
-        
-        {/* Login (Ruta Raíz) */}
-        <Route path="/" element={
-            <PublicRoute>
-                <Login />
-            </PublicRoute>
-        } />
-
-        {/* Login (Ruta Explícita) */}
-        <Route path="/login" element={
-            <PublicRoute>
-                <Login />
-            </PublicRoute>
-        } />
-
-        {/* RUTAS DE RECUPERACIÓN DE CONTRASEÑA */}
-        <Route path="/recuperar-password" element={
-            <PublicRoute>
-                <RecuperarPassword />
-            </PublicRoute>
-        } />
-        
-        <Route path="/reset-password/:token" element={
-            <PublicRoute>
-                <RestablecerPassword />
-            </PublicRoute>
-        } />
-        
-        <Route path="/primer-cambio-password" element={
-            <ProtectedRoute>
-                <CambiarPasswordInicial />
-            </ProtectedRoute>
-        } />
+        <Route path="/" element={<PublicRoute><Login /></PublicRoute>} />
+        <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+        <Route path="/recuperar-password" element={<PublicRoute><RecuperarPassword /></PublicRoute>} />
+        <Route path="/reset-password/:token" element={<PublicRoute><RestablecerPassword /></PublicRoute>} />
+        <Route path="/primer-cambio-password" element={<ProtectedRoute><CambiarPasswordInicial /></ProtectedRoute>} />
 
         {/* --- ZONA PRIVADA (DASHBOARD) --- */}
-        <Route path="/dashboard" element={
-            <ProtectedRoute>
-                <DashboardLayout />
-            </ProtectedRoute>
-        }>
+        <Route path="/dashboard" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
             <Route index element={<DashboardHome />} />
 
             {/* ZONA DOCENTE */}
             <Route element={<RoleGuard allowedRoles={['docente']} />}>
+                {/* 👇 AGREGA ESTA LÍNEA PARA QUE FUNCIONE */}
+                <Route path="mis-cursos" element={<MisCursos />} />
+                
                 <Route path="planificacion" element={<PlanificacionDocente />} />
                 <Route path="evaluacion" element={<EvaluacionDocente />} />
                 <Route path="reportes-docente" element={<ReportesDocente />} />
-                {/* 👇 CORRECCIÓN AQUÍ: Ruta relativa simple */}
                 <Route path="fichas-resumen" element={<FichaResumen />} />
             </Route>
 

@@ -5,14 +5,16 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Estudiante;
-use App\Models\User; // <--- IMPORTANTE: Importar modelo User
+use App\Models\User; 
 use Illuminate\Validation\Rule;
-use App\Rules\ValidaCedula; // Si usas tu regla personalizada
+use App\Rules\ValidaCedula; 
+use Illuminate\Support\Facades\DB;
 
 class EstudianteController extends Controller
 {
     public function index()
     {
+        // Traemos la carrera y las relaciones de matrícula
         return Estudiante::with('ultimaMatricula.periodo', 'ultimaMatricula.ciclo')
             ->orderBy('id', 'desc')
             ->get();
@@ -24,10 +26,10 @@ class EstudianteController extends Controller
             'cedula' => ['required', 'unique:estudiantes', new ValidaCedula],
             'nombres' => 'required',
             'apellidos' => 'required',
-            'email' => 'required|email|unique:estudiantes'
+            'email' => 'required|email|unique:estudiantes',
+            'carrera' => 'required|string' // Se guarda la carrera seleccionada
         ]);
 
-        // --- VALIDACIÓN CRUZADA: Verificar si ya existe como Usuario (Docente/Admin) ---
         if (User::where('cedula', $request->cedula)->exists()) {
             return response()->json([
                 'message' => 'Error: Esta cédula ya está registrada como Personal Administrativo/Docente.'
@@ -46,12 +48,11 @@ class EstudianteController extends Controller
             'cedula' => ['required', Rule::unique('estudiantes')->ignore($id), new ValidaCedula],
             'nombres' => 'required',
             'apellidos' => 'required',
-            'email' => ['required', 'email', Rule::unique('estudiantes')->ignore($id)]
+            'email' => ['required', 'email', Rule::unique('estudiantes')->ignore($id)],
+            'carrera' => 'required|string'
         ]);
 
-        // --- VALIDACIÓN CRUZADA EN UPDATE ---
-        // Verificamos en Users, pero solo si la cédula cambió o si ya existía allá por error
-        if (User::where('cedula', $request->cedula)->exists()) {
+        if (User::where('cedula', $request->cedula)->where('id', '!=', $id)->exists()) {
             return response()->json([
                 'message' => 'Conflicto: Esta cédula pertenece a un Usuario del sistema.'
             ], 422);
@@ -67,7 +68,7 @@ class EstudianteController extends Controller
         return response()->json(['message' => 'Eliminado']);
     }
 
-    // --- IMPORTACIÓN MASIVA CON VALIDACIÓN CRUZADA ---
+    // --- IMPORTACIÓN MASIVA ACTUALIZADA PARA GUARDAR CARRERA ---
     public function import(Request $request)
     {
         $request->validate(['file' => 'required|file']);
@@ -84,22 +85,18 @@ class EstudianteController extends Controller
             if (trim($linea) === '') continue;
             $row = str_getcsv($linea, $separador);
             
-            // Validar estructura mínima
-            if (count($row) < 4) continue; 
-            if (strtolower(trim($row[0])) === 'cedula') continue; // Cabecera
+            if (count($row) < 5) continue; // Ahora validamos 5 columnas (Cédula, Nombres, Apellidos, Email, Carrera)
+            if (strtolower(trim($row[0])) === 'cedula') continue; 
 
             $cedula = trim($row[0]);
             
-            // 1. Validar si ya es Estudiante
             if (Estudiante::where('cedula', $cedula)->exists()) {
-                // Opcional: Podrías actualizar en vez de dar error, depende de tu lógica
                 $errores[] = "Fila ".($index+1).": $cedula ya es estudiante.";
                 continue; 
             }
 
-            // 2. VALIDACIÓN CRUZADA: Validar si es Usuario
             if (User::where('cedula', $cedula)->exists()) {
-                $errores[] = "Fila ".($index+1).": $cedula ya existe como Personal Administrativo.";
+                $errores[] = "Fila ".($index+1).": $cedula ya existe como Personal.";
                 continue;
             }
 
@@ -109,7 +106,8 @@ class EstudianteController extends Controller
                     'nombres' => mb_convert_case(trim($row[1]), MB_CASE_TITLE, "UTF-8"),
                     'apellidos' => mb_convert_case(trim($row[2]), MB_CASE_TITLE, "UTF-8"),
                     'email' => strtolower(trim($row[3])),
-                    // 'carrera' => ... (si la tienes en el excel)
+                    'carrera' => trim($row[4] ?? 'SOFTWARE'), // <--- LEE LA QUINTA COLUMNA
+                    'estado' => 'Activo'
                 ]);
                 $creados++;
             } catch (\Exception $e) {
@@ -121,5 +119,26 @@ class EstudianteController extends Controller
             'message' => "Proceso terminado. Creados: $creados.",
             'errores' => $errores
         ]);
+    }
+
+    // --- BUSCADOR PARA EL DOCENTE (FILTRO POR CARRERA, NOMBRE O CEDULA) ---
+    public function buscar(Request $request)
+    {
+        $search = $request->input('query');
+        $carrera = $request->input('carrera');
+
+        $estudiantes = Estudiante::query()
+            ->when($carrera, function($q) use ($carrera) {
+                return $q->where('carrera', $carrera);
+            })
+            ->where(function($q) use ($search) {
+                $q->where('nombres', 'LIKE', "%{$search}%")
+                  ->orWhere('apellidos', 'LIKE', "%{$search}%")
+                  ->orWhere('cedula', 'LIKE', "%{$search}%");
+            })
+            ->limit(10)
+            ->get();
+
+        return response()->json($estudiantes);
     }
 }

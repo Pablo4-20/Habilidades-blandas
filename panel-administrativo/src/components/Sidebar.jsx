@@ -46,7 +46,6 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     const menuItems = {
         admin: [
             { name: 'Inicio', path: '/dashboard', icon: HomeIcon },
-            // 👇 CAMBIO: Periodos Académicos ahora va primero
             { name: 'Periodos Académicos', path: '/dashboard/periodos', icon: CalendarDaysIcon },
             { name: 'Gestión Usuarios', path: '/dashboard/usuarios', icon: UsersIcon },
             { name: 'Asignaturas', path: '/dashboard/asignaturas', icon: BookOpenIcon },
@@ -60,6 +59,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
         ],
         docente: [
             { name: 'Inicio', path: '/dashboard', icon: HomeIcon },
+            { name: 'Mis Cursos', path: '/dashboard/mis-cursos', icon: BookOpenIcon }, // <--- AGREGADO
             { name: 'Mis Habilidades', path: '/dashboard/planificacion', icon: ClipboardDocumentCheckIcon },
             { name: 'Calificar', path: '/dashboard/evaluacion', icon: UsersIcon },
             { name: 'Mis Reportes', path: '/dashboard/reportes-docente', icon: DocumentChartBarIcon },
