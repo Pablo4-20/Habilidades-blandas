@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB; 
+use App\Models\PeriodoAcademico; // <--- IMPORTANTE
 
 class CoordinadorController extends Controller
 {
@@ -13,11 +14,9 @@ class CoordinadorController extends Controller
         try {
             $carreras = DB::table('carreras')->orderBy('nombre')->pluck('nombre');
             
-            $periodos = DB::table('asignaciones')
-                        ->select('periodo')
-                        ->distinct()
-                        ->orderBy('periodo', 'desc')
-                        ->pluck('periodo');
+            // CAMBIO: Obtener periodos desde la tabla oficial, ordenados por fecha
+            // Esto evita que salgan periodos mal escritos que pudieran existir en asignaciones antiguas
+            $periodos = PeriodoAcademico::orderBy('id', 'desc')->pluck('nombre');
 
             return response()->json([
                 'carreras' => $carreras,
@@ -34,43 +33,35 @@ class CoordinadorController extends Controller
             $carrera = $request->query('carrera'); 
             $periodo = $request->query('periodo');
 
-            // 1. Si no viene periodo, intentamos tomar el activo
+            // 1. Si no viene periodo, tomamos el activo oficial
             if (empty($periodo) || $periodo === 'undefined' || $periodo === 'null') {
-                $periodoActivo = DB::table('periodos_academicos')->where('activo', true)->first();
+                $periodoActivo = PeriodoAcademico::where('activo', true)->first();
                 $periodo = $periodoActivo ? $periodoActivo->nombre : null;
             }
 
             if (!$periodo) return response()->json([]);
 
-            // 2. CONSULTA SQL
+            // 2. CONSULTA (Se mantiene igual porque Asignaciones usa el nombre del periodo)
+            // Esta lógica es correcta porque la asignación de materias (Docente-Materia)
+            // es independiente de la matrícula del estudiante.
             $query = DB::table('asignaciones')
                 ->join('users', 'asignaciones.docente_id', '=', 'users.id')
                 ->join('asignaturas', 'asignaciones.asignatura_id', '=', 'asignaturas.id')
                 ->join('carreras', 'asignaturas.carrera_id', '=', 'carreras.id')
                 ->join('ciclos', 'asignaturas.ciclo_id', '=', 'ciclos.id')
                 
-                // Unimos con Planificaciones
                 ->leftJoin('planificaciones', function($join) {
                     $join->on('asignaciones.asignatura_id', '=', 'planificaciones.asignatura_id')
                          ->on('asignaciones.docente_id', '=', 'planificaciones.docente_id')
                          ->on('asignaciones.periodo', '=', 'planificaciones.periodo_academico');
                 })
-                
-                // Unimos con Detalle
-                ->leftJoin('detalle_planificaciones', 'planificaciones.id', '=', 'detalle_planificaciones.planificacion_id')
-                
-                // Unimos con Habilidades
-                ->leftJoin('habilidades_blandas', 'detalle_planificaciones.habilidad_blanda_id', '=', 'habilidades_blandas.id')
-                
                 ->select(
-                    'asignaciones.id as asignacion_id',
-                    'carreras.nombre as carrera',
                     'asignaturas.nombre as asignatura',
-                    'ciclos.nombre as ciclo',
-                    'users.nombres', 
+                    'users.nombres',
                     'users.apellidos',
-                    'planificaciones.id as planificacion_id',
-                    'habilidades_blandas.nombre as habilidad'
+                    'carreras.nombre as carrera',
+                    'ciclos.nombre as ciclo',
+                    'planificaciones.id as plan_id'
                 )
                 ->where('asignaciones.periodo', $periodo);
 
@@ -78,63 +69,42 @@ class CoordinadorController extends Controller
                 $query->where('carreras.nombre', $carrera);
             }
 
-            $datos = $query->get();
+            $data = $query->get();
 
-            // 3. PROCESAMIENTO
-            $reporte = $datos->map(function($item) {
-                
-                $tienePlan = !is_null($item->planificacion_id);
-                $tieneHabilidad = !is_null($item->habilidad);
-                $habilidadTexto = $tieneHabilidad ? $item->habilidad : 'No definida';
+            // PROCESAMIENTO DE AVANCE (Lógica de semáforos)
+            $reporte = $data->map(function($item) {
+                $estado = 'Sin Planificar';
+                $avance = 0;
 
-                // --- LÓGICA CORREGIDA PARA DETECTAR 100% ---
-                $tieneEvaluaciones = false;
+                if ($item->plan_id) {
+                    $estado = 'En Proceso';
+                    $avance = 50;
 
-                if ($tienePlan) {
-                    // Verificamos si existen evaluaciones para este plan
-                    $tieneEvaluaciones = DB::table('evaluaciones')
-                        ->where('planificacion_id', $item->planificacion_id)
+                    // Verificar si tiene evaluaciones (notas subidas)
+                    $tieneEvaluacion = DB::table('evaluaciones')
+                        ->where('planificacion_id', $item->plan_id)
                         ->exists();
-                }
 
-                // Determinamos Estado y Progreso
-                if ($tieneEvaluaciones) {
-                    $estado = 'Completado';
-                    $progreso = 100;
-                } elseif ($tienePlan && $tieneHabilidad) {
-                    $estado = 'Planificado'; // Listo para calificar, pero aún no califica
-                    $progreso = 50; 
-                } elseif ($tienePlan && !$tieneHabilidad) {
-                    $estado = 'En Proceso'; // Creó el plan pero no añadió detalles
-                    $progreso = 25;
-                    $habilidadTexto = 'Sin seleccionar';
-                } else {
-                    $estado = 'Sin Planificar';
-                    $progreso = 0;
+                    if ($tieneEvaluacion) {
+                        $estado = 'Completado';
+                        $avance = 100;
+                    }
                 }
 
                 return [
-                    'id'         => $item->asignacion_id,
-                    'carrera'    => $item->carrera,
                     'asignatura' => $item->asignatura,
+                    'docente'    => $item->apellidos . ' ' . $item->nombres,
+                    'carrera'    => $item->carrera,
                     'ciclo'      => $item->ciclo,
-                    'docente'    => $item->nombres . ' ' . $item->apellidos,
-                    'habilidad'  => $habilidadTexto,
                     'estado'     => $estado,
-                    'progreso'   => $progreso
+                    'avance'     => $avance
                 ];
             });
 
-            // Eliminar duplicados (por si una materia tiene varias habilidades, muestra la primera procesada o todas si son distintas)
-            // Aquí agrupamos para que no salgan filas repetidas si no es necesario
-            $reporteUnico = $reporte->unique(function ($item) {
-                return $item['id'] . $item['habilidad'];
-            })->values();
-
-            return response()->json($reporteUnico);
+            return response()->json($reporte);
 
         } catch (\Exception $e) {
-            return response()->json(['message' => 'Error en reporte: ' . $e->getMessage()], 500);
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 }

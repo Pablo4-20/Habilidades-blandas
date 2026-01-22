@@ -51,6 +51,7 @@ const GestionUsuarios = () => {
     // --- ESTADOS ---
     const [activeTab, setActiveTab] = useState('administrativo');
     const [dataList, setDataList] = useState([]); 
+    const [listaCarreras, setListaCarreras] = useState([]); // <--- NUEVO: Para el select de coordinador
     const [loading, setLoading] = useState(false);
     const [editingId, setEditingId] = useState(null); 
 
@@ -66,7 +67,10 @@ const GestionUsuarios = () => {
     const fileInputRef = useRef(null);
 
     // Formularios
-    const [formUser, setFormUser] = useState({ cedula: '', nombres: '', apellidos: '', email: '', rol: 'docente', password: '' });
+    const [formUser, setFormUser] = useState({ 
+        cedula: '', nombres: '', apellidos: '', email: '', rol: 'docente', password: '', 
+        carrera_id: '' // <--- NUEVO CAMPO
+    });
     const [formStudent, setFormStudent] = useState({ cedula: '', nombres: '', apellidos: '', email: '', carrera: 'Software' });
 
     const [errors, setErrors] = useState({});
@@ -76,8 +80,16 @@ const GestionUsuarios = () => {
         setLoading(true);
         try {
             const endpoint = activeTab === 'administrativo' ? '/users' : '/estudiantes';
-            const res = await api.get(endpoint);
-            setDataList(Array.isArray(res.data) ? res.data : []);
+            
+            // Cargar Usuarios y Carreras en paralelo si es admin
+            const [resData, resCarreras] = await Promise.all([
+                api.get(endpoint),
+                activeTab === 'administrativo' ? api.get('/carreras').catch(() => ({ data: [] })) : Promise.resolve({ data: [] })
+            ]);
+
+            setDataList(Array.isArray(resData.data) ? resData.data : []);
+            if (activeTab === 'administrativo') setListaCarreras(resCarreras.data);
+
         } catch (error) {
             console.error("Error cargando datos:", error);
             setDataList([]);
@@ -101,7 +113,7 @@ const GestionUsuarios = () => {
         }
     };
 
-    // --- MANEJO DE INPUTS Y VALIDACIÓN ---
+    // --- MANEJO DE INPUTS ---
     const handleInputCedula = (e, isUser) => {
         const val = e.target.value.replace(/\D/g, '').slice(0, 10); 
         if (isUser) setFormUser({ ...formUser, cedula: val });
@@ -152,6 +164,11 @@ const GestionUsuarios = () => {
         const baseEndpoint = activeTab === 'administrativo' ? '/users' : '/estudiantes';
         const payload = activeTab === 'administrativo' ? formUser : formStudent;
 
+        // Validación extra: Coordinador debe tener carrera
+        if (activeTab === 'administrativo' && payload.rol === 'coordinador' && !payload.carrera_id) {
+            return Swal.fire('Falta Información', 'Debe asignar una carrera al Coordinador.', 'warning');
+        }
+
         if (!validarCedulaEcuador(payload.cedula)) {
             setErrors(prev => ({ ...prev, cedula: 'Cédula inválida' }));
             return;
@@ -196,12 +213,10 @@ const GestionUsuarios = () => {
         
         if (activeTab === 'administrativo') {
             name = "Plantilla_Personal.xlsx";
-            // Estructura Admin: 5 columnas (sin password)
-            data = [{ Cedula: "0201234567", Nombres: "Juan", Apellidos: "Perez", Email: "jperez@ueb.edu.ec", Rol: "docente" }];
-            wscols = [{wch: 15}, {wch: 15}, {wch: 15}, {wch: 25}, {wch: 15}];
+            data = [{ Cedula: "0201234567", Nombres: "Juan", Apellidos: "Perez", Email: "jperez@ueb.edu.ec", Password: "clave", Rol: "docente", Carrera: "Software (Solo Coordinador)" }];
+            wscols = [{wch: 15}, {wch: 15}, {wch: 15}, {wch: 25}, {wch: 15}, {wch: 15}, {wch: 25}];
         } else {
             name = "Plantilla_Estudiantes.xlsx";
-            // --- CORRECCIÓN AQUÍ: SOLO 4 COLUMNAS ---
             data = [{ Cedula: "0201234567", Nombres: "Carlos", Apellidos: "Ruiz", Email: "cruiz@mailes.ueb.edu.ec" }];
             wscols = [{wch: 15}, {wch: 15}, {wch: 15}, {wch: 30}];
         }
@@ -220,42 +235,41 @@ const GestionUsuarios = () => {
         if (!fileToUpload) return Swal.fire('Atención', 'Seleccione un archivo.', 'warning');
         Swal.fire({ title: 'Procesando...', text: 'Verificando datos...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
         try {
+            let fileToSend = fileToUpload;
             if (fileToUpload.name.endsWith('.xlsx') || fileToUpload.name.endsWith('.xls')) {
-                const reader = new FileReader();
-                reader.onload = async (evt) => {
-                    const bstr = evt.target.result;
-                    const workbook = XLSX.read(bstr, { type: 'binary' });
-                    const wsname = workbook.SheetNames[0];
-                    const ws = workbook.Sheets[wsname];
-                    const csvData = XLSX.utils.sheet_to_csv(ws);
-                    const blob = new Blob([csvData], { type: 'text/csv' });
-                    const convertedFile = new File([blob], "converted.csv", { type: "text/csv" });
-                    await enviarArchivoAlBackend(convertedFile);
-                };
-                reader.readAsBinaryString(fileToUpload);
-            } else { await enviarArchivoAlBackend(fileToUpload); }
-        } catch (error) { Swal.fire('Error', 'No se pudo procesar.', 'error'); }
-    };
-
-    const enviarArchivoAlBackend = async (file) => {
-        const formData = new FormData(); formData.append('file', file);
-        const endpoint = activeTab === 'administrativo' ? '/users/import' : '/estudiantes/import';
-        try {
+                const data = await fileToUpload.arrayBuffer();
+                const workbook = XLSX.read(data);
+                const csvData = XLSX.utils.sheet_to_csv(workbook.Sheets[workbook.SheetNames[0]], { FS: ";" });
+                const blob = new Blob([csvData], { type: 'text/csv' });
+                fileToSend = new File([blob], "converted.csv", { type: "text/csv" });
+            }
+            
+            const formData = new FormData(); 
+            formData.append('file', fileToSend);
+            
+            const endpoint = activeTab === 'administrativo' ? '/users/import' : '/estudiantes/import';
             const res = await api.post(endpoint, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+            
             Swal.fire('¡Éxito!', res.data.message, 'success');
             setShowImportModal(false); setFileToUpload(null); setFileName(''); fetchData();
-        } catch (error) { Swal.fire('Error', 'Formato incorrecto o datos duplicados.', 'error'); }
+        } catch (error) { Swal.fire('Error', error.response?.data?.message || 'Error al importar.', 'error'); }
     };
 
     const resetForms = () => {
-        setFormUser({ cedula: '', nombres: '', apellidos: '', email: '', rol: 'docente', password: '' });
+        setFormUser({ cedula: '', nombres: '', apellidos: '', email: '', rol: 'docente', password: '', carrera_id: '' });
         setFormStudent({ cedula: '', nombres: '', apellidos: '', email: '', carrera: 'Software' });
         setEditingId(null); setErrors({}); setShowModal(false);
     };
 
     const handleEditar = (item) => {
         setEditingId(item.id); 
-        if (activeTab === 'administrativo') setFormUser({ ...item, password: '' });
+        if (activeTab === 'administrativo') {
+            setFormUser({ 
+                ...item, 
+                password: '', 
+                carrera_id: item.carrera_id || '' // Cargar carrera si existe
+            });
+        }
         else setFormStudent({ ...item });
         setErrors({}); 
         setShowModal(true);
@@ -353,7 +367,13 @@ const GestionUsuarios = () => {
                                 <td className="px-6 py-4 text-sm text-gray-600 font-mono">{item.cedula}</td>
                                 <td className="px-6 py-4 flex items-center gap-3">
                                     <div className="h-8 w-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">{getInitials(item.nombres)}</div>
-                                    <div className="text-sm font-semibold text-gray-900">{item.apellidos} {item.nombres}</div>
+                                    <div className="flex flex-col">
+                                        <div className="text-sm font-semibold text-gray-900">{item.apellidos} {item.nombres}</div>
+                                        {/* MOSTRAR CARRERA SI ES COORDINADOR */}
+                                        {item.rol === 'coordinador' && item.carrera && (
+                                            <span className="text-xs text-blue-600 font-medium">Coord. {item.carrera.nombre}</span>
+                                        )}
+                                    </div>
                                 </td>
                                 <td className="px-6 py-4">
                                     <div className="flex flex-col">
@@ -431,14 +451,34 @@ const GestionUsuarios = () => {
                                         {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
                                     </div>
 
-                                    <select className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white outline-none" value={formUser.rol} onChange={e => setFormUser({...formUser, rol: e.target.value})}>
-                                        <option value="docente">Docente</option><option value="coordinador">Coordinador</option><option value="admin">Administrador</option>
-                                    </select>
-                                    <input type="password" placeholder={editingId ? "Contraseña (dejar vacío para no cambiar)" : "Contraseña"} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white outline-none" value={formUser.password} onChange={e => setFormUser({...formUser, password: e.target.value})} />
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <select className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white outline-none" value={formUser.rol} onChange={e => setFormUser({...formUser, rol: e.target.value})}>
+                                            <option value="docente">Docente</option><option value="coordinador">Coordinador</option><option value="admin">Administrador</option>
+                                        </select>
+                                        <input type="password" placeholder={editingId ? "Clave (vacío = actual)" : "Contraseña"} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white outline-none" value={formUser.password} onChange={e => setFormUser({...formUser, password: e.target.value})} />
+                                    </div>
+
+                                    {/* SELECT DE CARRERA (SOLO SI ES COORDINADOR) */}
+                                    {formUser.rol === 'coordinador' && (
+                                        <div className="animate-fade-in">
+                                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Asignar Carrera</label>
+                                            <select 
+                                                className="w-full px-4 py-2.5 bg-white border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-100 outline-none text-blue-800 font-medium"
+                                                value={formUser.carrera_id} 
+                                                onChange={e => setFormUser({...formUser, carrera_id: e.target.value})}
+                                                required
+                                            >
+                                                <option value="">-- Seleccione Carrera --</option>
+                                                {listaCarreras.map(c => (
+                                                    <option key={c.id} value={c.id}>{c.nombre}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
                                 </>
                             ) : (
                                 <>
-                                    {/* CAMPOS ESTUDIANTE (SIMPLE) */}
+                                    {/* CAMPOS ESTUDIANTE */}
                                     <div className="grid grid-cols-2 gap-4">
                                         <input required placeholder="Nombres" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white outline-none" value={formStudent.nombres} onChange={e => handleGenericInput(e, 'nombres', false)} />
                                         <input required placeholder="Apellidos" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white outline-none" value={formStudent.apellidos} onChange={e => handleGenericInput(e, 'apellidos', false)} />
@@ -449,12 +489,6 @@ const GestionUsuarios = () => {
                                             className={`w-full px-4 py-2.5 bg-gray-50 border rounded-xl outline-none focus:bg-white transition-all ${errors.email ? 'border-red-500' : 'border-gray-200'}`}
                                             value={formStudent.email} onChange={e => handleInputEmail(e, false)} />
                                         {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
-                                    </div>
-
-                                    <div className="w-full">
-                                        <select className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white outline-none" value={formStudent.carrera} onChange={e => setFormStudent({...formStudent, carrera: e.target.value})}>
-                                            <option value="Software">Software</option><option value="TI">TI</option>
-                                        </select>
                                     </div>
                                 </>
                             )}
@@ -473,7 +507,7 @@ const GestionUsuarios = () => {
                 </div>
             )}
 
-            {/* MODAL IMPORTAR (CON ESTRUCTURAS CORRECTAS) */}
+            {/* MODAL IMPORTAR */}
             {showImportModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-4 animate-fade-in">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-8 text-center relative overflow-hidden">
@@ -481,64 +515,19 @@ const GestionUsuarios = () => {
                             <CloudArrowUpIcon className="h-10 w-10 text-green-600" />
                         </div>
                         <h3 className="text-2xl font-bold text-gray-900 mb-2">Importar {activeTab === 'administrativo' ? 'Personal' : 'Estudiantes'}</h3>
-                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6 mt-4 text-left">
-                            <div className="flex justify-between items-center mb-3">
-                                <h4 className="text-xs font-bold text-slate-500 uppercase">Estructura Excel/CSV:</h4>
-                                <button onClick={downloadTemplate} className="text-xs flex items-center gap-1 text-green-700 hover:text-green-800 font-semibold bg-white px-3 py-1.5 rounded-lg border border-green-200 shadow-sm transition hover:shadow-md">
-                                    <ArrowDownTrayIcon className="h-3 w-3" /> Descargar Plantilla
-                                </button>
-                            </div>
-                            <div className="overflow-hidden rounded-lg border border-slate-300 shadow-sm bg-white overflow-x-auto">
-                                <table className="min-w-full text-xs text-left whitespace-nowrap">
-                                    <thead className="bg-slate-200 text-slate-700 font-bold">
-                                        {activeTab === 'administrativo' ? (
-                                            // 1. ESTRUCTURA PERSONAL ADMIN (5 COLUMNAS)
-                                            <tr>
-                                                <th className="px-3 py-2 border-r">Cedula</th>
-                                                <th className="px-3 py-2 border-r">Nombres</th>
-                                                <th className="px-3 py-2 border-r">Apellidos</th>
-                                                <th className="px-3 py-2 border-r">Email</th>
-                                                <th className="px-3 py-2">Rol</th>
-                                            </tr>
-                                        ) : (
-                                            // 2. ESTRUCTURA ESTUDIANTES (4 COLUMNAS)
-                                            <tr>
-                                                <th className="px-3 py-2 border-r">Cedula</th>
-                                                <th className="px-3 py-2 border-r">Nombres</th>
-                                                <th className="px-3 py-2 border-r">Apellidos</th>
-                                                <th className="px-3 py-2">Email</th>
-                                            </tr>
-                                        )}
-                                    </thead>
-                                    <tbody className="text-slate-600">
-                                        {activeTab === 'administrativo' ? (
-                                            <tr>
-                                                <td className="px-3 py-2 border-r">0201...</td>
-                                                <td className="px-3 py-2 border-r">Juan</td>
-                                                <td className="px-3 py-2 border-r">Perez</td>
-                                                <td className="px-3 py-2 border-r">j@ueb...</td>
-                                                <td className="px-3 py-2">docente</td>
-                                            </tr>
-                                        ) : (
-                                            <tr>
-                                                <td className="px-3 py-2 border-r">0201...</td>
-                                                <td className="px-3 py-2 border-r">Carlos</td>
-                                                <td className="px-3 py-2 border-r">Ruiz</td>
-                                                <td className="px-3 py-2">c@mailes...</td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                        <div onClick={handleClickUploadArea} className="border-2 border-dashed border-green-300 bg-green-50/50 rounded-xl p-8 cursor-pointer hover:bg-green-50 transition-colors mb-6">
+                        
+                        <div onClick={handleClickUploadArea} className="border-2 border-dashed border-green-300 bg-green-50/50 rounded-xl p-8 cursor-pointer hover:bg-green-50 transition-colors mb-6 mt-4">
                             <input type="file" ref={fileInputRef} accept=".csv, .xlsx" onChange={handleFileSelect} className="hidden" />
                             {fileName ? <div className="text-green-800 font-bold">{fileName}</div> : <div className="text-green-700 font-bold">Clic aquí para subir archivo</div>}
                         </div>
+
                         <div className="flex gap-4">
-                            <button onClick={() => setShowImportModal(false)} className="flex-1 py-3 bg-gray-100 rounded-xl">Cancelar</button>
-                            <button onClick={handleImportar} className="flex-1 py-3 bg-green-600 text-white rounded-xl font-bold">Subir</button>
+                            <button onClick={downloadTemplate} className="flex-1 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-50 flex items-center justify-center gap-2">
+                                <ArrowDownTrayIcon className="h-5 w-5"/> Plantilla
+                            </button>
+                            <button onClick={handleImportar} className="flex-1 py-3 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700">Procesar</button>
                         </div>
+                        <button onClick={() => setShowImportModal(false)} className="mt-4 text-gray-400 hover:text-gray-600 text-sm underline">Cancelar</button>
                     </div>
                 </div>
             )}

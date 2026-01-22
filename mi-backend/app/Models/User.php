@@ -10,14 +10,8 @@ use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable implements MustVerifyEmail
 {
-   
     use HasApiTokens, HasFactory, Notifiable; 
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array<int, string>
-     */
     protected $fillable = [
         'cedula',
         'nombres',   
@@ -26,28 +20,26 @@ class User extends Authenticatable implements MustVerifyEmail
         'password',
         'rol',
         'must_change_password',
+        'carrera_id', // <--- NUEVO CAMPO AGREGADO
     ];
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var array<int, string>
-     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    // --- RELACIÓN NUEVA ---
+    // Un usuario (coordinador) puede pertenecer a una carrera
+    public function carrera()
+    {
+        return $this->belongsTo(Carrera::class, 'carrera_id');
     }
 }

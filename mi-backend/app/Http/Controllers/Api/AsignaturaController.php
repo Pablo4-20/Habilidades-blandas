@@ -11,58 +11,118 @@ use App\Models\UnidadCurricular;
 
 class AsignaturaController extends Controller
 {
-    public function index() {
-        return Asignatura::with(['carrera', 'ciclo', 'unidadCurricular'])
-            ->orderBy('carrera_id', 'asc')
+    // 1. LISTAR (CON FILTRO DE SEGURIDAD)
+    public function index(Request $request) {
+        $user = $request->user();
+        
+        $query = Asignatura::with(['carrera', 'ciclo', 'unidadCurricular']);
+
+        // [SEGURIDAD] Si es coordinador, filtramos solo SU carrera
+        if ($user->rol === 'coordinador' && $user->carrera_id) {
+            $query->where('carrera_id', $user->carrera_id);
+        }
+
+        return $query->orderBy('carrera_id', 'asc')
             ->orderBy('unidad_curricular_id', 'asc')
             ->orderBy('ciclo_id', 'asc')
             ->orderBy('nombre', 'asc')
             ->get();
     }
 
+    // 2. CREAR INDIVIDUAL (FORZAR CARRERA)
     public function store(Request $request) {
-        $request->validate([
+        $user = $request->user();
+
+        // Validaciones dinámicas
+        $rules = [
             'nombre' => 'required',
-            'carrera_id' => 'required',
             'ciclo_id' => 'required',
             'unidad_curricular_id' => 'required'
-        ]);
+        ];
+
+        // Si es admin, exigimos que seleccione la carrera.
+        // Si es coordinador, la carrera la ponemos nosotros (no es required en el form).
+        if ($user->rol !== 'coordinador') {
+            $rules['carrera_id'] = 'required';
+        }
+
+        $request->validate($rules);
+
+        // DETERMINAR ID DE CARRERA
+        $carreraIdFinal = ($user->rol === 'coordinador' && $user->carrera_id)
+            ? $user->carrera_id  // Forzamos la del usuario
+            : $request->carrera_id; // Usamos la del formulario
+
         $nombreFormateado = $this->formatearTexto($request->nombre);
         
         $existe = Asignatura::where('nombre', $nombreFormateado)
-                            ->where('carrera_id', $request->carrera_id)
+                            ->where('carrera_id', $carreraIdFinal)
                             ->exists();
 
-        if ($existe) return response()->json(['message' => "La asignatura ya existe."], 422);
+        if ($existe) return response()->json(['message' => "La asignatura ya existe en esta carrera."], 422);
 
         $data = $request->all();
         $data['nombre'] = $nombreFormateado;
+        $data['carrera_id'] = $carreraIdFinal; // Guardamos la ID segura
+
         $asignatura = Asignatura::create($data);
         return response()->json($asignatura, 201);
     }
 
     public function update(Request $request, $id) {
+        $user = $request->user();
         $asignatura = Asignatura::findOrFail($id);
+
+        // [SEGURIDAD] Verificar permiso de edición
+        if ($user->rol === 'coordinador' && $user->carrera_id) {
+            if ($asignatura->carrera_id !== $user->carrera_id) {
+                return response()->json(['message' => 'No tiene permisos para editar esta asignatura.'], 403);
+            }
+        }
+
         $nombreFormateado = $this->formatearTexto($request->nombre);
         $data = $request->all();
         $data['nombre'] = $nombreFormateado;
+        
+        // El coordinador no puede cambiar la carrera de una asignatura
+        if ($user->rol === 'coordinador') {
+            unset($data['carrera_id']);
+        }
+
         $asignatura->update($data);
         return response()->json($asignatura);
     }
 
-    public function destroy($id) {
-        Asignatura::destroy($id);
+    public function destroy(Request $request, $id) { // Inyectamos Request para verificar usuario
+        $user = $request->user();
+        $asignatura = Asignatura::findOrFail($id);
+
+        // [SEGURIDAD]
+        if ($user->rol === 'coordinador' && $user->carrera_id) {
+            if ($asignatura->carrera_id !== $user->carrera_id) {
+                return response()->json(['message' => 'No tiene permisos para eliminar esto.'], 403);
+            }
+        }
+
+        $asignatura->delete();
         return response()->json(['message' => 'Eliminado']);
     }
 
-    
+    // 3. CARGA MASIVA (INTELIGENTE Y SEGURA)
     public function import(Request $request) {
         $request->validate(['file' => 'required|file']);
+        $user = $request->user();
         
+        // Determinar si forzamos carrera
+        $forcedCarreraId = null;
+        if ($user->rol === 'coordinador' && $user->carrera_id) {
+            $forcedCarreraId = $user->carrera_id;
+        }
+
         $file = $request->file('file');
         $contenido = file_get_contents($file->getRealPath());
 
-        // 1. DIVIDIR LÍNEAS (Universal)
+        // 1. DIVIDIR LÍNEAS
         $lines = preg_split("/\r\n|\n|\r/", $contenido);
         
         // 2. DETECTAR SEPARADOR
@@ -81,21 +141,15 @@ class AsignaturaController extends Controller
         $errores = [];
 
         foreach ($lines as $index => $linea) {
-            // Ignorar líneas totalmente vacías
             if (trim($linea) === '') continue;
 
             $row = str_getcsv($linea, $separador);
             
-            // Ignorar filas sin nombre
             if (!isset($row[0]) || trim($row[0]) === '') continue;
-
-            // Ignorar cabecera si dice "Nombre"
             if (strtolower(trim($row[0])) === 'nombre') continue;
 
-            // Verificar columnas mínimas
             if (count($row) < 4) {
-                // Solo reportar error si la fila parece tener datos pero está incompleta
-                $errores[] = "Fila " . ($index + 1) . ": Formato incompleto (menos de 4 columnas).";
+                $errores[] = "Fila " . ($index + 1) . ": Formato incompleto.";
                 continue;
             }
 
@@ -106,18 +160,27 @@ class AsignaturaController extends Controller
             $cicloNombre = $this->convertirCicloARomano($cicloRaw); 
             $unidadNombre = $this->formatearTexto($row[3]); 
 
-            // 2. BÚSQUEDA DE IDs
-            $carrera = Carrera::where('nombre', 'LIKE', "%$carreraNombre%")->first();
+            // 2. OBTENER ID CARRERA (SEGURIDAD)
+            $carreraIdFinal = null;
+
+            if ($forcedCarreraId) {
+                // Si es coordinador, USAMOS SU ID (Ignoramos el nombre del Excel si difiere)
+                $carreraIdFinal = $forcedCarreraId;
+            } else {
+                // Si es Admin, buscamos por nombre
+                $carrera = Carrera::where('nombre', 'LIKE', "%$carreraNombre%")->first();
+                if (!$carrera) {
+                    $errores[] = "Fila " . ($index + 1) . ": Carrera '$carreraNombre' no existe.";
+                    continue;
+                }
+                $carreraIdFinal = $carrera->id;
+            }
+
             $ciclo = Ciclo::where('nombre', $cicloNombre)->first();
             $unidad = UnidadCurricular::where('nombre', 'LIKE', "%$unidadNombre%")->first();
 
-            // 3. REPORTE DE ERRORES EXACTOS
-            if (!$carrera) {
-                $errores[] = "Fila " . ($index + 1) . ": Carrera '$carreraNombre' no existe (Asignatura: $nombre).";
-                continue;
-            }
             if (!$ciclo) {
-                $errores[] = "Fila " . ($index + 1) . ": Ciclo '$cicloNombre' inválido para '$nombre'.";
+                $errores[] = "Fila " . ($index + 1) . ": Ciclo '$cicloNombre' inválido.";
                 continue;
             }
             if (!$unidad) {
@@ -125,11 +188,11 @@ class AsignaturaController extends Controller
                 continue;
             }
 
-            // 4. GUARDAR
+            // 3. GUARDAR (FORZANDO LA CARRERA SI APLICA)
             $asignatura = Asignatura::updateOrCreate(
                 [
                     'nombre' => $nombre, 
-                    'carrera_id' => $carrera->id
+                    'carrera_id' => $carreraIdFinal // <-- Aquí está la clave
                 ], 
                 [
                     'ciclo_id' => $ciclo->id,
@@ -162,7 +225,7 @@ class AsignaturaController extends Controller
             $numeros = ['1'=>'I','2'=>'II','3'=>'III','4'=>'IV','5'=>'V','6'=>'VI','7'=>'VII','8'=>'VIII','9'=>'IX','10'=>'X'];
             $correcciones = ['Ii'=>'II','Iii'=>'III','Iv'=>'IV','Vi'=>'VI','Vii'=>'VII','Viii'=>'VIII','Ix'=>'IX','Xi'=>'XI'];
             
-            $cleanPalabra = rtrim($palabra, '.,;'); // Limpiar puntuación
+            $cleanPalabra = rtrim($palabra, '.,;'); 
 
             if (isset($numeros[$cleanPalabra])) return $numeros[$cleanPalabra];
             if (isset($correcciones[$cleanPalabra])) return $correcciones[$cleanPalabra];

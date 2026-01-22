@@ -5,10 +5,13 @@ import CustomSelect from './ui/CustomSelect';
 import { 
     UserIcon, BookOpenIcon, TrashIcon, PlusIcon, AcademicCapIcon,
     MagnifyingGlassIcon, CalendarDaysIcon, Squares2X2Icon,
-    XMarkIcon, PencilSquareIcon, FunnelIcon, ClockIcon, CheckIcon, ExclamationTriangleIcon
+    XMarkIcon, PencilSquareIcon, FunnelIcon, ClockIcon, CheckIcon, ExclamationTriangleIcon,
+    ComputerDesktopIcon
 } from '@heroicons/react/24/outline';
 
 const AsignarMaterias = () => {
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+
     // --- ESTADOS ---
     const [asignaciones, setAsignaciones] = useState([]);
     const [docentes, setDocentes] = useState([]);
@@ -48,15 +51,12 @@ const AsignarMaterias = () => {
     // --- DETECCIÓN INTELIGENTE DEL PERIODO ACTIVO ---
     useEffect(() => {
         if (!loading && periodos.length > 0) {
-            // Buscamos el periodo donde activo es 1 (true)
             const activo = periodos.find(p => p.activo === 1 || p.activo === true);
             
             if (activo) {
                 setPeriodoActivo(activo);
-                // Si no estamos editando, seteamos el periodo en el formulario y filtramos la tabla
                 if (!docenteGestionado) {
                     setForm(prev => ({ ...prev, periodo_id: activo.nombre }));
-                    // Auto-filtrar la tabla para mostrar solo lo actual
                     setFiltroPeriodo(activo.nombre); 
                 }
             } else {
@@ -66,20 +66,30 @@ const AsignarMaterias = () => {
         }
     }, [periodos, loading, docenteGestionado]);
 
+    // --- AUTO-SELECCIÓN DE CARRERA SI ES COORDINADOR ---
+    useEffect(() => {
+        if (carreras.length === 1) {
+            // Si la API solo devolvió una carrera (porque es coordinador), la seleccionamos por defecto
+            setForm(prev => ({ ...prev, carrera_id: carreras[0].id }));
+            // También podemos bloquear el filtro de tabla
+            setFiltroCarrera(carreras[0].nombre); 
+        }
+    }, [carreras]);
+
     const fetchData = async () => {
         setLoading(true);
         try {
             const [resAsig, resAux, resPeriodos, resCarreras, resCiclos] = await Promise.all([
                 api.get('/asignaciones'),
                 api.get('/asignaciones/auxiliares'),
-                api.get('/periodos'), // Traemos TODOS los periodos para detectar el activo localmente
-                api.get('/carreras'), 
+                api.get('/periodos'), 
+                api.get('/carreras'), // Esto ya viene filtrado por el backend si es coordinador
                 api.get('/ciclos')    
             ]);
 
             setAsignaciones(resAsig.data);
             setDocentes(resAux.data.docentes);
-            setMaterias(resAux.data.asignaturas);
+            setMaterias(resAux.data.asignaturas); // Esto también viene filtrado
             setPeriodos(Array.isArray(resPeriodos.data) ? resPeriodos.data : []);
             setCarreras(resCarreras.data);
             setCiclos(resCiclos.data);
@@ -104,10 +114,12 @@ const AsignarMaterias = () => {
         };
     };
 
-    // --- LÓGICA DE MATERIAS DISPONIBLES ---
+    // --- LÓGICA DE MATERIAS DISPONIBLES (FILTRADO MEJORADO) ---
     const materiasDisponibles = materias.filter(materia => {
-        // Filtro por selección de usuario
+        // Filtro por carrera del formulario
         if (form.carrera_id && String(materia.carrera_id) !== String(form.carrera_id)) return false;
+        
+        // Filtro por ciclo del formulario
         if (form.ciclo_id && String(materia.ciclo_id) !== String(form.ciclo_id)) return false;
 
         // Filtro de disponibilidad (si ya está asignada en este periodo)
@@ -169,12 +181,13 @@ const AsignarMaterias = () => {
             Toast.fire({ icon: 'success', title: 'Asignado' });
             fetchData();
             
-            // --- CAMBIO AQUÍ: RESET TOTAL DEL FORMULARIO ---
-            // Solo mantenemos el periodo activo, todo lo demás (Carrera, Ciclo, Docente) se limpia.
-            setForm({ 
+            // RESET INTELIGENTE
+            // Mantenemos periodo y carrera (si es coord)
+            setForm(prev => ({ 
                 ...initialFormState, 
-                periodo_id: periodoActivo.nombre 
-            });
+                periodo_id: periodoActivo.nombre,
+                carrera_id: carreras.length === 1 ? carreras[0].id : '' // Mantiene carrera si es única
+            }));
 
         } catch (error) {
             Swal.fire('Error', error.response?.data?.message || 'Error al procesar', 'error');
@@ -205,7 +218,6 @@ const AsignarMaterias = () => {
         const nombreMateria = (item.asignatura?.nombre || '').toLowerCase();
         const matchBusqueda = nombreDocente.includes(term) || nombreMateria.includes(term);
         
-        // Uso seguro de propiedades opcionales (?.)
         const cicloItem = String(item.asignatura?.ciclo?.nombre || '').toLowerCase();
         const matchCiclo = filtroCiclo ? cicloItem === String(filtroCiclo).toLowerCase() : true;
 
@@ -237,8 +249,6 @@ const AsignarMaterias = () => {
         subtext: `${m.carrera?.nombre || 'N/A'} - Ciclo ${m.ciclo?.nombre || 'N/A'}` 
     }));
     
-    // Filtros disponibles
-    const uniquePeriodos = [...new Set(asignaciones.map(a => a.periodo))].filter(Boolean);
     const opcionesPeriodosForm = periodos.map(p => ({ value: p.nombre, label: p.nombre, subtext: p.activo ? 'Activo' : '' }));
     const opcionesParalelos = [{ value: 'A', label: 'A' }, { value: 'B', label: 'B' }];
 
@@ -323,13 +333,31 @@ const AsignarMaterias = () => {
                             <CustomSelect label="Paralelo" icon={Squares2X2Icon} options={opcionesParalelos} value={form.paralelo} onChange={(val) => setForm({...form, paralelo: val})} disabled={!periodoActivo} />
                         </div>
                         <div className="md:col-span-3">
-                            <CustomSelect label="Carrera" icon={FunnelIcon} placeholder="Filtrar..." options={opcionesCarreras} value={form.carrera_id} onChange={(val) => setForm({...form, carrera_id: val})} disabled={!periodoActivo} />
+                            {/* CARRERA CON AUTO-BLOQUEO SI ES UNICA */}
+                            <CustomSelect 
+                                label="Carrera" 
+                                icon={ComputerDesktopIcon} 
+                                placeholder="Filtrar..." 
+                                options={opcionesCarreras} 
+                                value={form.carrera_id} 
+                                onChange={(val) => setForm({...form, carrera_id: val})} 
+                                disabled={!periodoActivo || carreras.length === 1} // Se bloquea si solo hay una (coordinador)
+                            />
                         </div>
                         <div className="md:col-span-2">
                             <CustomSelect label="Ciclo" icon={FunnelIcon} placeholder="Filtrar..." options={opcionesCiclos} value={form.ciclo_id} onChange={(val) => setForm({...form, ciclo_id: val})} disabled={!periodoActivo} />
                         </div>
                         <div className="md:col-span-7">
-                            <CustomSelect label={`Asignatura (${opcionesMaterias.length} Disp.)`} icon={BookOpenIcon} placeholder={(!form.carrera_id && !form.ciclo_id) ? "Filtre para ver materias" : "Seleccione materia..."} options={opcionesMaterias} value={form.asignatura_id} onChange={(val) => setForm({...form, asignatura_id: val})} searchable={true} disabled={!periodoActivo || opcionesMaterias.length === 0} />
+                            <CustomSelect 
+                                label={`Asignatura (${opcionesMaterias.length} Disp.)`} 
+                                icon={BookOpenIcon} 
+                                placeholder={(!form.carrera_id && !form.ciclo_id) ? "Filtre para ver materias" : "Seleccione materia..."} 
+                                options={opcionesMaterias} 
+                                value={form.asignatura_id} 
+                                onChange={(val) => setForm({...form, asignatura_id: val})} 
+                                searchable={true} 
+                                disabled={!periodoActivo || opcionesMaterias.length === 0} 
+                            />
                         </div>
                         <div className="md:col-span-3 flex justify-end mt-2">
                             <button onClick={handleGuardarNuevo} disabled={!periodoActivo || !form.asignatura_id || !form.docente_id} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition transform active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
@@ -351,11 +379,14 @@ const AsignarMaterias = () => {
                         <option value="">Todos los Ciclos</option>
                         {['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'].map(c => <option key={c} value={c}>Ciclo {c}</option>)}
                     </select>
-                    <select className="h-[42px] pl-3 pr-8 rounded-xl border border-gray-300 bg-white text-sm focus:ring-2 focus:ring-blue-100 outline-none" value={filtroCarrera} onChange={(e) => setFiltroCarrera(e.target.value)}>
-                        <option value="">Todas las Carreras</option>
-                        {['Software', 'TI'].map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                   
+                    
+                    {/* FILTRO CARRERA (Oculto si es coordinador específico) */}
+                    {carreras.length > 1 && (
+                        <select className="h-[42px] pl-3 pr-8 rounded-xl border border-gray-300 bg-white text-sm focus:ring-2 focus:ring-blue-100 outline-none" value={filtroCarrera} onChange={(e) => setFiltroCarrera(e.target.value)}>
+                            <option value="">Todas las Carreras</option>
+                            {['Software', 'TI'].map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                    )}
                 </div>
                 {(busqueda || filtroCiclo || filtroCarrera || filtroPeriodo) && (
                     <button onClick={() => { setBusqueda(''); setFiltroCiclo(''); setFiltroCarrera(''); setFiltroPeriodo(''); }} className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-xl font-medium transition border border-red-200 bg-white whitespace-nowrap">
