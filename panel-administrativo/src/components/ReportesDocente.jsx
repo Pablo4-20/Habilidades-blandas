@@ -6,50 +6,92 @@ import autoTable from 'jspdf-autotable';
 import CustomSelect from './ui/CustomSelect'; 
 import { 
     DocumentTextIcon, BookOpenIcon, CalendarDaysIcon,
-    PrinterIcon, SparklesIcon, ChartBarIcon, UserGroupIcon, ArrowDownTrayIcon
+    PrinterIcon, SparklesIcon, ChartBarIcon,
+    ArrowRightIcon, ArrowLeftIcon, ArrowDownTrayIcon, LockClosedIcon,
+    UserGroupIcon 
 } from '@heroicons/react/24/outline';
 
 const ReportesDocente = () => {
+    // --- ESTADOS ---
     const [asignacionesRaw, setAsignacionesRaw] = useState([]);
     const [selectedMateriaId, setSelectedMateriaId] = useState('');
     const [selectedPeriodo, setSelectedPeriodo] = useState('');
     const [dataCompleta, setDataCompleta] = useState(null); 
     const [conclusiones, setConclusiones] = useState({});
     const [loading, setLoading] = useState(false);
+    const [guardando, setGuardando] = useState(false);
+    
+    // Estado para la paginación (Paso a Paso)
+    const [pasoActual, setPasoActual] = useState(0);
 
+    // 1. CARGA INICIAL
     useEffect(() => {
-        api.get('/docente/asignaturas').then(res => {
-            setAsignacionesRaw(Array.isArray(res.data) ? res.data : []);
-        });
+        const cargarDatos = async () => {
+            try {
+                const [resAsig, resPer] = await Promise.all([
+                    api.get('/docente/asignaturas'),
+                    api.get('/periodos/activos')
+                ]);
+                
+                setAsignacionesRaw(Array.isArray(resAsig.data) ? resAsig.data : []);
+
+                const listaPeriodos = Array.isArray(resPer.data) ? resPer.data : [];
+                const activo = listaPeriodos.find(p => p.activo === 1 || p.activo === true);
+
+                if (activo) setSelectedPeriodo(activo.nombre);
+            } catch (error) {
+                console.error("Error al cargar datos iniciales:", error);
+            }
+        };
+        cargarDatos();
     }, []);
 
+    // 2. CARGAR REPORTE Y REINICIAR PASO
     useEffect(() => {
         if (selectedMateriaId && selectedPeriodo) {
             cargarDatosReporte();
+            setPasoActual(0); // Reiniciar al primer slide
         } else {
             setDataCompleta(null);
         }
     }, [selectedMateriaId, selectedPeriodo]);
 
-    const opcionesMaterias = useMemo(() => {
-        const unicas = [];
-        const map = new Map();
-        for (const item of asignacionesRaw) {
-            if(!map.has(item.id)) { 
-                map.set(item.id, true);
-                unicas.push({ value: item.id, label: item.nombre, subtext: item.carrera });
+    // 3. LOGICA DE AGRUPACIÓN (Habilidad -> P1 y P2 juntos)
+    const reportesAgrupados = useMemo(() => {
+        if (!dataCompleta || !dataCompleta.reportes) return [];
+
+        const grupos = {};
+        
+        dataCompleta.reportes.forEach(r => {
+            const nombreHab = r.habilidad;
+            // Si no existe el grupo, lo creamos
+            if (!grupos[nombreHab]) {
+                grupos[nombreHab] = {
+                    habilidad: nombreHab,
+                    p1: null,
+                    p2: null,
+                    // Usamos el ID de la planificación más reciente para guardar la observación
+                    idParaGuardar: null 
+                };
             }
-        }
-        return unicas;
-    }, [asignacionesRaw]);
+            
+            // Asignamos al parcial correspondiente
+            if (r.parcial_asignado === '1') grupos[nombreHab].p1 = r;
+            else grupos[nombreHab].p2 = r;
+        });
 
-    const opcionesPeriodos = useMemo(() => {
-        if (!selectedMateriaId) return [];
-        return asignacionesRaw
-            .filter(a => a.id === parseInt(selectedMateriaId)) 
-            .map(a => ({ value: a.periodo, label: a.periodo, subtext: `Paralelo ${a.paralelo}` }));
-    }, [asignacionesRaw, selectedMateriaId]);
+        // Convertimos a array y definimos qué ID usaremos para guardar la observación
+        return Object.values(grupos).map(g => {
+            // Preferencia: Guardar en P2, si no existe, en P1
+            const reportePrincipal = g.p2 || g.p1;
+            return {
+                ...g,
+                idParaGuardar: reportePrincipal ? reportePrincipal.planificacion_id : null,
+            };
+        });
+    }, [dataCompleta]);
 
+    // 4. CARGAR DATOS
     const cargarDatosReporte = async () => {
         setLoading(true);
         try {
@@ -58,51 +100,124 @@ const ReportesDocente = () => {
                 periodo: selectedPeriodo   
             });
             setDataCompleta(res.data);
+            
+            // Llenar estado de conclusiones INICIALMENTE desde la BD
             const initialConclusiones = {};
-            if (res.data.reportes) {
-                res.data.reportes.forEach(r => { initialConclusiones[r.planificacion_id] = r.conclusion || ''; });
-            }
+            const rawReportes = res.data.reportes || [];
+            
+            rawReportes.forEach(r => {
+                // Importante: Inicializamos con lo que venga de la BD o string vacío
+                initialConclusiones[r.planificacion_id] = r.conclusion || '';
+            });
+
             setConclusiones(initialConclusiones);
+
         } catch (error) {
             console.error(error);
             setDataCompleta(null);
-            Swal.fire('Info', 'No se encontraron datos para este periodo.', 'info');
+            Swal.fire('Info', 'No se encontraron datos.', 'info');
         } finally {
             setLoading(false);
         }
     };
 
-    const guardarConclusion = async (planId) => {
-        try {
-            await api.post('/reportes/guardar', {
-                planificacion_id: planId,
-                conclusion: conclusiones[planId]
-            });
-            Swal.fire({ title: 'Guardado', icon: 'success', toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 });
-        } catch (error) {
-            Swal.fire('Error', 'No se pudo guardar.', 'error');
+    // 5. NAVEGACIÓN
+    const handleSiguiente = () => {
+        if (pasoActual < reportesAgrupados.length - 1) {
+            setPasoActual(prev => prev + 1);
         }
     };
 
-    // ==========================================================
-    //   LÓGICA DEL PDF - CORREGIDA (Niveles por Porcentaje)
-    // ==========================================================
+    const handleAnterior = () => {
+        if (pasoActual > 0) {
+            setPasoActual(prev => prev - 1);
+        }
+    };
+
+    const guardarTodo = async () => {
+        setGuardando(true);
+        try {
+            const listaParaEnviar = Object.entries(conclusiones).map(([id, texto]) => ({
+                id: id,
+                texto: texto
+            }));
+
+            await api.post('/reportes/guardar-todo', { conclusiones: listaParaEnviar });
+
+            Swal.fire({
+                title: '¡Guardado!',
+                text: 'Observaciones registradas correctamente.',
+                icon: 'success',
+                timer: 2000,
+                showConfirmButton: false
+            });
+        } catch (error) {
+            Swal.fire('Error', 'No se pudo guardar.', 'error');
+        } finally {
+            setGuardando(false);
+        }
+    };
+
+    // --- COMPONENTE GRAFICO: BARRAS VERTICALES ESTILIZADAS ---
+    const MiniGrafico = ({ stats, titulo }) => {
+        if (!stats) return (
+            <div className="h-40 flex items-center justify-center border-2 border-dashed border-gray-200 rounded-xl bg-gray-50 text-gray-400 text-sm">
+                {titulo}: Sin datos
+            </div>
+        );
+
+        const maxVal = Math.max(...Object.values(stats)) || 1;
+        
+        return (
+            <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                <h5 className="text-[10px] font-bold text-gray-400 uppercase mb-4 text-center tracking-wider">{titulo}</h5>
+                
+                {/* Contenedor Flex Row para barras verticales */}
+                <div className="flex items-end justify-center h-32 gap-6"> 
+                    {[1, 2, 3, 4, 5].map(nivel => (
+                        <div key={nivel} className="flex flex-col items-center justify-end h-full w-10"> {/* w-10: Barras más delgadas */}
+                            
+                            {/* Valor numérico flotante */}
+                            <div className="text-sm font-bold text-blue-600 mb-2 transition-all transform group-hover:-translate-y-1">
+                                {stats[nivel]}
+                            </div>
+
+                            {/* La Barra Vertical */}
+                            <div className="w-full bg-gray-100 rounded-t-lg h-full relative overflow-hidden">
+                                <div 
+                                    className={`absolute bottom-0 w-full rounded-t-lg transition-all duration-1000 ease-out 
+                                        ${nivel <= 2 ? 'bg-red-400' : nivel <= 3 ? 'bg-amber-400' : 'bg-green-500'}
+                                    `}
+                                    style={{ height: `${(stats[nivel] / maxVal) * 100}%` }} // Altura dinámica
+                                ></div>
+                            </div>
+
+                            {/* Etiqueta Nivel */}
+                            <div className="mt-2 text-[10px] font-bold text-gray-400">N{nivel}</div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    };
+
+    // --- PDF ---
     const descargarPDFCompleto = () => {
         if (!dataCompleta || !dataCompleta.info) return;
         const doc = new jsPDF();
         const info = dataCompleta.info;
 
         const drawHeader = (doc) => {
+            const pageWidth = doc.internal.pageSize.getWidth();
             doc.setFontSize(14);
             doc.setTextColor(40, 53, 147); 
-            doc.text("UNIVERSIDAD ESTATAL DE BOLIVAR", 105, 15, { align: "center" });
+            doc.text("UNIVERSIDAD ESTATAL DE BOLIVAR", pageWidth / 2, 15, { align: "center" });
             doc.setFontSize(10);
             doc.setTextColor(80);
-            doc.text(info.facultad || 'FACULTAD', 105, 22, { align: "center" });
+            doc.text(info.facultad || 'FACULTAD', pageWidth / 2, 22, { align: "center" });
             doc.setTextColor(0);
         };
 
-        // --- PÁGINA 1: FICHA RESUMEN ---
         drawHeader(doc);
         doc.setFontSize(12);
         doc.setFont("helvetica", "bold");
@@ -112,9 +227,9 @@ const ReportesDocente = () => {
             startY: 40,
             theme: 'plain',
             body: [
-                ['Facultad:', info.facultad],
                 ['Carrera:', info.carrera],
                 ['Docente:', info.docente],
+                ['Asignatura:', info.asignatura],
                 ['Periodo:', info.periodo]
             ],
             styles: { fontSize: 9, cellPadding: 1 },
@@ -124,9 +239,9 @@ const ReportesDocente = () => {
         const filasResumen = dataCompleta.reportes.map(r => {
             const textoConclusion = conclusiones[r.planificacion_id] || "Sin observaciones.";
             return [
-                info.asignatura,
                 info.ciclo,
-                `${r.habilidad} (P${r.parcial_asignado})`,
+                `${r.habilidad}`,
+                r.parcial_asignado === '1' ? '1er' : '2do',
                 r.estadisticas[1], r.estadisticas[2], r.estadisticas[3], r.estadisticas[4], r.estadisticas[5],
                 textoConclusion
             ];
@@ -134,237 +249,183 @@ const ReportesDocente = () => {
 
         autoTable(doc, {
             startY: doc.lastAutoTable.finalY + 5,
-            head: [['Asignatura', 'Ciclo', 'Habilidad', 'N1', 'N2', 'N3', 'N4', 'N5', 'Observación']],
+            head: [['Ciclo', 'Habilidad', 'Parcial', 'N1', 'N2', 'N3', 'N4', 'N5', 'Observación']],
             body: filasResumen,
             theme: 'grid',
             headStyles: { fillColor: [220, 230, 241], textColor: 0, fontSize: 8, halign: 'center', valign: 'middle' },
             bodyStyles: { fontSize: 8, valign: 'middle', halign: 'center' },
-            columnStyles: { 0: { cellWidth: 25 }, 2: { cellWidth: 30 }, 8: { cellWidth: 50, halign: 'left' } }
+            columnStyles: { 8: { cellWidth: 60, halign: 'left' } }
         });
 
-        doc.line(14, 250, 80, 250);
+        const finalY = doc.lastAutoTable.finalY + 20;
+        doc.line(14, finalY, 80, finalY);
         doc.setFontSize(10);
-        doc.text("Firma del Docente", 14, 256);
-
-        // --- PÁGINAS INDIVIDUALES ---
-        dataCompleta.reportes.forEach((reporte) => {
-            const estudiantesNotas = reporte.parcial_asignado === '1' ? reporte.detalle_p1 : reporte.detalle_p2;
-            const nombreParcial = reporte.parcial_asignado === '1' ? 'Primer Parcial' : 'Segundo Parcial';
-
-            if (estudiantesNotas && estudiantesNotas.length > 0) {
-                doc.addPage();
-                drawHeader(doc); 
-
-                // 1. Cabecera Informativa
-                autoTable(doc, {
-                    startY: 30,
-                    theme: 'plain',
-                    body: [
-                        ['Carrera:', info.carrera, 'Periodo:', info.periodo],
-                        ['Ciclo:', info.ciclo, 'Asignatura:', info.asignatura],
-                        ['Habilidad:', reporte.habilidad, 'Parcial:', nombreParcial]
-                    ],
-                    styles: { fontSize: 10, cellPadding: 1.5 },
-                    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 25 }, 2: { fontStyle: 'bold', cellWidth: 25 } }
-                });
-
-                // 2. CÁLCULOS DE RENDIMIENTO
-                const stats = reporte.estadisticas;
-                const totalEvaluados = Object.values(stats).reduce((a, b) => a + b, 0);
-
-                // Calcular promedio ponderado del curso
-                // Suma = (cant_n1 * 1) + (cant_n2 * 2) ...
-                const sumaPuntos = (stats[1]*1) + (stats[2]*2) + (stats[3]*3) + (stats[4]*4) + (stats[5]*5);
-                const promedioNivel = totalEvaluados > 0 ? (sumaPuntos / totalEvaluados) : 0;
-                
-                // Convertir a porcentaje (Promedio / 5 * 100)
-                const porcentajeGlobal = (promedioNivel / 5) * 100;
-
-                // 3. TABLA DE ESTADÍSTICAS POR NIVEL (Header ajustado al 20%, 40%...)
-                autoTable(doc, {
-                    startY: doc.lastAutoTable.finalY + 8,
-                    head: [[
-                        'Nivel 1 (20%)', 
-                        'Nivel 2 (40%)', 
-                        'Nivel 3 (60%)', 
-                        'Nivel 4 (80%)', 
-                        'Nivel 5 (100%)',
-                        'TOTAL EST.',
-                        'RENDIMIENTO GLOBAL'
-                    ]],
-                    body: [[
-                        stats[1], 
-                        stats[2], 
-                        stats[3], 
-                        stats[4], 
-                        stats[5],
-                        totalEvaluados,
-                        porcentajeGlobal.toFixed(2) + '%' // El total sobre 100% que pediste
-                    ]],
-                    theme: 'grid',
-                    headStyles: { 
-                        fillColor: [230, 230, 230], 
-                        textColor: 0, 
-                        fontStyle: 'bold', 
-                        halign: 'center',
-                        fontSize: 9
-                    },
-                    bodyStyles: { 
-                        fontSize: 10, 
-                        halign: 'center', 
-                        cellPadding: 3 
-                    },
-                    // Colorear la columna final
-                    columnStyles: { 
-                        6: { fontStyle: 'bold', textColor: [40, 53, 147], fillColor: [240, 245, 255] }
-                    }
-                });
-
-                // 4. LISTA DE ESTUDIANTES (DISEÑO ORIGINAL)
-                const cuerpoTabla = estudiantesNotas.map(est => [est.nombre, est.n1, est.n2, est.n3, est.n4, est.n5]);
-
-                autoTable(doc, {
-                    startY: doc.lastAutoTable.finalY + 5,
-                    head: [['Nómina de Estudiantes', 'Nivel 1', 'Nivel 2', 'Nivel 3', 'Nivel 4', 'Nivel 5']],
-                    body: cuerpoTabla,
-                    theme: 'grid',
-                    headStyles: { fillColor: [50, 50, 50], textColor: 255, fontStyle: 'bold', halign: 'center' },
-                    bodyStyles: { fontSize: 9, cellPadding: 1.5, halign: 'center' },
-                    columnStyles: { 0: { halign: 'left', cellWidth: 80 } } 
-                });
-            }
-        });
-        
-        const filename = `Reporte_${info.asignatura}_${info.periodo.replace(/[\/\\]/g, '-')}.pdf`;
-        doc.save(filename);
+        doc.text("Firma del Docente", 14, finalY + 5);
+        doc.save(`Reporte_${info.asignatura}.pdf`);
     };
 
+    // --- RENDER ---
+    const opcionesMaterias = useMemo(() => {
+        if (!selectedPeriodo) return [];
+        const delPeriodo = asignacionesRaw.filter(a => a.periodo === selectedPeriodo);
+        const unicas = [];
+        const map = new Map();
+        for (const item of delPeriodo) {
+            if(!map.has(item.id)) { map.set(item.id, true); unicas.push({ value: item.id, label: item.nombre, subtext: `${item.carrera} (${item.paralelo})` }); }
+        }
+        return unicas;
+    }, [asignacionesRaw, selectedPeriodo]);
+
+    const itemActual = reportesAgrupados[pasoActual];
+
     return (
-        <div className="space-y-6 animate-fade-in pb-20">
-            <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+        <div className="space-y-6 animate-fade-in pb-12 p-6 bg-gray-50 min-h-screen">
+            {/* HEADER */}
+            <div className="flex justify-between items-center">
                 <div>
-                    <h2 className="text-2xl font-bold text-gray-900">Reportes por Asignatura</h2>
-                    <p className="text-gray-500 text-sm mt-1">Informe consolidado y actas de calificación.</p>
+                    <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                        <DocumentTextIcon className="h-7 w-7 text-blue-600"/> Reportes de Evolución
+                    </h2>
+                    <p className="text-gray-500 text-sm">Análisis comparativo por habilidad.</p>
                 </div>
-                {dataCompleta && (
-                    <button onClick={descargarPDFCompleto} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 px-6 rounded-xl shadow-lg shadow-red-100 transition flex items-center gap-2 transform active:scale-95">
-                        <PrinterIcon className="h-5 w-5"/> Descargar PDF Completo
-                    </button>
-                )}
+              
             </div>
 
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-6">
-                <CustomSelect
-                    label="1. Selecciona la Asignatura"
-                    icon={BookOpenIcon}
-                    placeholder="-- Buscar Materia --"
-                    options={opcionesMaterias}
-                    value={selectedMateriaId}
-                    onChange={(val) => {
-                        setSelectedMateriaId(val);
-                        setSelectedPeriodo(''); 
-                    }}
-                />
-                <div className={`transition-all duration-300 ${!selectedMateriaId ? 'opacity-50 pointer-events-none grayscale' : 'opacity-100'}`}>
+            {/* FILTROS */}
+            <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center gap-2 border border-blue-100 rounded-lg p-2 bg-blue-50 text-blue-800 text-sm font-bold">
+                    <CalendarDaysIcon className="h-5 w-5"/>
+                    <span>{selectedPeriodo || 'Cargando...'}</span>
+                    <LockClosedIcon className="h-4 w-4 ml-auto text-blue-400 opacity-50"/>
+                </div>
+                <div className={!selectedPeriodo ? 'opacity-50' : ''}>
                     <CustomSelect
-                        label="2. Selecciona el Periodo"
-                        icon={CalendarDaysIcon}
-                        placeholder={opcionesPeriodos.length === 0 ? "Sin periodos" : "-- Seleccionar Periodo --"}
-                        options={opcionesPeriodos}
-                        value={selectedPeriodo}
-                        onChange={setSelectedPeriodo}
+                        label=""
+                        placeholder={opcionesMaterias.length > 0 ? "Seleccionar Asignatura..." : "Sin materias"}
+                        options={opcionesMaterias}
+                        value={selectedMateriaId}
+                        onChange={setSelectedMateriaId}
+                        icon={BookOpenIcon}
                     />
                 </div>
             </div>
 
-            {loading && (
-                <div className="flex flex-col items-center justify-center py-12 text-gray-400 animate-pulse">
-                    <DocumentTextIcon className="h-10 w-10 mb-2"/>
-                    <p>Generando reporte...</p>
+            {/* CONTENIDO PRINCIPAL (WIZARD) */}
+            {!loading && itemActual && (
+                <div className="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden flex flex-col transition-all duration-300">
+                    
+                    {/* BARRA DE PROGRESO */}
+                    <div className="bg-gray-50 px-6 py-3 border-b border-gray-100 flex justify-between items-center">
+                        <span className="text-sm font-bold text-gray-400 uppercase tracking-wider">
+                            Habilidad {pasoActual + 1} de {reportesAgrupados.length}
+                        </span>
+                        <div className="flex gap-1">
+                            {reportesAgrupados.map((_, idx) => (
+                                <div key={idx} className={`h-1.5 w-6 rounded-full transition-all ${idx === pasoActual ? 'bg-blue-600' : 'bg-gray-200'}`}></div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="p-6 md:p-8">
+                        {/* TÍTULO HABILIDAD */}
+                        <div className="flex items-center gap-3 mb-8">
+                            <div className="bg-blue-100 p-3 rounded-2xl text-blue-600">
+                                <SparklesIcon className="h-8 w-8"/>
+                            </div>
+                            <h3 className="text-2xl font-bold text-gray-800">{itemActual.habilidad}</h3>
+                        </div>
+
+                        {/* COMPARATIVA GRAFICA (BARRAS VERTICALES CON ESPACIO) */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                            <div>
+                                <div className="flex items-center gap-2 mb-3">
+                                    <span className="bg-gray-100 text-gray-600 text-sm font-bold px-2 py-1 rounded">Parcial 1</span>
+                                    {itemActual.p1 && <span className="text-sm text-green-600 font-bold flex items-center gap-1"><UserGroupIcon className="h-3 w-3"/> Evaluados</span>}
+                                </div>
+                                <MiniGrafico stats={itemActual.p1?.estadisticas} titulo="Resultados P1" />
+                            </div>
+                            
+                            <div>
+                                <div className="flex items-center gap-2 mb-3">
+                                    <span className="bg-blue-100 text-blue-700 text-sm font-bold px-2 py-1 rounded">Parcial 2</span>
+                                    {itemActual.p2 && <span className="text-sm text-green-600 font-bold flex items-center gap-1"><UserGroupIcon className="h-3 w-3"/> Evaluados</span>}
+                                </div>
+                                <MiniGrafico stats={itemActual.p2?.estadisticas} titulo="Resultados P2" />
+                            </div>
+                        </div>
+
+                        {/* CAMPO DE OBSERVACIÓN */}
+                        <div className="bg-blue-50/50 p-6 rounded-2xl border border-blue-100">
+                            <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+                                <ChartBarIcon className="h-4 w-4 text-blue-500"/>
+                                Análisis de Evolución y Observaciones (Cierre del Parcial)
+                            </label>
+                            <textarea 
+                                rows="3"
+                                className="w-full px-4 py-3 border border-blue-200 rounded-xl bg-white focus:ring-2 focus:ring-blue-200 outline-none text-sm resize-none shadow-sm"
+                                placeholder={`Escriba sus conclusiones sobre el desempeño en ${itemActual.habilidad}...`}
+                                value={conclusiones[itemActual.idParaGuardar] !== undefined ? conclusiones[itemActual.idParaGuardar] : ''}
+                                onChange={(e) => {
+                                    if (itemActual.idParaGuardar) {
+                                        setConclusiones({
+                                            ...conclusiones,
+                                            [itemActual.idParaGuardar]: e.target.value
+                                        });
+                                    }
+                                }}
+                            />
+                            <p className="text-[10px] text-gray-400 mt-2 text-right">
+                                * Esta observación se guardará al finalizar todos los reportes.
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* FOOTER NAVEGACIÓN */}
+                    <div className="bg-gray-50 p-4 border-t border-gray-100 flex justify-between items-center">
+                        <button 
+                            onClick={handleAnterior}
+                            disabled={pasoActual === 0}
+                            className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition
+                                ${pasoActual === 0 
+                                    ? 'text-gray-300 cursor-not-allowed' 
+                                    : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900'}
+                            `}
+                        >
+                            <ArrowLeftIcon className="h-4 w-4"/> Anterior
+                        </button>
+
+                        {pasoActual < reportesAgrupados.length - 1 ? (
+                            <button 
+                                onClick={handleSiguiente}
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl font-bold text-sm shadow-lg shadow-blue-200 flex items-center gap-2 transform active:scale-95 transition"
+                            >
+                                Siguiente <ArrowRightIcon className="h-4 w-4"/>
+                            </button>
+                        ) : (
+                            <button 
+                                onClick={guardarTodo}
+                                disabled={guardando}
+                                className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 rounded-xl font-bold text-sm shadow-lg shadow-green-200 flex items-center gap-2 transform active:scale-95 transition"
+                            >
+                                {guardando ? 'Guardando...' : <><ArrowDownTrayIcon className="h-5 w-5"/> Guardar Todas las Observaciones</>}
+                            </button>
+                        )}
+                    </div>
                 </div>
             )}
 
-            {!loading && dataCompleta && dataCompleta.reportes.length > 0 && (
-                <div className="grid grid-cols-1 gap-6">
-                    {dataCompleta.reportes.map((reporte) => {
-                        const totalEvaluados = Object.values(reporte.estadisticas).reduce((a,b)=>a+b,0);
-                        const maxVal = Math.max(...Object.values(reporte.estadisticas)) || 1;
-
-                        return (
-                            <div key={reporte.planificacion_id} className="bg-white p-6 rounded-2xl shadow-sm border border-blue-100 transition hover:shadow-md">
-                                <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6 border-b border-gray-100 pb-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-2.5 rounded-xl text-white shadow-lg shadow-blue-200">
-                                            <SparklesIcon className="h-6 w-6"/>
-                                        </div>
-                                        <div>
-                                            <h3 className="text-lg font-bold text-gray-800">{reporte.habilidad}</h3>
-                                            <span className="text-xs font-bold bg-blue-50 text-blue-600 px-2 py-1 rounded-md border border-blue-100">
-                                                Parcial: {reporte.parcial_asignado === '1' ? 'I' : 'II'}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${totalEvaluados > 0 ? 'bg-green-50 border-green-100 text-green-700' : 'bg-gray-50 border-gray-200 text-gray-500'}`}>
-                                        <UserGroupIcon className="h-5 w-5"/>
-                                        <span className="text-sm font-bold">Evaluados: {totalEvaluados}</span>
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <div className="bg-gray-50 p-5 rounded-2xl border border-gray-100">
-                                        <h4 className="text-xs font-bold text-gray-400 uppercase mb-4 flex items-center gap-2">
-                                            <ChartBarIcon className="h-4 w-4"/> Estudiantes por Nivel
-                                        </h4>
-                                        <div className="flex items-end justify-between h-32 gap-3 px-2 pt-4">
-                                            {[1, 2, 3, 4, 5].map(nivel => (
-                                                <div key={nivel} className="flex flex-col items-center w-full group relative h-full justify-end">
-                                                    <div className="text-xs font-extrabold text-blue-600 mb-1.5 text-center w-full">
-                                                        {reporte.estadisticas[nivel]}
-                                                    </div>
-                                                    <div className="w-full bg-white rounded-t-md h-full relative border-b border-gray-200 overflow-hidden shadow-sm">
-                                                        <div 
-                                                            className="absolute bottom-0 w-full bg-blue-500 rounded-t-md transition-all duration-1000 ease-out hover:bg-blue-600"
-                                                            style={{ height: `${(reporte.estadisticas[nivel] / maxVal) * 100}%` }}
-                                                        ></div>
-                                                    </div>
-                                                    <div className="mt-2 text-[10px] font-bold text-gray-500">Nivel {nivel}</div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    <div className="flex flex-col h-full">
-                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Observación / Conclusión</label>
-                                        <div className="flex-1 relative">
-                                            <textarea 
-                                                rows="4"
-                                                className="w-full h-full px-4 py-3 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-blue-100 outline-none text-sm resize-none shadow-sm transition"
-                                                placeholder="Escriba aquí el análisis de resultados..."
-                                                value={conclusiones[reporte.planificacion_id] || ''}
-                                                onChange={(e) => setConclusiones({...conclusiones, [reporte.planificacion_id]: e.target.value})}
-                                            />
-                                        </div>
-                                        <div className="mt-3 text-right">
-                                            <button 
-                                                onClick={() => guardarConclusion(reporte.planificacion_id)}
-                                                className="text-blue-600 hover:text-blue-800 text-xs font-bold flex items-center justify-end gap-1 w-full uppercase tracking-wide transition"
-                                            >
-                                                <ArrowDownTrayIcon className="h-4 w-4"/> Guardar Observación
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })}
+            {/* ESTADO DE CARGA Y VACÍO */}
+            {loading && (
+                <div className="h-64 flex flex-col items-center justify-center text-gray-400 animate-pulse">
+                    <DocumentTextIcon className="h-10 w-10 mb-2"/>
+                    <p>Cargando análisis comparativo...</p>
                 </div>
             )}
             
-            {!loading && dataCompleta && dataCompleta.reportes.length === 0 && selectedPeriodo && (
-                <div className="h-64 flex flex-col items-center justify-center bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200 text-gray-400 animate-fade-in">
-                    <DocumentTextIcon className="h-14 w-14 mb-3 opacity-20"/>
-                    <p className="font-medium">Sin datos disponibles</p>
-                    <p className="text-sm">No hay reportes para este periodo.</p>
+            {!loading && !dataCompleta && selectedMateriaId && (
+                <div className="h-64 flex flex-col items-center justify-center border-2 border-dashed border-gray-200 rounded-3xl bg-gray-50 text-gray-400">
+                    <DocumentTextIcon className="h-10 w-10 mb-2 opacity-30"/>
+                    <p>No hay reportes disponibles.</p>
                 </div>
             )}
         </div>

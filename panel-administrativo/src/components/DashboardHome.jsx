@@ -41,6 +41,13 @@ const DashboardHome = () => {
         </div>
     );
 
+    // FUNCIÓN SEGURA PARA EL PORCENTAJE (CAP A 100%)
+    const getSafePercentage = (val) => {
+        if (!val) return 0;
+        const num = parseFloat(val);
+        return Math.min(num, 100); // Nunca devolverá más de 100
+    };
+
     return (
         <div className="space-y-8 animate-fade-in">
             {/* SALUDO DE BIENVENIDA */}
@@ -93,7 +100,7 @@ const DashboardHome = () => {
                     </>
                 )}
 
-                {/* --- VISTA COORDINADOR --- */}
+                {/* --- VISTA COORDINADOR (AQUÍ ESTÁ EL CAMBIO) --- */}
                 {user.rol === 'coordinador' && stats && (
                     <>
                         <StatCard 
@@ -112,9 +119,10 @@ const DashboardHome = () => {
                         />
                         <StatCard 
                             title="Cumplimiento" 
-                            value={`${stats.cumplimiento}%`} 
+                            // AQUI SE APLICA EL CORRECTOR
+                            value={`${getSafePercentage(stats.cumplimiento)}%`} 
                             icon={PresentationChartLineIcon} 
-                            color={stats.cumplimiento > 80 ? "border-l-green-500" : "border-l-orange-500"} 
+                            color={getSafePercentage(stats.cumplimiento) > 80 ? "border-l-green-500" : "border-l-orange-500"} 
                             subtext="Avance de planificación docente"
                         />
                         <StatCard 

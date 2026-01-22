@@ -11,8 +11,10 @@ import {
     ChevronRightIcon,
     SparklesIcon,
     BookOpenIcon,
-    CalendarDaysIcon 
+    CalendarDaysIcon,
+    DocumentCheckIcon 
 } from '@heroicons/react/24/outline';
+import { UserPlusIcon } from '@heroicons/react/24/outline';
 
 const Sidebar = ({ isOpen, toggleSidebar }) => {
     const user = JSON.parse(localStorage.getItem('user'));
@@ -44,14 +46,15 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     const menuItems = {
         admin: [
             { name: 'Inicio', path: '/dashboard', icon: HomeIcon },
-            // 👇 NUEVO ORDEN SOLICITADO
+            // 👇 CAMBIO: Periodos Académicos ahora va primero
+            { name: 'Periodos Académicos', path: '/dashboard/periodos', icon: CalendarDaysIcon },
             { name: 'Gestión Usuarios', path: '/dashboard/usuarios', icon: UsersIcon },
             { name: 'Asignaturas', path: '/dashboard/asignaturas', icon: BookOpenIcon },
             { name: 'Habilidades', path: '/dashboard/habilidades', icon: SparklesIcon },
-            { name: 'Periodos Académicos', path: '/dashboard/periodos', icon: CalendarDaysIcon }
         ],
         coordinador: [
             { name: 'Inicio', path: '/dashboard', icon: HomeIcon },
+            { name: 'Matriculación', path: '/dashboard/matriculacion', icon: UserPlusIcon },
             { name: 'Asignar Materias', path: '/dashboard/asignaciones', icon: AcademicCapIcon },
             { name: 'Reportes Generales', path: '/dashboard/reportes', icon: DocumentChartBarIcon },
         ],
@@ -60,6 +63,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
             { name: 'Mis Habilidades', path: '/dashboard/planificacion', icon: ClipboardDocumentCheckIcon },
             { name: 'Calificar', path: '/dashboard/evaluacion', icon: UsersIcon },
             { name: 'Mis Reportes', path: '/dashboard/reportes-docente', icon: DocumentChartBarIcon },
+            { name: 'Fichas Resumen', path: '/dashboard/fichas-resumen', icon: DocumentCheckIcon },
         ]
     };
 

@@ -8,36 +8,31 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use App\Rules\ValidaCedula;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\DB; 
 
 class EstudianteController extends Controller
 {
     public function index()
     {
-        return Estudiante::all();
-    }
+        $estudiantes = Estudiante::with(['usuario', 'ultimaMatricula.ciclo', 'ultimaMatricula.periodo'])
+            ->get()
+            ->map(function ($estudiante) {
+                
+                $mat = $estudiante->ultimaMatricula;
 
-    public function store(Request $request)
-    {
-        $request->validate([
-            'cedula' => ['required', 'unique:users,cedula', 'unique:estudiantes,cedula', new ValidaCedula],
-            'nombres' => 'required',
-            'apellidos' => 'required',
-            'email' => 'required|email|unique:estudiantes,email',
-            'carrera' => 'required',
-            'ciclo_actual' => 'required'
-        ]);
-        if (User::where('cedula', $request->cedula)->exists()) {
-            return response()->json([
-                'message' => 'Esta cédula ya está registrada como Personal Administrativo/Docente.'
-            ], 422);
-        }
-        $datos = $request->all();
-        $datos['nombres'] = mb_convert_case(trim($request->nombres), MB_CASE_TITLE, "UTF-8");
-        $datos['apellidos'] = mb_convert_case(trim($request->apellidos), MB_CASE_TITLE, "UTF-8");
+                return [
+                    'id'        => $estudiante->id,
+                    'cedula'    => $estudiante->cedula,
+                    'nombres'   => $estudiante->apellidos . ' ' . $estudiante->nombres,
+                    'email'     => $estudiante->email ?? 'S/N',
+                    'periodo'   => $mat ? $mat->periodo->nombre : '-',
+                    'ciclo'     => $mat ? $mat->ciclo->nombre : 'Sin Matrícula',
+                    'estado'    => $mat ? $mat->estado : 'Inactivo',
+                    'carrera'   => $estudiante->carrera ?? 'Software' 
+                ];
+            });
 
-        $estudiante = Estudiante::create($datos);
-        $estudiante->sendEmailVerificationNotification();
-        return response()->json($estudiante, 201);
+        return response()->json($estudiantes);
     }
 
     public function update(Request $request, $id)
@@ -46,8 +41,7 @@ class EstudianteController extends Controller
         
         $request->validate([
            'cedula' => ['required', 'unique:users,cedula', new ValidaCedula],
-           'email' => ['required', 'email', Rule::unique('estudiantes', 'email')->ignore($id)
-           ],
+           'email' => ['required', 'email', Rule::unique('estudiantes', 'email')->ignore($id)],
         ]);
 
         $estudiante->update($request->all());
@@ -60,12 +54,12 @@ class EstudianteController extends Controller
         return response()->json(['message' => 'Eliminado']);
     }
 
-    // --- CARGA MASIVA ROBUSTA ---
+    // --- CARGA MASIVA SIMPLIFICADA (SOLO DATOS PERSONALES) ---
     public function import(Request $request)
     {
         $request->validate(['file' => 'required|file']);
-        $file = $request->file('file');
         
+        $file = $request->file('file');
         $contenido = file_get_contents($file->getRealPath());
         $primerLinea = explode(PHP_EOL, $contenido)[0] ?? '';
         $separador = str_contains($primerLinea, ';') ? ';' : ',';
@@ -74,91 +68,68 @@ class EstudianteController extends Controller
             return str_getcsv($linea, $separador);
         }, file($file->getRealPath()));
 
-        // MANTENER array_shift SI TU CSV TIENE ENCABEZADOS
+        // Omitimos la cabecera
         array_shift($data); 
 
-        $count = 0;
+        $nuevos = 0;
         $actualizados = 0;
 
         foreach ($data as $index => $row) {
-            if (empty($row) || count($row) < 5) continue;
+            // Validamos que tenga al menos las 4 columnas básicas (Cédula, Nombres, Apellidos, Email)
+            if (empty($row) || count($row) < 4) continue;
 
             try {
-                // --- 1. NORMALIZACIÓN DE DATOS ---
-                
+                // 1. LIMPIEZA DE DATOS
                 $cedulaCSV = trim($row[0]);
                 $cedulaFinal = str_pad($cedulaCSV, 10, '0', STR_PAD_LEFT);
 
+                // Evitar conflicto si la cédula ya es de un administrativo
                 if (User::where('cedula', $cedulaFinal)->exists()) {
-                    throw new \Exception("La cédula $cedulaFinal ya pertenece a un Docente/Administrativo.");
+                    continue; 
                 }
                 
-                // Nombres/Apellidos: Primera letra mayúscula (Formato Título)
                 $nombresFinal   = mb_convert_case(trim($row[1]), MB_CASE_TITLE, "UTF-8");
                 $apellidosFinal = mb_convert_case(trim($row[2]), MB_CASE_TITLE, "UTF-8");
+                $emailFinal     = strtolower(trim($row[3]));
                 
-                $emailFinal = strtolower(trim($row[3]));
-                
-                $carreraRaw = trim($row[4]);
-                $carreraFinal = 'Software'; 
-                if (preg_match('/ti|tecnolog|t\.i/i', $carreraRaw)) {
-                    $carreraFinal = 'TI';
-                }
+                // NOTA: Ya no leemos ni Carrera ni Ciclo del Excel.
 
-                $cicloRaw = trim($row[5]);
-
-                // Traducción de Ciclos
-                $mapaCiclos = [
-                    '1' => 'I',   '2' => 'II',   '3' => 'III', '4' => 'IV',  '5' => 'V',
-                    '6' => 'VI',  '7' => 'VII',  '8' => 'VIII', '9' => 'IX', '10' => 'X'
-                ];
-
-                if (array_key_exists($cicloRaw, $mapaCiclos)) {
-                    $cicloFinal = $mapaCiclos[$cicloRaw];
-                } else {
-                    $cicloFinal = strtoupper($cicloRaw);
-                }
-
-                // --- 2. BÚSQUEDA ---
+                // 2. BUSCAR O CREAR
                 $estudiante = Estudiante::where('cedula', $cedulaFinal)
                                         ->orWhere('cedula', $cedulaCSV)
                                         ->orWhere('email', $emailFinal)
                                         ->first();
 
-                // --- 3. GUARDADO ---
-                $datosLimpios = [
-                    'cedula'       => $cedulaFinal,
-                    'nombres'      => $nombresFinal,
-                    'apellidos'    => $apellidosFinal,
-                    'email'        => $emailFinal,
-                    'carrera'      => $carreraFinal,
-                    'ciclo_actual' => $cicloFinal
+                $datosEstudiante = [
+                    'cedula'    => $cedulaFinal,
+                    'nombres'   => $nombresFinal,
+                    'apellidos' => $apellidosFinal,
+                    'email'     => $emailFinal,
+                    // Si tu base de datos exige el campo carrera, pon un default, 
+                    // si es nullable, puedes borrar esta línea.
+                    'carrera'   => 'Software' 
                 ];
 
                 if ($estudiante) {
-                    // Si ya existe, solo actualizamos datos
-                    $estudiante->update($datosLimpios);
+                    $estudiante->update($datosEstudiante);
                     $actualizados++;
                 } else {
-                    // --- AQUÍ ESTÁ EL CAMBIO ---
-                    // 1. Creamos y capturamos la instancia en una variable
-                    $nuevoEstudiante = Estudiante::create($datosLimpios);
-                    
-                    // 2. Enviamos el correo de verificación
-                    $nuevoEstudiante->sendEmailVerificationNotification();
-                    
-                    $count++;
+                    $nuevoEstudiante = Estudiante::create($datosEstudiante);
+                    // $nuevoEstudiante->sendEmailVerificationNotification(); // Opcional
+                    $nuevos++;
                 }
 
             } catch (\Exception $e) {
                 return response()->json([
-                    'message' => "Error Fila " . ($index + 1) . ": " . $e->getMessage()
+                    'message' => "Error en la fila " . ($index + 1) . ": " . $e->getMessage()
                 ], 500);
             }
         }
 
         return response()->json([
-            'message' => "Proceso completado: $count nuevos (correos enviados), $actualizados actualizados."
+            'message' => "Carga exitosa.\n" .
+                         "Nuevos registrados: $nuevos\n" .
+                         "Datos actualizados: $actualizados"
         ]);
     }
 }

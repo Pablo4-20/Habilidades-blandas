@@ -5,7 +5,6 @@ import * as XLSX from 'xlsx';
 import { 
     MagnifyingGlassIcon, 
     PlusIcon, 
-    DocumentTextIcon, 
     TrashIcon,
     PencilSquareIcon,
     UserGroupIcon,
@@ -17,7 +16,7 @@ import {
     ArrowDownTrayIcon,
     CheckCircleIcon, 
     ClockIcon,
-    ExclamationCircleIcon 
+    ExclamationCircleIcon
 } from '@heroicons/react/24/outline';
 
 // --- VALIDACIÓN CÉDULA ECUADOR ---
@@ -58,9 +57,7 @@ const GestionUsuarios = () => {
     // Filtros
     const [busqueda, setBusqueda] = useState('');
     const [filtroRol, setFiltroRol] = useState('');          
-    const [filtroCarrera, setFiltroCarrera] = useState('');  
-    const [filtroCiclo, setFiltroCiclo] = useState('');      
-
+    
     // Modales y Archivos
     const [showModal, setShowModal] = useState(false);       
     const [showImportModal, setShowImportModal] = useState(false); 
@@ -70,9 +67,8 @@ const GestionUsuarios = () => {
 
     // Formularios
     const [formUser, setFormUser] = useState({ cedula: '', nombres: '', apellidos: '', email: '', rol: 'docente', password: '' });
-    const [formStudent, setFormStudent] = useState({ cedula: '', nombres: '', apellidos: '', email: '', carrera: 'Software', ciclo_actual: 'I' });
+    const [formStudent, setFormStudent] = useState({ cedula: '', nombres: '', apellidos: '', email: '', carrera: 'Software' });
 
-    // Estado Errores
     const [errors, setErrors] = useState({});
 
     // --- CARGA DE DATOS ---
@@ -92,7 +88,7 @@ const GestionUsuarios = () => {
 
     useEffect(() => {
         fetchData();
-        setBusqueda(''); setFiltroRol(''); setFiltroCarrera(''); setFiltroCiclo('');
+        setBusqueda(''); setFiltroRol(''); 
         setFileToUpload(null); setFileName('');
         setErrors({});
     }, [activeTab]);
@@ -192,20 +188,24 @@ const GestionUsuarios = () => {
         }
     };
 
-    // --- IMPORTACIÓN Y OTROS ---
+    // --- IMPORTACIÓN Y PLANTILLAS ---
     const downloadTemplate = () => {
         let data = [];
         let name = "";
         let wscols = [];
+        
         if (activeTab === 'administrativo') {
             name = "Plantilla_Personal.xlsx";
-            data = [{ Cedula: "0201234567", Nombres: "Juan", Apellidos: "Perez", Email: "jperez@ueb.edu.ec", Password: "123", Rol: "docente" }];
-            wscols = [{wch: 15}, {wch: 15}, {wch: 15}, {wch: 25}, {wch: 10}, {wch: 15}];
+            // Estructura Admin: 5 columnas (sin password)
+            data = [{ Cedula: "0201234567", Nombres: "Juan", Apellidos: "Perez", Email: "jperez@ueb.edu.ec", Rol: "docente" }];
+            wscols = [{wch: 15}, {wch: 15}, {wch: 15}, {wch: 25}, {wch: 15}];
         } else {
             name = "Plantilla_Estudiantes.xlsx";
-            data = [{ Cedula: "0201234567", Nombres: "Carlos", Apellidos: "Ruiz", Email: "cruiz@mailes.ueb.edu.ec", Carrera: "Software", Ciclo: "I" }];
-            wscols = [{wch: 15}, {wch: 15}, {wch: 15}, {wch: 25}, {wch: 15}, {wch: 5}];
+            // --- CORRECCIÓN AQUÍ: SOLO 4 COLUMNAS ---
+            data = [{ Cedula: "0201234567", Nombres: "Carlos", Apellidos: "Ruiz", Email: "cruiz@mailes.ueb.edu.ec" }];
+            wscols = [{wch: 15}, {wch: 15}, {wch: 15}, {wch: 30}];
         }
+        
         const worksheet = XLSX.utils.json_to_sheet(data);
         worksheet['!cols'] = wscols;
         const workbook = XLSX.utils.book_new();
@@ -249,7 +249,7 @@ const GestionUsuarios = () => {
 
     const resetForms = () => {
         setFormUser({ cedula: '', nombres: '', apellidos: '', email: '', rol: 'docente', password: '' });
-        setFormStudent({ cedula: '', nombres: '', apellidos: '', email: '', carrera: 'Software', ciclo_actual: 'I' });
+        setFormStudent({ cedula: '', nombres: '', apellidos: '', email: '', carrera: 'Software' });
         setEditingId(null); setErrors({}); setShowModal(false);
     };
 
@@ -276,7 +276,7 @@ const GestionUsuarios = () => {
         const fullName = `${item.nombres} ${item.apellidos}`.toLowerCase();
         const matchesText = fullName.includes(term) || (item.email || '').toLowerCase().includes(term) || (item.cedula || '').includes(term);
         if (activeTab === 'administrativo') return matchesText && (filtroRol ? item.rol === filtroRol : true);
-        else return matchesText && (filtroCarrera ? item.carrera === filtroCarrera : true) && (filtroCiclo ? item.ciclo_actual === filtroCiclo : true);
+        else return matchesText;
     });
 
     const getInitials = (n) => n ? n.charAt(0).toUpperCase() : '?';
@@ -322,18 +322,13 @@ const GestionUsuarios = () => {
                     <MagnifyingGlassIcon className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
                     <input type="text" className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-100" placeholder="Buscar..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
                 </div>
-                {activeTab === 'administrativo' ? (
+                {activeTab === 'administrativo' && (
                     <div className="w-full md:w-48"><select value={filtroRol} onChange={(e) => setFiltroRol(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white outline-none text-sm text-gray-600"><option value="">Todos los Roles</option><option value="docente">Docentes</option><option value="coordinador">Coordinadores</option><option value="admin">Administradores</option></select></div>
-                ) : (
-                    <>
-                        <div className="w-full md:w-48"><select value={filtroCarrera} onChange={(e) => setFiltroCarrera(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white outline-none text-sm text-gray-600"><option value="">Todas las Carreras</option><option value="Software">Software</option><option value="TI">TI</option></select></div>
-                        <div className="w-full md:w-32"><select value={filtroCiclo} onChange={(e) => setFiltroCiclo(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white outline-none text-sm text-gray-600"><option value="">Ciclos</option><option value="I">I</option><option value="II">II</option><option value="III">III</option><option value="IV">IV</option><option value="V">V</option><option value="VI">VI</option><option value="VII">VII</option><option value="VIII">VIII</option></select></div>
-                    </>
                 )}
-                {(busqueda || filtroRol || filtroCarrera || filtroCiclo) && <button onClick={() => { setBusqueda(''); setFiltroRol(''); setFiltroCarrera(''); setFiltroCiclo(''); }} className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg">Limpiar</button>}
+                {(busqueda || filtroRol) && <button onClick={() => { setBusqueda(''); setFiltroRol(''); }} className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg">Limpiar</button>}
             </div>
 
-            {/* TABLA */}
+            {/* TABLA PRINCIPAL */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 <table className="min-w-full divide-y divide-gray-100">
                     <thead className="bg-gray-50">
@@ -341,14 +336,18 @@ const GestionUsuarios = () => {
                             <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Cédula</th>
                             <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Nombres y Apellidos</th>
                             <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Correo</th>
-                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">{activeTab === 'administrativo' ? 'Rol' : 'Carrera'}</th>
-                            {activeTab === 'estudiantil' && <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Ciclo</th>}
+                            
+                            {/* COLUMNA CONDICIONAL: Solo mostramos "Rol" si es administrativo */}
+                            {activeTab === 'administrativo' && (
+                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Rol</th>
+                            )}
+                            
                             <th className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase">Acciones</th>
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-50">
-                        {loading ? <tr><td colSpan="6" className="text-center py-10 text-gray-500">Cargando...</td></tr> : filteredData.length === 0 ? (
-                            <tr><td colSpan="6" className="text-center py-12 text-gray-400">Sin resultados.</td></tr>
+                        {loading ? <tr><td colSpan={activeTab === 'administrativo' ? 5 : 4} className="text-center py-10 text-gray-500">Cargando...</td></tr> : filteredData.length === 0 ? (
+                            <tr><td colSpan={activeTab === 'administrativo' ? 5 : 4} className="text-center py-12 text-gray-400">Sin resultados.</td></tr>
                         ) : filteredData.map((item) => (
                             <tr key={item.id} className="hover:bg-gray-50 transition">
                                 <td className="px-6 py-4 text-sm text-gray-600 font-mono">{item.cedula}</td>
@@ -364,12 +363,16 @@ const GestionUsuarios = () => {
                                         </div>
                                     </div>
                                 </td>
-                                <td className="px-6 py-4 text-sm">{activeTab === 'administrativo' ? <span className={`px-2 py-1 text-xs font-bold uppercase rounded-full border ${getRoleStyle(item.rol)}`}>{item.rol}</span> : item.carrera}</td>
-                                {activeTab === 'estudiantil' && <td className="px-6 py-4 text-sm font-bold text-gray-600">{item.ciclo_actual}</td>}
+                                
+                                {/* CELDA CONDICIONAL: ROL */}
+                                {activeTab === 'administrativo' && (
+                                    <td className="px-6 py-4 text-sm">
+                                        <span className={`px-2 py-1 text-xs font-bold uppercase rounded-full border ${getRoleStyle(item.rol)}`}>{item.rol}</span>
+                                    </td>
+                                )}
+                                
                                 <td className="px-6 py-4 text-right flex justify-end gap-2">
                                     <button onClick={() => handleEditar(item)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-full"><PencilSquareIcon className="h-5 w-5" /></button>
-                                    
-                                    {/* 👇 SOLUCIÓN: Mostramos el botón eliminar SIEMPRE para estudiantes O si no es el mismo admin */}
                                     {(activeTab === 'estudiantil' || item.id !== currentUser.id) && (
                                         <button onClick={() => handleEliminar(item.id)} className="p-2 text-gray-400 hover:text-red-600 rounded-full"><TrashIcon className="h-5 w-5" /></button>
                                     )}
@@ -380,7 +383,7 @@ const GestionUsuarios = () => {
                 </table>
             </div>
 
-            {/* MODAL CON VALIDACIONES */}
+            {/* MODAL CREAR/EDITAR */}
             {showModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-fade-in">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
@@ -435,12 +438,12 @@ const GestionUsuarios = () => {
                                 </>
                             ) : (
                                 <>
+                                    {/* CAMPOS ESTUDIANTE (SIMPLE) */}
                                     <div className="grid grid-cols-2 gap-4">
                                         <input required placeholder="Nombres" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white outline-none" value={formStudent.nombres} onChange={e => handleGenericInput(e, 'nombres', false)} />
                                         <input required placeholder="Apellidos" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white outline-none" value={formStudent.apellidos} onChange={e => handleGenericInput(e, 'apellidos', false)} />
                                     </div>
                                     
-                                    {/* EMAIL ESTUDIANTE */}
                                     <div>
                                         <input required type="email" placeholder="Correo Institucional (@mailes.ueb.edu.ec)" 
                                             className={`w-full px-4 py-2.5 bg-gray-50 border rounded-xl outline-none focus:bg-white transition-all ${errors.email ? 'border-red-500' : 'border-gray-200'}`}
@@ -448,12 +451,9 @@ const GestionUsuarios = () => {
                                         {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="w-full">
                                         <select className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white outline-none" value={formStudent.carrera} onChange={e => setFormStudent({...formStudent, carrera: e.target.value})}>
                                             <option value="Software">Software</option><option value="TI">TI</option>
-                                        </select>
-                                        <select className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white outline-none" value={formStudent.ciclo_actual} onChange={e => setFormStudent({...formStudent, ciclo_actual: e.target.value})}>
-                                            <option value="I">I</option><option value="II">II</option><option value="III">III</option><option value="IV">IV</option><option value="V">V</option><option value="VI">VI</option><option value="VII">VII</option><option value="VIII">VIII</option>
                                         </select>
                                     </div>
                                 </>
@@ -461,7 +461,6 @@ const GestionUsuarios = () => {
                             
                             <div className="flex gap-4 pt-4">
                                 <button type="button" onClick={resetForms} className="flex-1 py-3 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 transition">Cancelar</button>
-                                {/* BOTÓN GUARDAR (Deshabilitado si hay errores) */}
                                 <button type="submit" 
                                     className={`flex-1 py-3 text-white font-bold rounded-xl transition transform hover:-translate-y-0.5 ${Object.keys(errors).length > 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:shadow-lg'}`}
                                     disabled={Object.keys(errors).length > 0}
@@ -474,7 +473,7 @@ const GestionUsuarios = () => {
                 </div>
             )}
 
-            {/* MODAL IMPORTAR (SE MANTIENE IGUAL) */}
+            {/* MODAL IMPORTAR (CON ESTRUCTURAS CORRECTAS) */}
             {showImportModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-4 animate-fade-in">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-8 text-center relative overflow-hidden">
@@ -489,12 +488,46 @@ const GestionUsuarios = () => {
                                     <ArrowDownTrayIcon className="h-3 w-3" /> Descargar Plantilla
                                 </button>
                             </div>
-                            <div className="overflow-hidden rounded-lg border border-slate-300 shadow-sm bg-white">
-                                <table className="min-w-full text-xs text-left">
+                            <div className="overflow-hidden rounded-lg border border-slate-300 shadow-sm bg-white overflow-x-auto">
+                                <table className="min-w-full text-xs text-left whitespace-nowrap">
                                     <thead className="bg-slate-200 text-slate-700 font-bold">
-                                        <tr><th className="px-3 py-2 border-r">Cedula</th><th className="px-3 py-2 border-r">Nombres</th><th className="px-3 py-2">Email</th></tr>
+                                        {activeTab === 'administrativo' ? (
+                                            // 1. ESTRUCTURA PERSONAL ADMIN (5 COLUMNAS)
+                                            <tr>
+                                                <th className="px-3 py-2 border-r">Cedula</th>
+                                                <th className="px-3 py-2 border-r">Nombres</th>
+                                                <th className="px-3 py-2 border-r">Apellidos</th>
+                                                <th className="px-3 py-2 border-r">Email</th>
+                                                <th className="px-3 py-2">Rol</th>
+                                            </tr>
+                                        ) : (
+                                            // 2. ESTRUCTURA ESTUDIANTES (4 COLUMNAS)
+                                            <tr>
+                                                <th className="px-3 py-2 border-r">Cedula</th>
+                                                <th className="px-3 py-2 border-r">Nombres</th>
+                                                <th className="px-3 py-2 border-r">Apellidos</th>
+                                                <th className="px-3 py-2">Email</th>
+                                            </tr>
+                                        )}
                                     </thead>
-                                    <tbody className="text-slate-600"><tr><td className="px-3 py-2 border-r">1234567890</td><td className="px-3 py-2 border-r">Juan</td><td className="px-3 py-2">jperez@ueb.edu.ec</td></tr></tbody>
+                                    <tbody className="text-slate-600">
+                                        {activeTab === 'administrativo' ? (
+                                            <tr>
+                                                <td className="px-3 py-2 border-r">0201...</td>
+                                                <td className="px-3 py-2 border-r">Juan</td>
+                                                <td className="px-3 py-2 border-r">Perez</td>
+                                                <td className="px-3 py-2 border-r">j@ueb...</td>
+                                                <td className="px-3 py-2">docente</td>
+                                            </tr>
+                                        ) : (
+                                            <tr>
+                                                <td className="px-3 py-2 border-r">0201...</td>
+                                                <td className="px-3 py-2 border-r">Carlos</td>
+                                                <td className="px-3 py-2 border-r">Ruiz</td>
+                                                <td className="px-3 py-2">c@mailes...</td>
+                                            </tr>
+                                        )}
+                                    </tbody>
                                 </table>
                             </div>
                         </div>

@@ -17,20 +17,15 @@ class DetallePlanificacion extends Model
         'actividades'
     ];
 
-    /**
-     * Relación con la Planificación (Padre)
-     */
-    public function planificacion()
-    {
-        return $this->belongsTo(Planificacion::class);
-    }
-
-    /**
-     * Relación con la Habilidad Blanda (Catálogo Global)
-     * Nombre estándar: habilidadBlanda
-     */
-    public function habilidadBlanda()
+    // --- ESTA ES LA RELACIÓN QUE FALTABA ---
+    public function habilidad()
     {
         return $this->belongsTo(HabilidadBlanda::class, 'habilidad_blanda_id');
+    }
+
+    // Relación inversa con Planificación (opcional pero recomendada)
+    public function planificacion()
+    {
+        return $this->belongsTo(Planificacion::class, 'planificacion_id');
     }
 }

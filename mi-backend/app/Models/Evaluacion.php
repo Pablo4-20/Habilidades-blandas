@@ -15,6 +15,7 @@ class Evaluacion extends Model
         'planificacion_id',
         'estudiante_id',
         'habilidad_blanda_id', 
+        'parcial', // <--- FALTABA ESTE CAMPO
         'nivel',
         //'fecha_evaluacion'
     ];

@@ -11,10 +11,8 @@ class CoordinadorController extends Controller
     public function filtrosReporte()
     {
         try {
-            // Obtener carreras desde la tabla catálogo
             $carreras = DB::table('carreras')->orderBy('nombre')->pluck('nombre');
             
-            // Obtener periodos reales de la tabla de asignaciones
             $periodos = DB::table('asignaciones')
                         ->select('periodo')
                         ->distinct()
@@ -42,28 +40,26 @@ class CoordinadorController extends Controller
                 $periodo = $periodoActivo ? $periodoActivo->nombre : null;
             }
 
-            // Si aún así no hay periodo, retornamos vacío
             if (!$periodo) return response()->json([]);
 
-            // 2. CONSULTA SQL CORREGIDA
-            // Base: Tabla Asignaciones (Lo que el coordinador asignó)
+            // 2. CONSULTA SQL
             $query = DB::table('asignaciones')
                 ->join('users', 'asignaciones.docente_id', '=', 'users.id')
                 ->join('asignaturas', 'asignaciones.asignatura_id', '=', 'asignaturas.id')
                 ->join('carreras', 'asignaturas.carrera_id', '=', 'carreras.id')
                 ->join('ciclos', 'asignaturas.ciclo_id', '=', 'ciclos.id')
                 
-                // Unimos con Planificaciones (Puede existir o no -> Left Join)
+                // Unimos con Planificaciones
                 ->leftJoin('planificaciones', function($join) {
                     $join->on('asignaciones.asignatura_id', '=', 'planificaciones.asignatura_id')
                          ->on('asignaciones.docente_id', '=', 'planificaciones.docente_id')
                          ->on('asignaciones.periodo', '=', 'planificaciones.periodo_academico');
                 })
                 
-                // Unimos con Detalle para sacar la habilidad (Puede existir o no)
+                // Unimos con Detalle
                 ->leftJoin('detalle_planificaciones', 'planificaciones.id', '=', 'detalle_planificaciones.planificacion_id')
                 
-                // Unimos con el catálogo de Habilidades (Usando el nombre correcto de la tabla)
+                // Unimos con Habilidades
                 ->leftJoin('habilidades_blandas', 'detalle_planificaciones.habilidad_blanda_id', '=', 'habilidades_blandas.id')
                 
                 ->select(
@@ -74,40 +70,47 @@ class CoordinadorController extends Controller
                     'users.nombres', 
                     'users.apellidos',
                     'planificaciones.id as planificacion_id',
-                    // Usamos GROUP_CONCAT por si una materia tiene varias habilidades, o tomamos una
                     'habilidades_blandas.nombre as habilidad'
                 )
                 ->where('asignaciones.periodo', $periodo);
 
-            // Filtro de Carrera
             if ($carrera && $carrera !== 'Todas') {
                 $query->where('carreras.nombre', $carrera);
             }
 
-            // Obtenemos los datos
             $datos = $query->get();
 
-            // 3. PROCESAMIENTO (Mapeo de datos para el Frontend)
+            // 3. PROCESAMIENTO
             $reporte = $datos->map(function($item) {
-                // Cálculo del Estado
+                
                 $tienePlan = !is_null($item->planificacion_id);
                 $tieneHabilidad = !is_null($item->habilidad);
+                $habilidadTexto = $tieneHabilidad ? $item->habilidad : 'No definida';
 
-                if (!$tienePlan) {
-                    $estado = 'Sin Planificar';
-                    $progreso = 0;
-                    $habilidadTexto = 'No definida';
+                // --- LÓGICA CORREGIDA PARA DETECTAR 100% ---
+                $tieneEvaluaciones = false;
+
+                if ($tienePlan) {
+                    // Verificamos si existen evaluaciones para este plan
+                    $tieneEvaluaciones = DB::table('evaluaciones')
+                        ->where('planificacion_id', $item->planificacion_id)
+                        ->exists();
+                }
+
+                // Determinamos Estado y Progreso
+                if ($tieneEvaluaciones) {
+                    $estado = 'Completado';
+                    $progreso = 100;
+                } elseif ($tienePlan && $tieneHabilidad) {
+                    $estado = 'Planificado'; // Listo para calificar, pero aún no califica
+                    $progreso = 50; 
                 } elseif ($tienePlan && !$tieneHabilidad) {
-                    $estado = 'En Proceso'; // Tiene plan pero no ha guardado el detalle
+                    $estado = 'En Proceso'; // Creó el plan pero no añadió detalles
                     $progreso = 25;
                     $habilidadTexto = 'Sin seleccionar';
                 } else {
-                    $estado = 'Planificado'; // Ya seleccionó habilidad
-                    $progreso = 50; 
-                    $habilidadTexto = $item->habilidad;
-                    
-                    // Opcional: Podrías consultar la tabla 'evaluaciones' aquí para ver si ya evaluó
-                    // y poner progreso en 100%. Por ahora lo dejamos en 50% "Planificado".
+                    $estado = 'Sin Planificar';
+                    $progreso = 0;
                 }
 
                 return [
@@ -122,9 +125,8 @@ class CoordinadorController extends Controller
                 ];
             });
 
-            // Eliminar duplicados si la consulta trajo filas dobles por múltiples detalles
-            // (Si un docente selecciona 2 habilidades para 1 materia, aparecerá 2 veces.
-            //  Si quieres que salga solo una vez, usamos unique)
+            // Eliminar duplicados (por si una materia tiene varias habilidades, muestra la primera procesada o todas si son distintas)
+            // Aquí agrupamos para que no salgan filas repetidas si no es necesario
             $reporteUnico = $reporte->unique(function ($item) {
                 return $item['id'] . $item['habilidad'];
             })->values();

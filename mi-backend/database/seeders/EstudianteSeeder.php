@@ -15,21 +15,33 @@ class EstudianteSeeder extends Seeder
                 'nombres' => 'Miguel', 
                 'apellidos' => 'Andrade', 
                 'carrera' => 'Software', 
-                'ciclo_actual' => 'V'
+                'ciclo_actual' => 'V',
+                'email' => 'miguel.andrade@est.ueb.edu.ec',
+                'email_verified_at' => now(), // <--- ESTO LOS MARCA COMO VERIFICADOS
+                'created_at' => now(),
+                'updated_at' => now(),
             ],
             [
                 'cedula' => '0202222222', // <--- Cédula ficticia 2
                 'nombres' => 'Lorena', 
                 'apellidos' => 'Benavidez', 
                 'carrera' => 'Software', 
-                'ciclo_actual' => 'V'
+                'ciclo_actual' => 'V',
+                'email' => 'lorena.benavidez@est.ueb.edu.ec',
+                'email_verified_at' => now(), // <--- ESTO LOS MARCA COMO VERIFICADOS
+                'created_at' => now(),
+                'updated_at' => now(),
             ],
             [
                 'cedula' => '0203333333', // <--- Cédula ficticia 3
                 'nombres' => 'Joel', 
                 'apellidos' => 'Diaz', 
                 'carrera' => 'Software', 
-                'ciclo_actual' => 'V'
+                'ciclo_actual' => 'V',
+                'email' => 'joel.diaz@est.ueb.edu.ec',
+                'email_verified_at' => now(), // <--- ESTO LOS MARCA COMO VERIFICADOS
+                'created_at' => now(),
+                'updated_at' => now(),
             ],
         ]);
     }

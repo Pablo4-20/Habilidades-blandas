@@ -355,10 +355,7 @@ const AsignarMaterias = () => {
                         <option value="">Todas las Carreras</option>
                         {['Software', 'TI'].map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
-                    <select className="h-[42px] pl-3 pr-8 rounded-xl border border-gray-300 bg-white text-sm focus:ring-2 focus:ring-blue-100 outline-none" value={filtroPeriodo} onChange={(e) => setFiltroPeriodo(e.target.value)}>
-                        <option value="">Todos los Periodos</option>
-                        {uniquePeriodos.map(p => <option key={p} value={p}>{p}</option>)}
-                    </select>
+                   
                 </div>
                 {(busqueda || filtroCiclo || filtroCarrera || filtroPeriodo) && (
                     <button onClick={() => { setBusqueda(''); setFiltroCiclo(''); setFiltroCarrera(''); setFiltroPeriodo(''); }} className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-xl font-medium transition border border-red-200 bg-white whitespace-nowrap">
@@ -443,7 +440,7 @@ const AsignarMaterias = () => {
 
                                     <td className="px-6 py-4 align-top text-right">
                                         <button onClick={() => iniciarGestion(grupo.docente, grupo.asignaciones)} className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition shadow-sm border ${docenteGestionado?.id === grupo.docente?.id ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:text-blue-600'}`}>
-                                            <PencilSquareIcon className="h-4 w-4"/> {docenteGestionado?.id === grupo.docente?.id ? 'Editando...' : 'Gestionar'}
+                                            <PencilSquareIcon className="h-4 w-4"/> {docenteGestionado?.id === grupo.docente?.id ? 'Editando...' : 'Editar'}
                                         </button>
                                     </td>
                                 </tr>

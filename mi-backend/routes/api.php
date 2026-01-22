@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\EstudianteController;
-use App\Http\Controllers\Api\HabilidadBlandaController; // <--- Controlador actualizado
+use App\Http\Controllers\Api\HabilidadBlandaController; 
 use App\Http\Controllers\Api\AsignaturaController;
 use App\Http\Controllers\Api\AsignacionController;
 use App\Http\Controllers\Api\CoordinadorController;
@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\VerificationController;
 use App\Http\Controllers\Api\NewPasswordController;
 use App\Http\Controllers\Api\CatalogoController;
 use App\Http\Controllers\Api\VerificationEstudianteController;
+use App\Http\Controllers\Api\MatriculaController;
 
 // 1. LOGIN (Público)
 Route::post('/login', [AuthController::class, 'login']);
@@ -83,6 +84,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/asignaciones/auxiliares', [AsignacionController::class, 'datosAuxiliares']);
     Route::apiResource('/asignaciones', AsignacionController::class);
 
+    Route::post('/matriculas', [MatriculaController::class, 'matricular']);
+    Route::get('/matriculas/periodo/{id}', [MatriculaController::class, 'byPeriodo']);
+Route::post('/matriculas/import', [MatriculaController::class, 'import']);
+
     // --- DOCENTE ---
     Route::get('/docente/asignaturas', [DocenteController::class, 'misAsignaturas']);
     Route::get('/docente/estudiantes/{asignatura}', [DocenteController::class, 'verEstudiantes']);
@@ -99,5 +104,6 @@ Route::middleware('auth:sanctum')->group(function () {
     // Reportes Docente
     Route::post('/reportes/generar', [ReporteController::class, 'generar']);
     Route::post('/reportes/pdf-data', [DocenteController::class, 'pdfData']);
-    Route::post('/reportes/guardar', [DocenteController::class, 'guardarConclusion']);
+    Route::post('/reportes/pdf-data-general', [DocenteController::class, 'pdfDataGeneral']);
+    Route::post('/reportes/guardar-todo', [DocenteController::class, 'guardarConclusionesMasivas']);
 });

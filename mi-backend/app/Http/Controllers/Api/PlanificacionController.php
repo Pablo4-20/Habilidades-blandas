@@ -5,13 +5,12 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Planificacion;
-use App\Models\HabilidadBlanda;
+use App\Models\HabilidadBlanda; // Asegúrate de que el modelo apunte a 'habilidades_blandas'
 use App\Models\Asignacion; 
 use Illuminate\Support\Facades\DB;
 
 class PlanificacionController extends Controller
 {
-   
     public function verificar(Request $request, $asignatura_id)
     {
         try {
@@ -19,7 +18,7 @@ class PlanificacionController extends Controller
             $periodo = $request->query('periodo'); 
             $parcialSolicitado = $request->query('parcial'); 
 
-            // 1. Validar asignación docente (Filtro por periodo si se envía)
+            // 1. Validar asignación
             $queryAsignacion = Asignacion::where('asignatura_id', $asignatura_id)
                 ->where('docente_id', $user->id);
 
@@ -36,10 +35,10 @@ class PlanificacionController extends Controller
                 ]);
             }
 
-            // 2. Traer Catálogo Global de Habilidades Blandas
+            // 2. Traer Catálogo Global (CORRECCIÓN: Asegurar nombre de tabla correcto en Modelo)
             $catalogoHabilidades = HabilidadBlanda::select('id', 'nombre', 'descripcion')->get();
 
-            // 3. Buscar si YA existe planificación previa (Modo Edición)
+            // 3. Buscar planificación existente
             $queryPlan = Planificacion::with('detalles')
                 ->where('asignatura_id', $asignatura_id)
                 ->where('docente_id', $user->id)
@@ -53,11 +52,11 @@ class PlanificacionController extends Controller
 
             $planDocente = $queryPlan->first();
 
-            // 4. Preparar respuesta para el Frontend
+            // 4. Respuesta Estructurada
             $datosRespuesta = [
                 'tiene_asignacion' => true,
                 'periodo_detectado' => $asignacion->periodo,
-                'catalogo_habilidades' => $catalogoHabilidades, 
+                'habilidades' => $catalogoHabilidades, // <--- CORREGIDO: Ahora se llama 'habilidades'
                 'es_edicion' => false,
                 'parcial_guardado' => null,
                 'habilidades_seleccionadas' => [], 
@@ -68,13 +67,13 @@ class PlanificacionController extends Controller
                 $datosRespuesta['es_edicion'] = true;
                 $datosRespuesta['parcial_guardado'] = $planDocente->parcial;
                 
-                // Reconstruir lo que guardó el docente
+                // Reconstruir datos desde DETALLES
                 foreach ($planDocente->detalles as $detalle) {
-                    // Guardamos el ID para que el checkbox aparezca marcado
                     $datosRespuesta['habilidades_seleccionadas'][] = $detalle->habilidad_blanda_id;
                     
-                    // Guardamos la actividad asociada
-                    $datosRespuesta['actividades_guardadas'][$detalle->habilidad_blanda_id] = $detalle->actividades;
+                    // Convertir salto de línea en array para el frontend si es necesario
+                    // O mantener string si tu frontend usa split
+                    $datosRespuesta['actividades_guardadas'][$detalle->habilidad_blanda_id] = explode("\n", $detalle->actividades);
                 }
             }
 
@@ -85,10 +84,8 @@ class PlanificacionController extends Controller
         }
     }
 
-    
     public function store(Request $request)
     {
-        // 1. Validación
         $request->validate([
             'asignatura_id' => 'required',
             'docente_id' => 'required',
@@ -98,8 +95,7 @@ class PlanificacionController extends Controller
         ]);
 
         return DB::transaction(function () use ($request) {
-            // 2. Guardar o Actualizar la Cabecera (Planificación)
-            // Clave única: Asignatura + Parcial + Periodo
+            // 1. Guardar Cabecera
             $planificacion = Planificacion::updateOrCreate(
                 [
                     'asignatura_id' => $request->asignatura_id,
@@ -107,20 +103,20 @@ class PlanificacionController extends Controller
                     'periodo_academico' => $request->periodo_academico
                 ],
                 [
-                    'docente_id' => $request->docente_id
+                    'docente_id' => $request->docente_id,
+                    'observaciones' => $request->observaciones ?? null
                 ]
             );
 
-            // 3. Guardar los Detalles
+            // 2. Guardar Detalles (Borrar previos para evitar duplicados)
             $planificacion->detalles()->delete();
 
             foreach ($request->detalles as $detalle) {
-                // Si no viene ID de habilidad, saltamos
                 if (empty($detalle['habilidad_blanda_id'])) continue;
 
                 $planificacion->detalles()->create([
                     'habilidad_blanda_id' => $detalle['habilidad_blanda_id'],
-                    
+                    // Si viene como array, lo unimos. Si es string, lo dejamos.
                     'actividades' => is_array($detalle['actividades']) 
                                      ? implode("\n", $detalle['actividades']) 
                                      : $detalle['actividades']

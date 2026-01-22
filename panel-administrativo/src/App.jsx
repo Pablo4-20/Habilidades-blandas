@@ -13,8 +13,9 @@ import ReportesDocente from './components/ReportesDocente';
 import ReportesCoordinador from './components/ReportesCoordinador';
 import GestionPeriodos from './components/GestionPeriodos';
 import CambiarPasswordInicial from './components/CambiarPasswordInicial';
+import FichaResumen from './components/FichaResumen';
+import Matriculacion from './components/Matriculacion'; 
 
-// 👇 IMPORTS FALTANTES (Esto solucionará tu error)
 import RecuperarPassword from './components/RecuperarPassword';
 import RestablecerPassword from './components/RestablecerPassword';
 
@@ -51,7 +52,7 @@ function App() {
             </PublicRoute>
         } />
 
-        {/* 👇 RUTAS DE RECUPERACIÓN DE CONTRASEÑA */}
+        {/* RUTAS DE RECUPERACIÓN DE CONTRASEÑA */}
         <Route path="/recuperar-password" element={
             <PublicRoute>
                 <RecuperarPassword />
@@ -65,10 +66,10 @@ function App() {
         } />
         
         <Route path="/primer-cambio-password" element={
-        <ProtectedRoute>
-            <CambiarPasswordInicial />
-        </ProtectedRoute>
-    } />
+            <ProtectedRoute>
+                <CambiarPasswordInicial />
+            </ProtectedRoute>
+        } />
 
         {/* --- ZONA PRIVADA (DASHBOARD) --- */}
         <Route path="/dashboard" element={
@@ -83,6 +84,8 @@ function App() {
                 <Route path="planificacion" element={<PlanificacionDocente />} />
                 <Route path="evaluacion" element={<EvaluacionDocente />} />
                 <Route path="reportes-docente" element={<ReportesDocente />} />
+                {/* 👇 CORRECCIÓN AQUÍ: Ruta relativa simple */}
+                <Route path="fichas-resumen" element={<FichaResumen />} />
             </Route>
 
             {/* ZONA ADMIN */}
@@ -97,7 +100,9 @@ function App() {
             <Route element={<RoleGuard allowedRoles={['coordinador']} />}>
                 <Route path="asignaciones" element={<AsignarMaterias />} />
                 <Route path="reportes" element={<ReportesCoordinador />} />
+                <Route path="matriculacion" element={<Matriculacion />} />
             </Route>
+
         </Route>
       </Routes>
     </BrowserRouter>

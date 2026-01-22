@@ -51,4 +51,20 @@ class Estudiante extends Model
     {
         $this->notify(new VerifyEmail);
     }
+    public function matriculas()
+    {
+        return $this->hasMany(Matricula::class);
+    }
+
+    // 2. Relación MÁGICA: Obtener solo la última matrícula (La actual)
+    public function ultimaMatricula()
+    {
+        return $this->hasOne(Matricula::class)->latestOfMany();
+    }
+    
+    // 3. Relación con el Usuario (para sacar nombres)
+    public function usuario()
+    {
+        return $this->belongsTo(User::class, 'user_id'); // Asumiendo que tienes user_id
+    }
 }

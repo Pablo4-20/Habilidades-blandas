@@ -1,183 +1,237 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import api from '../services/api';
 import Swal from 'sweetalert2';
 import CustomSelect from './ui/CustomSelect';
 import { 
     BookOpenIcon, SparklesIcon, UserGroupIcon, 
-    CheckBadgeIcon, CalendarDaysIcon, ClockIcon, CheckCircleIcon,
-    CursorArrowRaysIcon, PencilSquareIcon 
+    CheckBadgeIcon, CalendarDaysIcon, ClockIcon, 
+    CheckCircleIcon, PlusIcon, TrashIcon, ListBulletIcon, LockClosedIcon
 } from '@heroicons/react/24/outline';
 
-// --- CATÁLOGO OFICIAL (Mismo contenido que tenías) ---
-const CATALOGO_GUIA = {
-    // ... (Mantén tu catálogo igual que antes) ...
-    'Comunicación Efectiva': ['Debates y mesas redondas', 'Presentaciones orales y proyectos grupales', 'Simulaciones y dramatizaciones', 'Análisis de discursos y textos'],
-    'Resolución de Problemas': ['Observación directa', 'Estudio de casos', 'Debates y discusiones', 'Simulaciones y role-playing', 'Proyectos colaborativos', 'Autoevaluación y reflexión', 'Autoevaluación y coevaluación', 'Análisis de productos grupales', 'Autoevaluación'],
-    'Trabajo en Equipo': ['Observación directa', 'Estudio de casos', 'Debates y discusiones', 'Simulaciones y role-playing', 'Proyectos colaborativos', 'Autoevaluación y reflexión', 'Autoevaluación y coevaluación', 'Análisis de productos grupales', 'Autoevaluación'],
-    'Gestión del Tiempo': ['Observación directa', 'Análisis de resultados', 'Retroalimentación de pares', 'Uso de indicadores de desempeño'],
-    'Adaptabilidad': ['Aprendizaje basado en problemas', 'Simulación de escenarios cambiantes', 'Proyectos interdisciplinarios', 'Uso de metodologías activas-aulas invertidas', 'Problemas abiertos con recursos limitados', 'Promover la experimentación y el manejo del error'],
-    'Aprender a Aprender': ['Aprendizaje basado en problemas', 'Simulación de escenarios cambiantes', 'Proyectos interdisciplinarios', 'Uso de metodologías activas-aulas invertidas', 'Problemas abiertos con recursos limitados', 'Promover la experimentación y el manejo del error'],
-    'Asertividad': ['Debates y discusiones guiadas', 'Sesiones de preguntas y respuestas activas', 'Análisis de casos', 'Proyectos de innovación', 'Evaluación del proceso creativo', 'Presentaciones orales y exposiciones de proyectos'],
-    'Creatividad': ['Debates y discusiones guiadas', 'Sesiones de preguntas y respuestas activas', 'Análisis de casos', 'Proyectos de innovación', 'Evaluación del proceso creativo', 'Presentaciones orales y exposiciones de proyectos'],
-    'Pensamiento Crítico': ['Feedback constructivo en procesos creativos', 'Análisis de casos', 'Debates estructurados', 'Ensayos reflexivos', 'Simulación de tomas de decisiones', 'Cuestionarios de autoevaluación'],
-    'Liderazgo': ['Rubricas de evaluación de liderazgo en actividades colaborativas', 'Autoevaluación y metacognición', 'Portafolios reflexivos', 'Evaluación entre pares', 'Simulación y estudios de caso', 'Problemas abiertos y desestructurados', 'Estudio de casos o escenarios reales', 'Depuración de código ajeno'],
-    'Toma de Decisiones': ['Rubricas de evaluación de liderazgo en actividades colaborativas', 'Autoevaluación y metacognición', 'Portafolios reflexivos', 'Evaluación entre pares', 'Simulación y estudios de caso', 'Problemas abiertos y desestructurados', 'Estudio de casos o escenarios reales', 'Depuración de código ajeno'],
-    'Autocontrol': ['Rubricas de evaluación de liderazgo en actividades colaborativas', 'Autoevaluación y metacognición', 'Portafolios reflexivos', 'Evaluación entre pares', 'Simulación y estudios de caso', 'Problemas abiertos y desestructurados', 'Estudio de casos o escenarios reales', 'Depuración de código ajeno']
-};
-
 const PlanificacionDocente = () => {
+    // Estados principales
     const [misAsignaturas, setMisAsignaturas] = useState([]);
-    const [periodos, setPeriodos] = useState([]); // NUEVO: Lista de periodos
     const [estudiantes, setEstudiantes] = useState([]);
+    const [catalogoHabilidades, setCatalogoHabilidades] = useState([]);
     const [loading, setLoading] = useState(false);
 
-    const [habilidadesAsignadas, setHabilidadesAsignadas] = useState([]);
+    // Formulario
     const [form, setForm] = useState({
         asignatura_id: '',
         parcial: '1',
-        periodo_academico: '', // Ahora el usuario selecciona esto primero
+        periodo_academico: '', 
     });
 
-    const [opcionesPorHabilidad, setOpcionesPorHabilidad] = useState({});
-    const [seleccionActividades, setSeleccionActividades] = useState({});
+    // Estado de la planificación actual
+    const [habilidadesSeleccionadas, setHabilidadesSeleccionadas] = useState([]); 
+    const [actividadesPorHabilidad, setActividadesPorHabilidad] = useState({}); 
     const [esEdicion, setEsEdicion] = useState(false);
 
-    // 1. CARGA INICIAL (Asignaturas y Periodos)
+    // Estado para agregar nueva actividad
+    const [nuevaActividad, setNuevaActividad] = useState(''); 
+    const [habilidadParaActividad, setHabilidadParaActividad] = useState(null);
+
+    // --- BASE DE DATOS DE ACTIVIDADES (De la Guía Oficial) ---
+    const ACTIVIDADES_GUIA = {
+        "Comunicación Efectiva": [
+            "Debates y mesas redondas", "Presentaciones orales y proyectos grupales",
+            "Simulaciones y dramatizaciones", "Análisis de discursos y textos"
+        ],
+        "Resolución de Problemas": [
+            "Observación directa", "Estudio de casos", "Debates y discusiones",
+            "Simulaciones y role-playing", "Proyectos colaborativos", "Autoevaluación y reflexión"
+        ],
+        "Trabajo en Equipo": [
+            "Observación directa", "Estudio de casos", "Debates y discusiones",
+            "Simulaciones y role-playing", "Proyectos colaborativos"
+        ],
+        "Gestión del Tiempo": [
+            "Observación directa", "Análisis de resultados",
+            "Retroalimentación de pares", "Uso de indicadores de desempeño"
+        ],
+        "Adaptabilidad": [
+            "Aprendizaje basado en problemas", "Simulación de escenarios cambiantes",
+            "Proyectos interdisciplinarios", "Uso de metodologías activas"
+        ],
+        "Aprender a Aprender": [
+            "Aprendizaje basado en problemas", "Simulación de escenarios cambiantes",
+            "Proyectos interdisciplinarios"
+        ],
+        "Asertividad": [
+            "Debates y discusiones guiadas", "Sesiones de preguntas y respuestas",
+            "Análisis de casos", "Proyectos de innovación"
+        ],
+        "Creatividad": [
+            "Debates y discusiones guiadas", "Análisis de casos",
+            "Proyectos de innovación", "Evaluación del proceso creativo"
+        ],
+        "Pensamiento Crítico": [
+            "Feedback constructivo", "Análisis de casos",
+            "Debates estructurados", "Ensayos reflexivos"
+        ],
+        "Liderazgo": [
+            "Rubricas de evaluación de liderazgo", "Autoevaluación y metacognición",
+            "Portafolios reflexivos", "Evaluación entre pares"
+        ],
+        "Toma de Decisiones": [
+            "Rubricas de evaluación", "Autoevaluación y metacognición",
+            "Portafolios reflexivos", "Estudio de casos reales"
+        ]
+    };
+
+    // 1. CARGA INICIAL
     useEffect(() => {
-        api.get('/docente/asignaturas').then(res => {
-            setMisAsignaturas(Array.isArray(res.data) ? res.data : []);
-        });
-        
-        // NUEVO: Cargar periodos disponibles
-        api.get('/periodos/activos').then(res => {
-            setPeriodos(Array.isArray(res.data) ? res.data : []);
-        });
+        const cargarDatos = async () => {
+            try {
+                const [resAsig, resPer] = await Promise.all([
+                    api.get('/docente/asignaturas'),
+                    api.get('/periodos/activos')
+                ]);
+                setMisAsignaturas(Array.isArray(resAsig.data) ? resAsig.data : []);
+                
+                // AUTOMATIZACIÓN DEL PERIODO
+                const periodosActivos = Array.isArray(resPer.data) ? resPer.data : [];
+                const activo = periodosActivos.find(p => p.activo === 1 || p.activo === true);
+                
+                if (activo) {
+                    setForm(prev => ({ ...prev, periodo_academico: activo.nombre }));
+                }
+            } catch (error) {
+                console.error("Error cargando datos iniciales", error);
+            }
+        };
+        cargarDatos();
     }, []);
 
-    // 2. EFECTO: Recarga al cambiar Materia o Parcial (o Periodo)
+    // 2. RECARGA AL CAMBIAR FILTROS
     useEffect(() => {
         if (form.asignatura_id && form.parcial && form.periodo_academico) {
-            cargarDatosPlanificacion();
+            cargarPlanificacion();
+            cargarEstudiantes(form.asignatura_id);
         }
     }, [form.asignatura_id, form.parcial, form.periodo_academico]);
 
-    // NUEVO: Manejo de cambio de periodo
-    const handleCambioPeriodo = (val) => {
-        setForm(prev => ({
-            ...prev,
-            periodo_academico: val,
-            asignatura_id: '' // Reseteamos la materia porque cambian según el periodo
-        }));
-        setHabilidadesAsignadas([]);
-    };
-
+    // HANDLERS
     const handleCambioMateria = (val) => {
-        const materia = misAsignaturas.find(m => m.id == val && m.periodo === form.periodo_academico);
+        const materia = misAsignaturas.find(m => String(m.id) === String(val) && m.periodo === form.periodo_academico);
         let nuevoParcial = '1';
-        
-        // Auto-seleccionar parcial 2 si el 1 ya está listo
         if (materia && materia.planificacion_p1 && !materia.planificacion_p2) nuevoParcial = '2';
 
-        setForm(prev => ({
-            ...prev,
-            asignatura_id: val,
-            parcial: nuevoParcial
-            // Ya no sobreescribimos el periodo aquí, usamos el seleccionado
-        }));
-        
-        if(val) cargarEstudiantes(val);
+        setForm(prev => ({ ...prev, asignatura_id: val, parcial: nuevoParcial }));
     };
 
-    const cargarDatosPlanificacion = async () => {
-        setHabilidadesAsignadas([]);
-        setSeleccionActividades({});
-        setEsEdicion(false);
-
+    // --- LÓGICA PRINCIPAL CORREGIDA ---
+    const cargarPlanificacion = async () => {
+        setLoading(true);
         try {
-            // MODIFICADO: Enviamos también el periodo_academico
-            const res = await api.get(`/planificaciones/verificar/${form.asignatura_id}?parcial=${form.parcial}&periodo=${encodeURIComponent(form.periodo_academico)}`);
-            
+            // 1. Intentar cargar planificación del parcial ACTUAL
+            const res = await api.get(`/planificaciones/verificar/${form.asignatura_id}`, {
+                params: { parcial: form.parcial, periodo: form.periodo_academico }
+            });
+
             if (res.data.tiene_asignacion) {
-                const habilidades = res.data.habilidades;
-                const guardadas = res.data.actividades_guardadas || {};
-                const esModoEdicion = res.data.es_edicion;
+                setCatalogoHabilidades(res.data.habilidades || []);
+                
+                if (res.data.es_edicion) {
+                    // CASO A: Ya existe planificación para este parcial (Edición)
+                    setEsEdicion(true);
+                    setHabilidadesSeleccionadas(res.data.habilidades_seleccionadas || []);
+                    setActividadesPorHabilidad(res.data.actividades_guardadas || {});
+                    Swal.mixin({toast: true, position: 'top-end', timer: 2000, showConfirmButton: false})
+                        .fire({icon: 'info', title: 'Planificación cargada'});
+                
+                } else if (form.parcial === '2') {
+                    // CASO B: No existe plan P2, intentamos copiar habilidades de P1
+                    const resP1 = await api.get(`/planificaciones/verificar/${form.asignatura_id}`, {
+                        params: { parcial: '1', periodo: form.periodo_academico }
+                    });
 
-                setHabilidadesAsignadas(habilidades);
-                setEsEdicion(esModoEdicion);
-
-                const opcionesMap = {};
-                const seleccionMap = {};
-
-                habilidades.forEach(h => {
-                    const nombreBD = h.nombre.trim();
-                    let listaOpciones = [];
-
-                    if (CATALOGO_GUIA[nombreBD]) {
-                        listaOpciones = CATALOGO_GUIA[nombreBD];
+                    if (resP1.data.es_edicion) {
+                        setEsEdicion(false); // Es nueva, pero pre-llenada
+                        // Copiamos SOLO las habilidades
+                        setHabilidadesSeleccionadas(resP1.data.habilidades_seleccionadas || []);
+                        // Dejamos actividades vacías para que el docente elija nuevas
+                        setActividadesPorHabilidad({}); 
+                        
+                        Swal.mixin({toast: true, position: 'top-end', timer: 3000, showConfirmButton: false})
+                            .fire({icon: 'success', title: 'Habilidades copiadas del Parcial 1. Seleccione las nuevas actividades.'});
                     } else {
-                        const keyEncontrada = Object.keys(CATALOGO_GUIA).find(k => 
-                            k.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") === 
-                            nombreBD.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-                        );
-                        listaOpciones = keyEncontrada ? CATALOGO_GUIA[keyEncontrada] : ['Actividad sugerida por defecto'];
+                        // Si no hay P1, todo limpio
+                        setEsEdicion(false);
+                        setHabilidadesSeleccionadas([]);
+                        setActividadesPorHabilidad({});
                     }
-
-                    opcionesMap[h.id] = listaOpciones;
-                    seleccionMap[h.id] = (esModoEdicion && guardadas[h.id]) ? guardadas[h.id] : [];
-                });
-
-                setOpcionesPorHabilidad(opcionesMap);
-                setSeleccionActividades(seleccionMap);
-
-                if (esModoEdicion) {
-                    const Toast = Swal.mixin({toast: true, position: 'top-end', showConfirmButton: false, timer: 2000});
-                    Toast.fire({icon: 'info', title: `Cargada planificación P${form.parcial}`});
+                } else {
+                    // CASO C: Es Parcial 1 y no hay nada (Todo nuevo)
+                    setEsEdicion(false);
+                    setHabilidadesSeleccionadas([]);
+                    setActividadesPorHabilidad({});
                 }
-            } else {
-                Swal.fire('Información', res.data.message || 'Materia sin configuración.', 'info');
             }
         } catch (error) {
-            console.error("Error cargando planificación:", error);
+            console.error(error);
+            Swal.fire('Error', 'No se pudo cargar la planificación.', 'error');
+        } finally {
+            setLoading(false);
         }
     };
 
-    const cargarEstudiantes = (asignaturaId) => {
-        setLoading(true);
-        api.get(`/docente/estudiantes/${asignaturaId}`)
-            .then(res => setEstudiantes(res.data))
-            .finally(() => setLoading(false));
+    const cargarEstudiantes = (id) => {
+        api.get(`/docente/estudiantes/${id}`).then(res => setEstudiantes(res.data));
     };
 
-    const toggleActividad = (habilidadId, actividad) => {
-        setSeleccionActividades(prev => {
-            const seleccionadas = prev[habilidadId] || [];
-            if (seleccionadas.includes(actividad)) {
-                return { ...prev, [habilidadId]: seleccionadas.filter(a => a !== actividad) };
+    // GESTIÓN DE HABILIDADES Y ACTIVIDADES
+    const toggleHabilidad = (id) => {
+        setHabilidadesSeleccionadas(prev => {
+            if (prev.includes(id)) {
+                const newState = prev.filter(h => h !== id);
+                const nuevasActividades = { ...actividadesPorHabilidad };
+                delete nuevasActividades[id];
+                setActividadesPorHabilidad(nuevasActividades);
+                return newState;
             } else {
-                return { ...prev, [habilidadId]: [...seleccionadas, actividad] };
+                return [...prev, id];
             }
+        });
+    };
+
+    const agregarActividad = (habilidadId) => {
+        if (!nuevaActividad) return;
+        const actuales = actividadesPorHabilidad[habilidadId] || [];
+        if(actuales.includes(nuevaActividad)) {
+            return Swal.fire('Atención', 'Esta actividad ya fue agregada.', 'info');
+        }
+        setActividadesPorHabilidad(prev => ({
+            ...prev,
+            [habilidadId]: [...(prev[habilidadId] || []), nuevaActividad]
+        }));
+        setNuevaActividad('');
+        setHabilidadParaActividad(null);
+    };
+
+    const eliminarActividad = (habilidadId, index) => {
+        setActividadesPorHabilidad(prev => {
+            const actividades = [...(prev[habilidadId] || [])];
+            actividades.splice(index, 1);
+            return { ...prev, [habilidadId]: actividades };
         });
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        // ... (Tu lógica de submit se mantiene igual)
-        if (!form.asignatura_id) return Swal.fire('Atención', 'Selecciona una asignatura.', 'warning');
-        if (habilidadesAsignadas.length === 0) return Swal.fire('Error', 'No hay habilidades.', 'error');
-        
-        const userStr = localStorage.getItem('user');
-        if (!userStr) return Swal.fire('Error', 'Sesión inválida.', 'error');
-        const user = JSON.parse(userStr);
+        if (habilidadesSeleccionadas.length === 0) return Swal.fire('Error', 'Selecciona al menos una habilidad.', 'warning');
 
-        for (let h of habilidadesAsignadas) {
-            if (!seleccionActividades[h.id] || seleccionActividades[h.id].length === 0) {
-                return Swal.fire('Faltan datos', `Selecciona actividades para: ${h.nombre}`, 'warning');
+        for (let id of habilidadesSeleccionadas) {
+            if (!actividadesPorHabilidad[id] || actividadesPorHabilidad[id].length === 0) {
+                const nombreHab = catalogoHabilidades.find(h => h.id === id)?.nombre;
+                return Swal.fire('Faltan actividades', `Selecciona actividades para: ${nombreHab}`, 'warning');
             }
         }
 
-        const detalles = habilidadesAsignadas.map(hab => ({
-            habilidad_blanda_id: hab.id,
-            actividades: seleccionActividades[hab.id].join('\n') 
+        const user = JSON.parse(localStorage.getItem('user'));
+        const detalles = habilidadesSeleccionadas.map(id => ({
+            habilidad_blanda_id: id,
+            actividades: actividadesPorHabilidad[id] 
         }));
 
         try {
@@ -188,183 +242,136 @@ const PlanificacionDocente = () => {
                 periodo_academico: form.periodo_academico,
                 detalles: detalles
             });
-            
-            Swal.fire({
-                title: esEdicion ? '¡Actualizado!' : '¡Guardado!',
-                text: `Planificación del Parcial ${form.parcial} registrada correctamente.`,
-                icon: 'success'
-            });
-            
-            // Recargamos asignaturas para actualizar indicadores P1/P2
+            Swal.fire('¡Éxito!', 'Planificación guardada correctamente.', 'success');
+            setEsEdicion(true);
             api.get('/docente/asignaturas').then(res => setMisAsignaturas(res.data));
-            setEsEdicion(true); 
-            
         } catch (error) {
-            const msj = error.response?.data?.message || 'Error al guardar.';
-            Swal.fire('Error', msj, 'error');
+            Swal.fire('Error', 'No se pudo guardar la planificación.', 'error');
         }
     };
 
-    // --- FILTRADO DE ASIGNATURAS POR PERIODO ---
+    // OPCIONES SELECT Y HELPER
     const asignaturasDelPeriodo = misAsignaturas.filter(a => a.periodo === form.periodo_academico);
-
     const opcionesAsignaturas = asignaturasDelPeriodo.map(a => ({
         value: a.id,
         label: a.nombre,
-        subtext: `${a.carrera} (${a.paralelo}) | P1:${a.planificacion_p1?'Ok':'-'} P2:${a.planificacion_p2?'Ok':'-'}`,
+        subtext: `${a.carrera} (${a.paralelo})`,
         icon: (a.planificacion_p1 && a.planificacion_p2) ? CheckCircleIcon : null
     }));
+    const opcionesParciales = [{ value: '1', label: '1er Parcial' }, { value: '2', label: '2do Parcial' }];
 
-    // Opciones para el Select de Periodos
-    const opcionesPeriodos = periodos.map(p => ({
-        value: p.nombre,
-        label: p.nombre
-    }));
-
-    const opcionesParciales = [
-        { value: '1', label: 'Primer Parcial' },
-        { value: '2', label: 'Segundo Parcial' }
-    ];
+    const getOpcionesActividades = (habilidadId) => {
+        const habilidadObj = catalogoHabilidades.find(h => h.id === habilidadId);
+        if (!habilidadObj) return [];
+        const nombreBD = habilidadObj.nombre;
+        let actividades = ACTIVIDADES_GUIA[nombreBD] || [];
+        
+        if (actividades.length === 0) {
+            const key = Object.keys(ACTIVIDADES_GUIA).find(k => nombreBD.includes(k) || k.includes(nombreBD));
+            if (key) actividades = ACTIVIDADES_GUIA[key];
+        }
+        if (actividades.length === 0) return [{ value: 'Actividad General', label: 'Actividad General' }];
+        return actividades.map(act => ({ value: act, label: act }));
+    };
 
     return (
-        <div className="space-y-6 animate-fade-in">
+        <div className="space-y-6 animate-fade-in pb-20 p-6 bg-gray-50 min-h-screen">
             <div className="flex justify-between items-center">
-                <div>
-                    <h2 className="text-2xl font-bold text-gray-900">Planificación de Habilidades</h2>
-                    <p className="text-gray-500 text-sm mt-1">Gestiona las actividades oficiales de la Guía Académica.</p>
-                </div>
-                {esEdicion && (
-                    <span className="bg-amber-100 text-amber-700 px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 border border-amber-200 animate-pulse">
-                        <PencilSquareIcon className="h-5 w-5"/>
-                        Editando Parcial {form.parcial}
-                    </span>
-                )}
+                <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                    <BookOpenIcon className="h-7 w-7 text-blue-600"/> Planificación de Habilidades
+                </h2>
+                {esEdicion && <span className="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-xs font-bold border border-amber-200">Modo Edición</span>}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* --- FORMULARIO --- */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-6">
-                    <form onSubmit={handleSubmit}>
-                        <div className={`p-6 rounded-2xl shadow-sm border mb-6 space-y-4 transition-colors ${esEdicion ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-100'}`}>
-                            
-                            {/* 1. SELECCIÓN DE PERIODO (NUEVO) */}
-                            <CustomSelect 
-                                label="1. Selecciona el Periodo Académico"
-                                icon={CalendarDaysIcon}
-                                placeholder="-- Elegir periodo --"
-                                options={opcionesPeriodos}
-                                value={form.periodo_academico}
-                                onChange={handleCambioPeriodo}
-                            />
-
-                            {/* 2. SELECCIÓN DE ASIGNATURA (Filtrada) */}
-                            <div className={`transition-all ${form.periodo_academico ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
-                                <CustomSelect 
-                                    label="2. Selecciona tu Asignatura"
-                                    icon={BookOpenIcon}
-                                    placeholder={asignaturasDelPeriodo.length > 0 ? "-- Elegir materia --" : "No tienes materias en este periodo"}
-                                    options={opcionesAsignaturas}
-                                    value={form.asignatura_id}
-                                    onChange={handleCambioMateria}
-                                />
-                            </div>
-                            
-                            <div className={`transition-all ${form.asignatura_id ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
-                                <CustomSelect 
-                                    label="3. Parcial"
-                                    icon={ClockIcon}
-                                    options={opcionesParciales}
-                                    value={form.parcial}
-                                    onChange={(val) => setForm(prev => ({ ...prev, parcial: val }))} 
-                                />
+                    {/* FILTROS CON PERIODO AUTOMÁTICO */}
+                    <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="md:col-span-2">
+                            <label className="block text-sm font-bold text-gray-700 mb-1 ml-1">Periodo Académico (Automático)</label>
+                            <div className="flex items-center gap-3 w-full border border-blue-200 rounded-xl p-3 bg-blue-50 text-blue-800 font-medium">
+                                <CalendarDaysIcon className="h-5 w-5"/>
+                                <span>{form.periodo_academico || 'Cargando periodo activo...'}</span>
+                                <LockClosedIcon className="h-4 w-4 ml-auto text-blue-400"/>
                             </div>
                         </div>
+                        <CustomSelect label="Asignatura" icon={BookOpenIcon} options={opcionesAsignaturas} value={form.asignatura_id} onChange={handleCambioMateria} disabled={!form.periodo_academico} />
+                        <CustomSelect label="Parcial" icon={ClockIcon} options={opcionesParciales} value={form.parcial} onChange={v => setForm({...form, parcial: v})} disabled={!form.asignatura_id} />
+                    </div>
 
-                        {/* ... (El resto del renderizado de habilidades y botón se mantiene igual) ... */}
-                        {habilidadesAsignadas.length > 0 ? (
-                            <div className="space-y-6">
-                                <h3 className="font-bold text-gray-700 flex items-center gap-2 px-1 text-lg">
-                                    <SparklesIcon className="h-6 w-6 text-purple-600"/>
-                                    4. Habilidades ({habilidadesAsignadas.length})
-                                </h3>
-                                {/* ... Mismo código de map habilidades ... */}
-                                {habilidadesAsignadas.map((hab, index) => (
-                                    <div key={hab.id} className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm relative overflow-hidden">
-                                        <div className="absolute top-0 left-0 w-1.5 h-full bg-purple-500"></div>
-                                        <div className="mb-4">
-                                            <div className="flex justify-between items-center mb-1">
-                                                <span className="text-xs font-bold text-purple-600 uppercase tracking-wide bg-purple-50 px-2 py-1 rounded">
-                                                    #{index + 1} {hab.nombre}
-                                                </span>
+                    {/* LISTA DE HABILIDADES */}
+                    {form.asignatura_id && (
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                            <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                                <SparklesIcon className="h-5 w-5 text-purple-600"/> Selecciona las Habilidades
+                            </h3>
+                            <div className="space-y-4">
+                                {catalogoHabilidades.map(hab => {
+                                    const seleccionado = habilidadesSeleccionadas.includes(hab.id);
+                                    const opcionesActividades = getOpcionesActividades(hab.id);
+                                    return (
+                                        <div key={hab.id} className={`border rounded-xl p-4 transition-all ${seleccionado ? 'border-purple-500 bg-purple-50/30' : 'border-gray-200'}`}>
+                                            <div className="flex items-center gap-3">
+                                                <input type="checkbox" checked={seleccionado} onChange={() => toggleHabilidad(hab.id)} className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500 cursor-pointer"/>
+                                                <div>
+                                                    <p className="font-bold text-gray-800">{hab.nombre}</p>
+                                                    <p className="text-xs text-gray-500">{hab.descripcion}</p>
+                                                </div>
                                             </div>
-                                            {hab.definicion && (
-                                                <p className="text-sm text-gray-500 italic mt-1 bg-gray-50 p-2 rounded border border-gray-100">
-                                                    "{hab.definicion}"
-                                                </p>
+                                            {seleccionado && (
+                                                <div className="mt-4 pl-8 border-l-2 border-purple-200 ml-2">
+                                                    <p className="text-xs font-bold text-purple-700 mb-2 uppercase">Actividades Planificadas:</p>
+                                                    <ul className="space-y-2 mb-3">
+                                                        {(actividadesPorHabilidad[hab.id] || []).map((act, idx) => (
+                                                            <li key={idx} className="flex justify-between items-center bg-white p-2 rounded border border-purple-100 text-sm text-gray-700">
+                                                                <span>• {act}</span>
+                                                                <button onClick={() => eliminarActividad(hab.id, idx)} className="text-red-400 hover:text-red-600"><TrashIcon className="h-4 w-4"/></button>
+                                                            </li>
+                                                        ))}
+                                                        {(actividadesPorHabilidad[hab.id] || []).length === 0 && <li className="text-xs text-gray-400 italic">No hay actividades seleccionadas.</li>}
+                                                    </ul>
+                                                    <div className="flex gap-2 items-end">
+                                                        <div className="flex-1">
+                                                            <CustomSelect label="" placeholder="Seleccionar actividad sugerida..." options={opcionesActividades} value={habilidadParaActividad === hab.id ? nuevaActividad : ''} onChange={(val) => { setHabilidadParaActividad(hab.id); setNuevaActividad(val); }} icon={ListBulletIcon} />
+                                                        </div>
+                                                        <button onClick={() => agregarActividad(hab.id)} className="bg-purple-600 text-white px-3 py-2.5 rounded-lg hover:bg-purple-700 transition shadow-sm h-[42px]" title="Agregar"><PlusIcon className="h-5 w-5"/></button>
+                                                    </div>
+                                                </div>
                                             )}
                                         </div>
-                                        <div className="mt-4">
-                                            <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-                                                <CursorArrowRaysIcon className="h-5 w-5 text-blue-600"/> 
-                                                Actividades según Guía Metodológica:
-                                            </label>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                                {opcionesPorHabilidad[hab.id]?.map((actividad, i) => {
-                                                    const isSelected = (seleccionActividades[hab.id] || []).includes(actividad);
-                                                    return (
-                                                        <label key={i} className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${isSelected ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' : 'bg-white border-gray-200 hover:bg-gray-50'}`}>
-                                                            <input type="checkbox" className="mt-1 w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer" checked={isSelected} onChange={() => toggleActividad(hab.id, actividad)}/>
-                                                            <span className={`text-xs md:text-sm ${isSelected ? 'text-blue-800 font-medium' : 'text-gray-600'}`}>{actividad}</span>
-                                                        </label>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                                <div className="pt-4 pb-8">
-                                    <button type="submit" className={`w-full font-bold py-4 rounded-xl shadow-lg transition flex justify-center items-center gap-2 text-lg transform hover:-translate-y-0.5 active:translate-y-0 ${esEdicion ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}>
-                                        {esEdicion ? (<><PencilSquareIcon className="h-6 w-6"/> Actualizar Planificación P{form.parcial}</>) : (<><CheckBadgeIcon className="h-6 w-6"/> Guardar Planificación P{form.parcial}</>)}
-                                    </button>
-                                </div>
+                                    );
+                                })}
                             </div>
-                        ) : form.asignatura_id && (
-                            <div className="p-10 bg-gray-50 border border-gray-200 border-dashed rounded-xl text-center flex flex-col items-center justify-center h-64">
-                                <SparklesIcon className="h-10 w-10 text-gray-300 mb-2"/>
-                                <p className="text-gray-500 font-medium">Esta materia no tiene habilidades asignadas.</p>
+                            <div className="mt-6 pt-4 border-t border-gray-100 flex justify-end">
+                                <button onClick={handleSubmit} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg flex items-center gap-2 transform active:scale-95 transition">
+                                    <CheckBadgeIcon className="h-6 w-6"/> {esEdicion ? 'Actualizar Planificación' : 'Guardar Planificación'}
+                                </button>
                             </div>
-                        )}
-                    </form>
+                        </div>
+                    )}
                 </div>
 
-                {/* --- DERECHA: NÓMINA (Sin Cambios mayores) --- */}
                 <div className="lg:col-span-1">
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 h-full flex flex-col overflow-hidden max-h-[800px] sticky top-6">
-                        <div className="p-5 border-b border-gray-100 bg-gray-50">
-                            <h3 className="font-bold text-gray-800 flex items-center gap-2">
-                                <UserGroupIcon className="h-5 w-5 text-blue-600"/>
-                                Estudiantes
-                            </h3>
-                            {form.periodo_academico && <p className="text-xs text-blue-500 font-bold mt-1">{form.periodo_academico}</p>}
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 h-full max-h-[600px] flex flex-col overflow-hidden sticky top-6">
+                        <div className="p-4 border-b bg-gray-50 flex items-center gap-2">
+                            <UserGroupIcon className="h-5 w-5 text-blue-600"/>
+                            <h3 className="font-bold text-gray-700">Nómina</h3>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-0 scrollbar-thin">
-                            {/* ... (renderizado de estudiantes igual) ... */}
-                            {loading ? (
-                                <div className="p-10 text-center text-gray-400">Cargando...</div>
-                            ) : estudiantes.length > 0 ? (
+                        <div className="flex-1 overflow-y-auto p-0">
+                            {estudiantes.length > 0 ? (
                                 <ul className="divide-y divide-gray-50">
                                     {estudiantes.map((est, i) => (
-                                        <li key={est.id} className="px-5 py-3 flex items-center gap-3 hover:bg-blue-50 transition">
-                                            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-xs font-bold text-gray-500">{i+1}</span>
+                                        <li key={est.id} className="p-3 hover:bg-blue-50 flex items-center gap-3 text-sm">
+                                            <span className="font-bold text-gray-400 w-5">{i+1}</span>
                                             <div>
-                                                <div className="text-sm font-bold text-gray-700">{est.apellidos} {est.nombres}</div>
-                                                <div className="text-[10px] text-gray-400">{est.email}</div>
+                                                <p className="font-bold text-gray-800">{est.apellidos} {est.nombres}</p>
+                                                <p className="text-xs text-gray-400">{est.email}</p>
                                             </div>
                                         </li>
                                     ))}
                                 </ul>
                             ) : (
-                                <div className="p-10 text-center text-gray-400 text-sm">Selecciona una materia.</div>
+                                <div className="p-8 text-center text-gray-400 text-sm">Selecciona una materia para ver estudiantes.</div>
                             )}
                         </div>
                     </div>
