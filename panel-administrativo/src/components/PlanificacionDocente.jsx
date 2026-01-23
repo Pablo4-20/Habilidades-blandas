@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import api from '../services/api';
 import Swal from 'sweetalert2';
 import CustomSelect from './ui/CustomSelect';
 import { 
-    BookOpenIcon, SparklesIcon, UserGroupIcon, 
+    BookOpenIcon, SparklesIcon, 
     CheckBadgeIcon, CalendarDaysIcon, ClockIcon, 
     CheckCircleIcon, PlusIcon, TrashIcon, ListBulletIcon, LockClosedIcon
 } from '@heroicons/react/24/outline';
@@ -11,7 +11,6 @@ import {
 const PlanificacionDocente = () => {
     // Estados principales
     const [misAsignaturas, setMisAsignaturas] = useState([]);
-    const [estudiantes, setEstudiantes] = useState([]);
     const [catalogoHabilidades, setCatalogoHabilidades] = useState([]);
     const [loading, setLoading] = useState(false);
 
@@ -31,7 +30,7 @@ const PlanificacionDocente = () => {
     const [nuevaActividad, setNuevaActividad] = useState(''); 
     const [habilidadParaActividad, setHabilidadParaActividad] = useState(null);
 
-    // --- BASE DE DATOS DE ACTIVIDADES (De la Guía Oficial) ---
+    // --- BASE DE DATOS DE ACTIVIDADES ---
     const ACTIVIDADES_GUIA = {
         "Comunicación Efectiva": [
             "Debates y mesas redondas", "Presentaciones orales y proyectos grupales",
@@ -89,7 +88,6 @@ const PlanificacionDocente = () => {
                 ]);
                 setMisAsignaturas(Array.isArray(resAsig.data) ? resAsig.data : []);
                 
-                // AUTOMATIZACIÓN DEL PERIODO
                 const periodosActivos = Array.isArray(resPer.data) ? resPer.data : [];
                 const activo = periodosActivos.find(p => p.activo === 1 || p.activo === true);
                 
@@ -107,7 +105,6 @@ const PlanificacionDocente = () => {
     useEffect(() => {
         if (form.asignatura_id && form.parcial && form.periodo_academico) {
             cargarPlanificacion();
-            cargarEstudiantes(form.asignatura_id);
         }
     }, [form.asignatura_id, form.parcial, form.periodo_academico]);
 
@@ -120,11 +117,10 @@ const PlanificacionDocente = () => {
         setForm(prev => ({ ...prev, asignatura_id: val, parcial: nuevoParcial }));
     };
 
-    // --- LÓGICA PRINCIPAL CORREGIDA ---
+    // --- LÓGICA PRINCIPAL ---
     const cargarPlanificacion = async () => {
         setLoading(true);
         try {
-            // 1. Intentar cargar planificación del parcial ACTUAL
             const res = await api.get(`/planificaciones/verificar/${form.asignatura_id}`, {
                 params: { parcial: form.parcial, periodo: form.periodo_academico }
             });
@@ -133,7 +129,6 @@ const PlanificacionDocente = () => {
                 setCatalogoHabilidades(res.data.habilidades || []);
                 
                 if (res.data.es_edicion) {
-                    // CASO A: Ya existe planificación para este parcial (Edición)
                     setEsEdicion(true);
                     setHabilidadesSeleccionadas(res.data.habilidades_seleccionadas || []);
                     setActividadesPorHabilidad(res.data.actividades_guardadas || {});
@@ -141,28 +136,23 @@ const PlanificacionDocente = () => {
                         .fire({icon: 'info', title: 'Planificación cargada'});
                 
                 } else if (form.parcial === '2') {
-                    // CASO B: No existe plan P2, intentamos copiar habilidades de P1
                     const resP1 = await api.get(`/planificaciones/verificar/${form.asignatura_id}`, {
                         params: { parcial: '1', periodo: form.periodo_academico }
                     });
 
                     if (resP1.data.es_edicion) {
-                        setEsEdicion(false); // Es nueva, pero pre-llenada
-                        // Copiamos SOLO las habilidades
+                        setEsEdicion(false); 
                         setHabilidadesSeleccionadas(resP1.data.habilidades_seleccionadas || []);
-                        // Dejamos actividades vacías para que el docente elija nuevas
                         setActividadesPorHabilidad({}); 
                         
                         Swal.mixin({toast: true, position: 'top-end', timer: 3000, showConfirmButton: false})
-                            .fire({icon: 'success', title: 'Habilidades copiadas del Parcial 1. Seleccione las nuevas actividades.'});
+                            .fire({icon: 'success', title: 'Habilidades copiadas del P1. Defina las nuevas actividades.'});
                     } else {
-                        // Si no hay P1, todo limpio
                         setEsEdicion(false);
                         setHabilidadesSeleccionadas([]);
                         setActividadesPorHabilidad({});
                     }
                 } else {
-                    // CASO C: Es Parcial 1 y no hay nada (Todo nuevo)
                     setEsEdicion(false);
                     setHabilidadesSeleccionadas([]);
                     setActividadesPorHabilidad({});
@@ -176,11 +166,6 @@ const PlanificacionDocente = () => {
         }
     };
 
-    const cargarEstudiantes = (id) => {
-        api.get(`/docente/estudiantes/${id}`).then(res => setEstudiantes(res.data));
-    };
-
-    // GESTIÓN DE HABILIDADES Y ACTIVIDADES
     const toggleHabilidad = (id) => {
         setHabilidadesSeleccionadas(prev => {
             if (prev.includes(id)) {
@@ -242,7 +227,16 @@ const PlanificacionDocente = () => {
                 periodo_academico: form.periodo_academico,
                 detalles: detalles
             });
-            Swal.fire('¡Éxito!', 'Planificación guardada correctamente.', 'success');
+            
+            await Swal.fire({
+                icon: 'success',
+                title: '¡Éxito!',
+                text: 'Planificación guardada correctamente.',
+                returnFocus: false 
+            });
+
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+
             setEsEdicion(true);
             api.get('/docente/asignaturas').then(res => setMisAsignaturas(res.data));
         } catch (error) {
@@ -250,7 +244,6 @@ const PlanificacionDocente = () => {
         }
     };
 
-    // OPCIONES SELECT Y HELPER
     const asignaturasDelPeriodo = misAsignaturas.filter(a => a.periodo === form.periodo_academico);
     const opcionesAsignaturas = asignaturasDelPeriodo.map(a => ({
         value: a.id,
@@ -283,99 +276,93 @@ const PlanificacionDocente = () => {
                 {esEdicion && <span className="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-xs font-bold border border-amber-200">Modo Edición</span>}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 space-y-6">
-                    {/* FILTROS CON PERIODO AUTOMÁTICO */}
-                    <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="md:col-span-2">
-                            <label className="block text-sm font-bold text-gray-700 mb-1 ml-1">Periodo Académico (Automático)</label>
-                            <div className="flex items-center gap-3 w-full border border-blue-200 rounded-xl p-3 bg-blue-50 text-blue-800 font-medium">
-                                <CalendarDaysIcon className="h-5 w-5"/>
-                                <span>{form.periodo_academico || 'Cargando periodo activo...'}</span>
-                                <LockClosedIcon className="h-4 w-4 ml-auto text-blue-400"/>
-                            </div>
+            {/* SE ELIMINÓ EL GRID PRINCIPAL (COLUMNAS) Y SE DEJÓ SOLO EL CONTENIDO A ANCHO COMPLETO */}
+            <div className="w-full space-y-6">
+                
+                {/* FILTROS */}
+                <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                        <label className="block text-sm font-bold text-gray-700 mb-1 ml-1">Periodo Académico (Automático)</label>
+                        <div className="flex items-center gap-3 w-full border border-blue-200 rounded-xl p-3 bg-blue-50 text-blue-800 font-medium">
+                            <CalendarDaysIcon className="h-5 w-5"/>
+                            <span>{form.periodo_academico || 'Cargando periodo activo...'}</span>
+                            <LockClosedIcon className="h-4 w-4 ml-auto text-blue-400"/>
                         </div>
-                        <CustomSelect label="Asignatura" icon={BookOpenIcon} options={opcionesAsignaturas} value={form.asignatura_id} onChange={handleCambioMateria} disabled={!form.periodo_academico} />
-                        <CustomSelect label="Parcial" icon={ClockIcon} options={opcionesParciales} value={form.parcial} onChange={v => setForm({...form, parcial: v})} disabled={!form.asignatura_id} />
                     </div>
+                    <CustomSelect label="Asignatura" icon={BookOpenIcon} options={opcionesAsignaturas} value={form.asignatura_id} onChange={handleCambioMateria} disabled={!form.periodo_academico} />
+                    <CustomSelect label="Parcial" icon={ClockIcon} options={opcionesParciales} value={form.parcial} onChange={v => setForm({...form, parcial: v})} disabled={!form.asignatura_id} />
+                </div>
 
-                    {/* LISTA DE HABILIDADES */}
-                    {form.asignatura_id && (
-                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                            <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-                                <SparklesIcon className="h-5 w-5 text-purple-600"/> Selecciona las Habilidades
-                            </h3>
-                            <div className="space-y-4">
-                                {catalogoHabilidades.map(hab => {
+                {/* LISTA DE HABILIDADES */}
+                {form.asignatura_id && (
+                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                        <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                            <SparklesIcon className="h-5 w-5 text-purple-600"/> 
+                            {form.parcial === '2' ? 'Habilidades Continuas (2do Parcial)' : 'Selecciona las Habilidades (1er Parcial)'}
+                        </h3>
+                        
+                        {/* GRID DE 2 COLUMNAS PARA LAS HABILIDADES CON 'items-start' PARA EVITAR ESTIRAMIENTO */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                            {catalogoHabilidades
+                                .filter(hab => form.parcial === '1' || habilidadesSeleccionadas.includes(hab.id))
+                                .map(hab => {
                                     const seleccionado = habilidadesSeleccionadas.includes(hab.id);
                                     const opcionesActividades = getOpcionesActividades(hab.id);
                                     return (
-                                        <div key={hab.id} className={`border rounded-xl p-4 transition-all ${seleccionado ? 'border-purple-500 bg-purple-50/30' : 'border-gray-200'}`}>
-                                            <div className="flex items-center gap-3">
-                                                <input type="checkbox" checked={seleccionado} onChange={() => toggleHabilidad(hab.id)} className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500 cursor-pointer"/>
+                                        <div key={hab.id} className={`border rounded-xl p-4 transition-all flex flex-col ${seleccionado ? 'border-purple-500 bg-purple-50/30' : 'border-gray-200'}`}>
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={seleccionado} 
+                                                    onChange={() => toggleHabilidad(hab.id)} 
+                                                    className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500 cursor-pointer"
+                                                />
                                                 <div>
                                                     <p className="font-bold text-gray-800">{hab.nombre}</p>
-                                                    <p className="text-xs text-gray-500">{hab.descripcion}</p>
+                                                    <p className="text-xs text-gray-500 line-clamp-2">{hab.descripcion}</p>
                                                 </div>
                                             </div>
+                                            
+                                            {/* Sección expandible de actividades */}
                                             {seleccionado && (
-                                                <div className="mt-4 pl-8 border-l-2 border-purple-200 ml-2">
-                                                    <p className="text-xs font-bold text-purple-700 mb-2 uppercase">Actividades Planificadas:</p>
-                                                    <ul className="space-y-2 mb-3">
+                                                <div className="mt-auto pt-3 border-t border-purple-200/50">
+                                                    <p className="text-[10px] font-bold text-purple-700 mb-2 uppercase tracking-wide">Actividades:</p>
+                                                    <ul className="space-y-1.5 mb-3">
                                                         {(actividadesPorHabilidad[hab.id] || []).map((act, idx) => (
-                                                            <li key={idx} className="flex justify-between items-center bg-white p-2 rounded border border-purple-100 text-sm text-gray-700">
-                                                                <span>• {act}</span>
-                                                                <button onClick={() => eliminarActividad(hab.id, idx)} className="text-red-400 hover:text-red-600"><TrashIcon className="h-4 w-4"/></button>
+                                                            <li key={idx} className="flex justify-between items-start bg-white p-2 rounded border border-purple-100 text-xs text-gray-700">
+                                                                <span className="flex-1 break-words">• {act}</span>
+                                                                <button onClick={() => eliminarActividad(hab.id, idx)} className="ml-2 text-red-400 hover:text-red-600 shrink-0"><TrashIcon className="h-3.5 w-3.5"/></button>
                                                             </li>
                                                         ))}
-                                                        {(actividadesPorHabilidad[hab.id] || []).length === 0 && <li className="text-xs text-gray-400 italic">No hay actividades seleccionadas.</li>}
+                                                        {(actividadesPorHabilidad[hab.id] || []).length === 0 && <li className="text-xs text-gray-400 italic">Sin actividades.</li>}
                                                     </ul>
-                                                    <div className="flex gap-2 items-end">
-                                                        <div className="flex-1">
-                                                            <CustomSelect label="" placeholder="Seleccionar actividad sugerida..." options={opcionesActividades} value={habilidadParaActividad === hab.id ? nuevaActividad : ''} onChange={(val) => { setHabilidadParaActividad(hab.id); setNuevaActividad(val); }} icon={ListBulletIcon} />
+                                                    <div className="flex gap-1 items-end">
+                                                        <div className="flex-1 min-w-0">
+                                                            <CustomSelect label="" placeholder="Actividad..." options={opcionesActividades} value={habilidadParaActividad === hab.id ? nuevaActividad : ''} onChange={(val) => { setHabilidadParaActividad(hab.id); setNuevaActividad(val); }} icon={ListBulletIcon} />
                                                         </div>
-                                                        <button onClick={() => agregarActividad(hab.id)} className="bg-purple-600 text-white px-3 py-2.5 rounded-lg hover:bg-purple-700 transition shadow-sm h-[42px]" title="Agregar"><PlusIcon className="h-5 w-5"/></button>
+                                                        <button onClick={() => agregarActividad(hab.id)} className="bg-purple-600 text-white px-2 py-2.5 rounded-lg hover:bg-purple-700 transition shadow-sm h-[42px]" title="Agregar"><PlusIcon className="h-5 w-5"/></button>
                                                     </div>
                                                 </div>
                                             )}
                                         </div>
                                     );
                                 })}
-                            </div>
-                            <div className="mt-6 pt-4 border-t border-gray-100 flex justify-end">
-                                <button onClick={handleSubmit} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg flex items-center gap-2 transform active:scale-95 transition">
-                                    <CheckBadgeIcon className="h-6 w-6"/> {esEdicion ? 'Actualizar Planificación' : 'Guardar Planificación'}
-                                </button>
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                <div className="lg:col-span-1">
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 h-full max-h-[600px] flex flex-col overflow-hidden sticky top-6">
-                        <div className="p-4 border-b bg-gray-50 flex items-center gap-2">
-                            <UserGroupIcon className="h-5 w-5 text-blue-600"/>
-                            <h3 className="font-bold text-gray-700">Nómina</h3>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-0">
-                            {estudiantes.length > 0 ? (
-                                <ul className="divide-y divide-gray-50">
-                                    {estudiantes.map((est, i) => (
-                                        <li key={est.id} className="p-3 hover:bg-blue-50 flex items-center gap-3 text-sm">
-                                            <span className="font-bold text-gray-400 w-5">{i+1}</span>
-                                            <div>
-                                                <p className="font-bold text-gray-800">{est.apellidos} {est.nombres}</p>
-                                                <p className="text-xs text-gray-400">{est.email}</p>
-                                            </div>
-                                        </li>
-                                    ))}
-                                </ul>
-                            ) : (
-                                <div className="p-8 text-center text-gray-400 text-sm">Selecciona una materia para ver estudiantes.</div>
+                            
+                            {/* Mensaje vacío */}
+                            {form.parcial === '2' && catalogoHabilidades.filter(hab => habilidadesSeleccionadas.includes(hab.id)).length === 0 && (
+                                <div className="col-span-1 md:col-span-2 p-8 text-center border-2 border-dashed border-gray-200 rounded-xl">
+                                    <p className="text-gray-400 text-sm">No se encontraron habilidades del Primer Parcial para dar continuidad.</p>
+                                </div>
                             )}
                         </div>
+
+                        <div className="mt-6 pt-4 border-t border-gray-100 flex justify-end">
+                            <button onClick={handleSubmit} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg flex items-center gap-2 transform active:scale-95 transition">
+                                <CheckBadgeIcon className="h-6 w-6"/> {esEdicion ? 'Actualizar Planificación' : 'Guardar Planificación'}
+                            </button>
+                        </div>
                     </div>
-                </div>
+                )}
             </div>
         </div>
     );

@@ -19,8 +19,8 @@ class CatalogoController extends Controller
             return Carrera::where('id', $user->carrera_id)->get();
         }
 
-        // Si es ADMIN, devolvemos TODAS.
-        return Carrera::where('estado', 'Activo')->get();
+        // CORRECCIÓN: Usar all() en lugar de filtrar por 'estado' que no existe
+        return Carrera::all(); 
     }
 
     public function getCiclos() {

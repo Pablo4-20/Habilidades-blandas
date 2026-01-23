@@ -53,13 +53,13 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
         ],
         coordinador: [
             { name: 'Inicio', path: '/dashboard', icon: HomeIcon },
-            { name: 'Matriculación', path: '/dashboard/matriculacion', icon: UserPlusIcon },
-            { name: 'Asignar Materias', path: '/dashboard/asignaciones', icon: AcademicCapIcon },
+            { name: 'Asignar Materias', path: '/dashboard/asignaciones', icon: AcademicCapIcon }, // MOVIDO ARRIBA
+            { name: 'Matriculación', path: '/dashboard/matriculacion', icon: UserPlusIcon },     // MOVIDO ABAJO
             { name: 'Reportes Generales', path: '/dashboard/reportes', icon: DocumentChartBarIcon },
         ],
         docente: [
             { name: 'Inicio', path: '/dashboard', icon: HomeIcon },
-            { name: 'Mis Cursos', path: '/dashboard/mis-cursos', icon: BookOpenIcon }, // <--- AGREGADO
+            { name: 'Mis Cursos', path: '/dashboard/mis-cursos', icon: BookOpenIcon },
             { name: 'Mis Habilidades', path: '/dashboard/planificacion', icon: ClipboardDocumentCheckIcon },
             { name: 'Calificar', path: '/dashboard/evaluacion', icon: UsersIcon },
             { name: 'Mis Reportes', path: '/dashboard/reportes-docente', icon: DocumentChartBarIcon },

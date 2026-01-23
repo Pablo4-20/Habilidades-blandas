@@ -11,32 +11,32 @@ class EstudianteSeeder extends Seeder
     {
         DB::table('estudiantes')->insert([
             [
-                'cedula' => '0201111111', // <--- Cédula ficticia 1
-                'nombres' => 'Miguel', 
-                'apellidos' => 'Andrade', 
-                'carrera' => 'Software', 
+                'cedula' => '1752504975',
+                'nombres' => 'Miguel',
+                'apellidos' => 'Andrade',
                 'email' => 'miguel.andrade@est.ueb.edu.ec',
-                'email_verified_at' => now(), // <--- ESTO LOS MARCA COMO VERIFICADOS
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'cedula' => '0202222222', // <--- Cédula ficticia 2
-                'nombres' => 'Lorena', 
-                'apellidos' => 'Benavidez', 
                 'carrera' => 'Software',
-                'email' => 'lorena.benavidez@est.ueb.edu.ec',
-                'email_verified_at' => now(), // <--- ESTO LOS MARCA COMO VERIFICADOS
+                // 'email_verified_at' => now(), // <--- ESTA LÍNEA SE ELIMINA
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
             [
-                'cedula' => '0203333333', // <--- Cédula ficticia 3
-                'nombres' => 'Joel', 
-                'apellidos' => 'Diaz', 
-                'carrera' => 'Software', 
+                'cedula' => '1103796544',
+                'nombres' => 'Lorena',
+                'apellidos' => 'Benavidez',
+                'email' => 'lorena.benavidez@est.ueb.edu.ec',
+                'carrera' => 'Software',
+                // 'email_verified_at' => now(), // <--- ESTA LÍNEA SE ELIMINA
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'cedula' => '1752504801',
+                'nombres' => 'Joel',
+                'apellidos' => 'Diaz',
                 'email' => 'joel.diaz@est.ueb.edu.ec',
-                'email_verified_at' => now(), // <--- ESTO LOS MARCA COMO VERIFICADOS
+                'carrera' => 'Software',
+                // 'email_verified_at' => now(), // <--- ESTA LÍNEA SE ELIMINA
                 'created_at' => now(),
                 'updated_at' => now(),
             ],

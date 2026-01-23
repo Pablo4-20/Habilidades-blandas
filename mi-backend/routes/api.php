@@ -19,7 +19,6 @@ use App\Http\Controllers\Api\PeriodoAcademicoController;
 use App\Http\Controllers\Api\VerificationController;
 use App\Http\Controllers\Api\NewPasswordController;
 use App\Http\Controllers\Api\CatalogoController;
-use App\Http\Controllers\Api\VerificationEstudianteController;
 use App\Http\Controllers\Api\MatriculaController;
 
 // 1. LOGIN (Público)
@@ -27,12 +26,9 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::post('/forgot-password', [NewPasswordController::class, 'forgotPassword']);
 Route::post('/reset-password', [NewPasswordController::class, 'resetPassword']);
 
-// Verificación de Email
+// Verificación de Email (SOLO PARA USUARIOS DEL SISTEMA)
 Route::get('/email/verify/{id}/{hash}', [VerificationController::class, 'verify'])
     ->name('verification.verify'); 
-
-Route::get('/email/verify-student/{id}/{hash}', [VerificationEstudianteController::class, 'verify'])
-    ->name('verification.verify.student');
 
 // 2. RUTAS PROTEGIDAS (Requieren Token)
 Route::middleware('auth:sanctum')->group(function () {
@@ -46,14 +42,13 @@ Route::middleware('auth:sanctum')->group(function () {
     // --- DASHBOARD ---
     Route::get('/dashboard/stats', [DashboardController::class, 'index']);
 
-    // --- CATÁLOGOS GLOBALES (Para dropdowns) ---
+    // --- CATÁLOGOS GLOBALES ---
     Route::get('/carreras', [CatalogoController::class, 'getCarreras']);
     Route::get('/ciclos', [CatalogoController::class, 'getCiclos']);
     Route::get('/unidades', [CatalogoController::class, 'getUnidades']);
 
     // --- ADMINISTRADOR ---
-
-    // Periodos Académicos
+    // Periodos
     Route::get('/periodos', [PeriodoAcademicoController::class, 'index']);
     Route::post('/periodos', [PeriodoAcademicoController::class, 'store']);
     Route::put('/periodos/{id}', [PeriodoAcademicoController::class, 'update']);
@@ -73,8 +68,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('/asignaturas', AsignaturaController::class);
     Route::post('/asignaturas/import', [AsignaturaController::class, 'import']);
 
-    // HABILIDADES BLANDAS (Catálogo Global) - CORREGIDO
-    // Nota: Usamos 'habilidades-blandas' para coincidir con el frontend
+    // Habilidades Blandas
     Route::apiResource('habilidades-blandas', HabilidadBlandaController::class);
     Route::post('/habilidades-blandas/import', [HabilidadBlandaController::class, 'import']);
 
@@ -86,27 +80,35 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/matriculas', [MatriculaController::class, 'matricular']);
     Route::get('/matriculas/periodo/{id}', [MatriculaController::class, 'byPeriodo']);
-Route::post('/matriculas/import', [MatriculaController::class, 'import']);
+    Route::post('/matriculas/import', [MatriculaController::class, 'import']);
 
     // --- DOCENTE ---
-   Route::get('/docente/mis-cursos', [DocenteController::class, 'misCursos']);
+    // Cursos y Listados
+    Route::get('/docente/mis-cursos', [DocenteController::class, 'misCursos']);
     Route::get('/docente/curso/{asignaturaId}/estudiantes', [DocenteController::class, 'misEstudiantes']);
-    Route::get('/docente/asignaturas', [DocenteController::class, 'misAsignaturas']);
+    Route::get('/docente/asignaturas', [DocenteController::class, 'misAsignaturas']); // Para combos
     Route::get('/docente/estudiantes/{asignatura}', [DocenteController::class, 'verEstudiantes']);
     Route::get('/docente/habilidades/{asignatura}', [DocenteController::class, 'misHabilidades']);
+    
+    // Gestión Manual de Estudiantes (Arrastres y Bajas)
+    Route::post('/docente/agregar-estudiante', [DocenteController::class, 'agregarEstudianteManual']);
+    Route::post('/docente/eliminar-estudiante', [DocenteController::class, 'eliminarEstudiante']);
+
     // Planificación
     Route::get('/planificaciones/verificar/{asignatura_id}', [PlanificacionController::class, 'verificar']);
     Route::post('/planificaciones', [PlanificacionController::class, 'store']);
    
-    // Evaluación
+    // Evaluación y Calificación
     Route::post('/docente/rubrica', [DocenteController::class, 'rubrica']);
     Route::post('/docente/guardar-notas', [DocenteController::class, 'guardarNotas']);
+    Route::get('/docente/progreso', [DocenteController::class, 'verificarProgreso']); // NUEVA RUTA DE PROGRESO
 
-    // Reportes Docente
+    // Reportes Docente (CORREGIDOS A ReporteController)
     Route::post('/reportes/generar', [ReporteController::class, 'generar']);
-    Route::post('/reportes/pdf-data', [DocenteController::class, 'pdfData']);
-    Route::post('/reportes/pdf-data-general', [DocenteController::class, 'pdfDataGeneral']);
-    Route::post('/reportes/guardar-todo', [DocenteController::class, 'guardarConclusionesMasivas']);
-    Route::post('/docente/agregar-estudiante', [DocenteController::class, 'agregarEstudianteManual']);
     
+    // Aquí es donde corregimos: Usamos ReporteController para la data del PDF
+    Route::post('/reportes/pdf-data', [ReporteController::class, 'datosParaPdf']); 
+    
+    // Esta ruta se usa para guardar observaciones masivas
+    Route::post('/reportes/guardar-todo', [ReporteController::class, 'guardarConclusionesMasivas']);
 });

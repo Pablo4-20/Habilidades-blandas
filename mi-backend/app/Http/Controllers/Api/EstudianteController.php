@@ -14,12 +14,12 @@ class EstudianteController extends Controller
 {
     public function index()
     {
-        // Traemos la carrera y las relaciones de matrícula
         return Estudiante::with('ultimaMatricula.periodo', 'ultimaMatricula.ciclo')
             ->orderBy('id', 'desc')
             ->get();
     }
 
+    // --- 1. CREACIÓN MANUAL (CONVERTIDO A TITLE CASE) ---
     public function store(Request $request)
     {
         $request->validate([
@@ -27,7 +27,7 @@ class EstudianteController extends Controller
             'nombres' => 'required',
             'apellidos' => 'required',
             'email' => 'required|email|unique:estudiantes',
-            'carrera' => 'required|string' // Se guarda la carrera seleccionada
+            'carrera' => 'required|string'
         ]);
 
         if (User::where('cedula', $request->cedula)->exists()) {
@@ -36,10 +36,16 @@ class EstudianteController extends Controller
             ], 422);
         }
 
-        $estudiante = Estudiante::create($request->all());
+        // Preparamos los datos convirtiendo a Title Case
+        $data = $request->all();
+        $data['nombres']   = mb_convert_case($request->nombres, MB_CASE_TITLE, "UTF-8");
+        $data['apellidos'] = mb_convert_case($request->apellidos, MB_CASE_TITLE, "UTF-8");
+
+        $estudiante = Estudiante::create($data);
         return response()->json($estudiante, 201);
     }
 
+    // --- 2. ACTUALIZACIÓN (CONVERTIDO A TITLE CASE) ---
     public function update(Request $request, $id)
     {
         $estudiante = Estudiante::findOrFail($id);
@@ -58,7 +64,16 @@ class EstudianteController extends Controller
             ], 422);
         }
 
-        $estudiante->update($request->all());
+        // Convertimos antes de guardar
+        $data = $request->all();
+        if ($request->has('nombres')) {
+            $data['nombres'] = mb_convert_case($request->nombres, MB_CASE_TITLE, "UTF-8");
+        }
+        if ($request->has('apellidos')) {
+            $data['apellidos'] = mb_convert_case($request->apellidos, MB_CASE_TITLE, "UTF-8");
+        }
+
+        $estudiante->update($data);
         return response()->json($estudiante);
     }
 
@@ -68,7 +83,7 @@ class EstudianteController extends Controller
         return response()->json(['message' => 'Eliminado']);
     }
 
-    // --- IMPORTACIÓN MASIVA ACTUALIZADA PARA GUARDAR CARRERA ---
+    // --- 3. IMPORTACIÓN MASIVA (YA TENÍA LA LÓGICA, SE MANTIENE) ---
     public function import(Request $request)
     {
         $request->validate(['file' => 'required|file']);
@@ -85,7 +100,7 @@ class EstudianteController extends Controller
             if (trim($linea) === '') continue;
             $row = str_getcsv($linea, $separador);
             
-            if (count($row) < 5) continue; // Ahora validamos 5 columnas (Cédula, Nombres, Apellidos, Email, Carrera)
+            if (count($row) < 5) continue; 
             if (strtolower(trim($row[0])) === 'cedula') continue; 
 
             $cedula = trim($row[0]);
@@ -101,13 +116,14 @@ class EstudianteController extends Controller
             }
 
             try {
+                // Aquí ya tenías mb_convert_case, está perfecto.
                 Estudiante::create([
-                    'cedula' => $cedula,
-                    'nombres' => mb_convert_case(trim($row[1]), MB_CASE_TITLE, "UTF-8"),
+                    'cedula'    => $cedula,
+                    'nombres'   => mb_convert_case(trim($row[1]), MB_CASE_TITLE, "UTF-8"),
                     'apellidos' => mb_convert_case(trim($row[2]), MB_CASE_TITLE, "UTF-8"),
-                    'email' => strtolower(trim($row[3])),
-                    'carrera' => trim($row[4] ?? 'SOFTWARE'), // <--- LEE LA QUINTA COLUMNA
-                    'estado' => 'Activo'
+                    'email'     => strtolower(trim($row[3])),
+                    'carrera'   => trim($row[4] ?? 'SOFTWARE'),
+                    'estado'    => 'Activo'
                 ]);
                 $creados++;
             } catch (\Exception $e) {
@@ -121,7 +137,6 @@ class EstudianteController extends Controller
         ]);
     }
 
-    // --- BUSCADOR PARA EL DOCENTE (FILTRO POR CARRERA, NOMBRE O CEDULA) ---
     public function buscar(Request $request)
     {
         $search = $request->input('query');
