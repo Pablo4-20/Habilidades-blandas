@@ -106,9 +106,15 @@ Route::middleware('auth:sanctum')->group(function () {
     // Reportes Docente (CORREGIDOS A ReporteController)
     Route::post('/reportes/generar', [ReporteController::class, 'generar']);
     
-    // Aquí es donde corregimos: Usamos ReporteController para la data del PDF
+    // 1. Ruta para Actas Individuales
     Route::post('/reportes/pdf-data', [ReporteController::class, 'datosParaPdf']); 
     
-    // Esta ruta se usa para guardar observaciones masivas
+    // 2. Ruta para Ficha Resumen General (AGREGADA)
+    Route::post('/reportes/pdf-data-general', [ReporteController::class, 'pdfDataGeneral']);
+
+    // Guardado de observaciones
     Route::post('/reportes/guardar-todo', [ReporteController::class, 'guardarConclusionesMasivas']);
+    
+    // Ruta opcional para datos en JSON (si se usa en el futuro)
+    Route::post('/fichas/datos', [ReporteController::class, 'obtenerFichaResumen']);
 });

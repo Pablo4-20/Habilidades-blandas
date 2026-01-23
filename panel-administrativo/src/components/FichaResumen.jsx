@@ -51,7 +51,6 @@ const FichaResumen = () => {
 
             const doc = new jsPDF({ orientation: "landscape" }); 
             
-            // Obtener fecha actual
             const fechaActual = new Date().toLocaleString('es-ES', {
                 year: 'numeric', month: 'long', day: 'numeric',
                 hour: '2-digit', minute: '2-digit'
@@ -97,7 +96,6 @@ const FichaResumen = () => {
             doc.setFontSize(10);
             doc.text("Firma del Docente", 14, finalY + 5);
 
-            // FECHA
             doc.setFontSize(8);
             doc.setTextColor(100);
             doc.text(`Generado el: ${fechaActual}`, 14, finalY + 12);
@@ -108,7 +106,7 @@ const FichaResumen = () => {
     };
 
     // ------------------------------------------------------------------------
-    // OPCIÓN 2: ACTAS INDIVIDUALES (CON TEXTO AJUSTADO AUTOMÁTICAMENTE)
+    // OPCIÓN 2: ACTAS INDIVIDUALES
     // ------------------------------------------------------------------------
     const descargarActasIndividuales = async () => {
         if (!selectedMateriaId || !selectedPeriodo) return Swal.fire('Error', 'Selecciona una materia.', 'warning');
@@ -121,7 +119,6 @@ const FichaResumen = () => {
             const doc = new jsPDF(); 
             const info = data.info;
 
-            // Obtener fecha actual
             const fechaActual = new Date().toLocaleString('es-ES', {
                 year: 'numeric', month: 'long', day: 'numeric',
                 hour: '2-digit', minute: '2-digit'
@@ -151,43 +148,33 @@ const FichaResumen = () => {
                     
                     drawHeader(doc);
                     
-                    // --- DATOS INFORMATIVOS (AJUSTE AUTOMÁTICO DE TEXTO) ---
                     let y = 40; 
                     const xLabelL = 14; const xValueL = 45; 
-                    const xLabelR = 110; const xValueR = 145; // Movido ligeramente a la izquierda
-                    
-                    const maxW_L = 60; // Ancho máximo permitido para texto columna izquierda
-                    const maxW_R = 55; // Ancho máximo permitido para texto columna derecha
+                    const xLabelR = 110; const xValueR = 145;
+                    const maxW_L = 60; const maxW_R = 55;
 
                     doc.setFontSize(10);
                     
-                    // Fila 1
                     doc.setFont("helvetica", "bold"); doc.text("Carrera:", xLabelL, y);
                     doc.setFont("helvetica", "normal"); doc.text(info.carrera, xValueL, y);
 
                     doc.setFont("helvetica", "bold"); doc.text("Periodo Académico:", xLabelR, y);
                     doc.setFont("helvetica", "normal"); doc.text(info.periodo, xValueR, y);
 
-                    // Fila 2
                     y += 8;
                     doc.setFont("helvetica", "bold"); doc.text("Ciclo:", xLabelL, y);
                     doc.setFont("helvetica", "normal"); doc.text(info.ciclo, xValueL, y);
 
                     doc.setFont("helvetica", "bold"); doc.text("Asignatura:", xLabelR, y);
                     doc.setFont("helvetica", "normal"); 
-                    // SOLUCIÓN: Si el nombre es muy largo, se divide en líneas
                     const asignaturaLines = doc.splitTextToSize(info.asignatura, maxW_R);
                     doc.text(asignaturaLines, xValueR, y);
 
-                    // Calculamos cuánto espacio ocupó la asignatura para mover la siguiente fila
                     const extraHeightAsig = (asignaturaLines.length - 1) * 5; 
-
-                    // Fila 3 (Bajamos Y considerando si la asignatura ocupó más líneas)
                     y += 8 + extraHeightAsig;
                     
                     doc.setFont("helvetica", "bold"); doc.text("Habilidad Blanda:", xLabelL, y);
                     doc.setFont("helvetica", "normal"); 
-                    // Habilidad también puede ser larga
                     const habilidadLines = doc.splitTextToSize(rep.habilidad, maxW_L);
                     doc.text(habilidadLines, xValueL, y); 
 
@@ -196,14 +183,12 @@ const FichaResumen = () => {
                     const romanParcial = rep.parcial_asignado === '1' ? 'I' : (rep.parcial_asignado === '2' ? 'II' : rep.parcial_asignado);
                     doc.text(romanParcial, xValueR, y);
 
-                    // Espacio extra si la habilidad ocupó varias líneas
                     const extraHeightHab = (habilidadLines.length - 1) * 5;
 
-                    // --- TABLA ---
                     const body = ests.map((e) => [e.nombre, e.n1, e.n2, e.n3, e.n4, e.n5]);
 
                     autoTable(doc, {
-                        startY: y + 10 + extraHeightHab, // Inicio dinámico según el texto anterior
+                        startY: y + 10 + extraHeightHab,
                         head: [['Estudiante', 'Nivel 1', 'Nivel 2', 'Nivel 3', 'Nivel 4', 'Nivel 5']],
                         body: body,
                         theme: 'grid', 
@@ -216,7 +201,6 @@ const FichaResumen = () => {
                         }
                     });
 
-                    // Firma
                     const fy = doc.lastAutoTable.finalY + 30; 
                     doc.setDrawColor(0); 
                     doc.line(14, fy, 80, fy); 
@@ -224,7 +208,6 @@ const FichaResumen = () => {
                     doc.setFontSize(10);
                     doc.text("Firma del Docente", 14, fy + 5);
 
-                    // Fecha
                     doc.setFontSize(8);
                     doc.setTextColor(100);
                     doc.text(`Generado el: ${fechaActual}`, 14, fy + 12);

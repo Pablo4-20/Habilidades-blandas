@@ -131,25 +131,27 @@ const ReportesDocente = () => {
             const listaParaEnviar = [];
             
             reportesAgrupados.forEach(grupo => {
-                // Obtenemos IDs y Keys
-                const planP1 = grupo.p1?.planificacion_id;
-                const keyP1 = grupo.uniqueKeyP1;
+                const idP2 = grupo.p2?.planificacion_id;
+                const idP1 = grupo.p1?.planificacion_id;
+                const texto = conclusiones[grupo.idParaGuardar];
+                const habId = grupo.habilidad_id; // <--- OBTENEMOS EL ID
                 
-                const planP2 = grupo.p2?.planificacion_id;
-                const keyP2 = grupo.uniqueKeyP2;
-
-                // Buscamos si hay texto escrito. Priorizamos P2 (cierre), si no P1.
-                // Nota: Usamos la misma conclusión para ambos parciales de la misma habilidad por ahora
-                const texto = conclusiones[keyP2] || conclusiones[keyP1];
-
                 if (texto) {
-                    if (planP2) listaParaEnviar.push({ id: planP2, texto });
-                    if (planP1) listaParaEnviar.push({ id: planP1, texto });
+                    // Enviamos también el habilidad_id
+                    if (idP2) listaParaEnviar.push({ id: idP2, habilidad_id: habId, texto });
+                    if (idP1) listaParaEnviar.push({ id: idP1, habilidad_id: habId, texto });
                 }
             });
 
             await api.post('/reportes/guardar-todo', { conclusiones: listaParaEnviar });
-            Swal.fire({ title: '¡Guardado!', text: 'Observaciones registradas.', icon: 'success', timer: 2000, showConfirmButton: false });
+
+            Swal.fire({
+                title: '¡Guardado!',
+                text: 'Observaciones registradas correctamente.',
+                icon: 'success',
+                timer: 2000,
+                showConfirmButton: false
+            });
         } catch (error) {
             Swal.fire('Error', 'No se pudo guardar.', 'error');
         } finally {

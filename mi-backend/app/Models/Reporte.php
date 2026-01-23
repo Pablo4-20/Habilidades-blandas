@@ -11,6 +11,7 @@ class Reporte extends Model
 
     protected $fillable = [
         'planificacion_id',
+        'habilidad_blanda_id',
         'conclusion_progreso',
         'fecha_generacion'
     ];
