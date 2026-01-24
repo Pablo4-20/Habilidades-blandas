@@ -35,7 +35,7 @@ const FichaResumen = () => {
     }, []);
 
     // ------------------------------------------------------------------------
-    // OPCIÓN 1: FICHA RESUMEN GENERAL (TABLA CONSOLIDADA)
+    // OPCIÓN 1: FICHA RESUMEN GENERAL (PDF HORIZONTAL)
     // ------------------------------------------------------------------------
     const descargarFichaResumen = async () => {
         if (!selectedPeriodo) return;
@@ -50,7 +50,9 @@ const FichaResumen = () => {
             }
 
             const doc = new jsPDF({ orientation: "landscape" }); 
-            
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const pageHeight = doc.internal.pageSize.getHeight(); // Altura total
+
             const fechaActual = new Date().toLocaleString('es-ES', {
                 year: 'numeric', month: 'long', day: 'numeric',
                 hour: '2-digit', minute: '2-digit'
@@ -58,12 +60,12 @@ const FichaResumen = () => {
 
             // Encabezado
             doc.setFontSize(14); doc.setTextColor(40, 53, 147);
-            doc.text("UNIVERSIDAD ESTATAL DE BOLIVAR", 148, 15, { align: "center" });
+            doc.text("UNIVERSIDAD ESTATAL DE BOLIVAR", pageWidth / 2, 15, { align: "center" });
             doc.setFontSize(10); doc.setTextColor(80);
-            doc.text("FACULTAD DE CIENCIAS ADMINISTRATIVAS, GESTIÓN EMPRESARIAL E INFORMÁTICA", 148, 22, { align: "center" });
+            doc.text("FACULTAD DE CIENCIAS ADMINISTRATIVAS, GESTIÓN EMPRESARIAL E INFORMÁTICA", pageWidth / 2, 22, { align: "center" });
             
             doc.setTextColor(0); doc.setFont("helvetica", "bold");
-            doc.text("ANEXO 1: FICHA RESUMEN DE EJECUCIÓN", 148, 32, { align: "center" });
+            doc.text("ANEXO 1: FICHA RESUMEN DE EJECUCIÓN", pageWidth / 2, 32, { align: "center" });
 
             // Datos Informativos
             autoTable(doc, {
@@ -88,17 +90,27 @@ const FichaResumen = () => {
                 columnStyles: { 0: { halign: 'left', cellWidth: 50 }, 2: { halign: 'left', cellWidth: 40 }, 8: { halign: 'left', cellWidth: 80 } }
             });
 
-            // FIRMA
-            const finalY = doc.lastAutoTable.finalY + 30;
+            // PIE DE PÁGINA (FIRMA IZQUIERDA - FECHA DERECHA AL FINAL)
+            // Calculamos Y para que quede al final de la hoja, o después de la tabla si es muy larga
+            let finalY = doc.lastAutoTable.finalY + 30;
+            if (finalY > pageHeight - 20) {
+                doc.addPage();
+                finalY = 40; // Margen superior nueva página
+            }
+            
+            // Firma (Izquierda)
             doc.setDrawColor(0); 
             doc.line(14, finalY, 80, finalY); 
             doc.setFont("helvetica", "normal");
             doc.setFontSize(10);
+            doc.setTextColor(0);
             doc.text("Firma del Docente", 14, finalY + 5);
 
+            // Fecha (Derecha - Extremo opuesto)
             doc.setFontSize(8);
             doc.setTextColor(100);
-            doc.text(`Generado el: ${fechaActual}`, 14, finalY + 12);
+            // Usamos (pageWidth - 14) como X y align: 'right' para pegarlo al margen derecho
+            doc.text(`Generado el: ${fechaActual}`, pageWidth - 14, finalY + 5, { align: "right" });
 
             doc.save(`Ficha_Resumen_${info.periodo}.pdf`);
         } catch (error) { console.error(error); Swal.fire('Error', 'Error al generar.', 'error'); } 
@@ -106,7 +118,7 @@ const FichaResumen = () => {
     };
 
     // ------------------------------------------------------------------------
-    // OPCIÓN 2: ACTAS INDIVIDUALES
+    // OPCIÓN 2: ACTAS INDIVIDUALES (PDF VERTICAL)
     // ------------------------------------------------------------------------
     const descargarActasIndividuales = async () => {
         if (!selectedMateriaId || !selectedPeriodo) return Swal.fire('Error', 'Selecciona una materia.', 'warning');
@@ -118,6 +130,8 @@ const FichaResumen = () => {
 
             const doc = new jsPDF(); 
             const info = data.info;
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const pageHeight = doc.internal.pageSize.getHeight();
 
             const fechaActual = new Date().toLocaleString('es-ES', {
                 year: 'numeric', month: 'long', day: 'numeric',
@@ -125,11 +139,10 @@ const FichaResumen = () => {
             });
 
             const drawHeader = (doc) => {
-                const w = doc.internal.pageSize.getWidth();
                 doc.setFontSize(14); doc.setTextColor(40, 53, 147); 
-                doc.text("UNIVERSIDAD ESTATAL DE BOLIVAR", w/2, 15, { align: "center" });
+                doc.text("UNIVERSIDAD ESTATAL DE BOLIVAR", pageWidth/2, 15, { align: "center" });
                 doc.setFontSize(10); doc.setTextColor(80);
-                doc.text("FACULTAD DE CIENCIAS ADMINISTRATIVAS, GESTIÓN EMPRESARIAL E INFORMÁTICA", w/2, 22, { align: "center" }); 
+                doc.text("FACULTAD DE CIENCIAS ADMINISTRATIVAS, GESTIÓN EMPRESARIAL E INFORMÁTICA", pageWidth/2, 22, { align: "center" }); 
                 doc.setTextColor(0);
             };
 
@@ -163,7 +176,7 @@ const FichaResumen = () => {
 
                     y += 8;
                     doc.setFont("helvetica", "bold"); doc.text("Ciclo:", xLabelL, y);
-                    doc.setFont("helvetica", "normal"); doc.text(info.ciclo, xValueL, y);
+                    doc.setFont("helvetica", "normal"); doc.text(String(info.ciclo), xValueL, y); 
 
                     doc.setFont("helvetica", "bold"); doc.text("Asignatura:", xLabelR, y);
                     doc.setFont("helvetica", "normal"); 
@@ -201,16 +214,27 @@ const FichaResumen = () => {
                         }
                     });
 
-                    const fy = doc.lastAutoTable.finalY + 30; 
+                    // PIE DE PÁGINA (FIRMA IZQUIERDA - FECHA DERECHA)
+                    let fy = doc.lastAutoTable.finalY + 30; 
+                    // Si se sale de la hoja, nueva página
+                    if (fy > pageHeight - 20) {
+                        doc.addPage();
+                        fy = 40;
+                    }
+                    
+                    // Firma (Izquierda)
                     doc.setDrawColor(0); 
                     doc.line(14, fy, 80, fy); 
                     doc.setFont("helvetica", "normal");
                     doc.setFontSize(10);
+                    doc.setTextColor(0);
                     doc.text("Firma del Docente", 14, fy + 5);
 
+                    // Fecha (Derecha - Alineada al final)
                     doc.setFontSize(8);
                     doc.setTextColor(100);
-                    doc.text(`Generado el: ${fechaActual}`, 14, fy + 12);
+                    // pageWidth - 14 (margen derecho)
+                    doc.text(`Generado el: ${fechaActual}`, pageWidth - 14, fy + 5, { align: "right" });
                 }
             });
 

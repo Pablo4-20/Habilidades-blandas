@@ -131,28 +131,35 @@ const ReportesDocente = () => {
             const listaParaEnviar = [];
             
             reportesAgrupados.forEach(grupo => {
-                const idP2 = grupo.p2?.planificacion_id;
-                const idP1 = grupo.p1?.planificacion_id;
-                const texto = conclusiones[grupo.idParaGuardar];
-                const habId = grupo.habilidad_id; // <--- OBTENEMOS EL ID
+                const planP1 = grupo.p1?.planificacion_id;
+                const keyP1 = grupo.uniqueKeyP1;
                 
+                const planP2 = grupo.p2?.planificacion_id;
+                const keyP2 = grupo.uniqueKeyP2;
+                
+                // IMPORTANTE: Obtenemos el ID de la habilidad del grupo
+                const habId = grupo.habilidad_id; 
+
+                const texto = conclusiones[keyP2] || conclusiones[keyP1];
+
                 if (texto) {
-                    // Enviamos también el habilidad_id
-                    if (idP2) listaParaEnviar.push({ id: idP2, habilidad_id: habId, texto });
-                    if (idP1) listaParaEnviar.push({ id: idP1, habilidad_id: habId, texto });
+                    // AHORA SÍ enviamos 'habilidad_id' al backend
+                    if (planP2) listaParaEnviar.push({ id: planP2, habilidad_id: habId, texto });
+                    if (planP1) listaParaEnviar.push({ id: planP1, habilidad_id: habId, texto });
                 }
             });
 
-            await api.post('/reportes/guardar-todo', { conclusiones: listaParaEnviar });
+            // Si no hay nada que guardar, avisamos para no llamar a la API en vano
+            if (listaParaEnviar.length === 0) {
+                Swal.fire('Aviso', 'No hay observaciones nuevas para guardar.', 'info');
+                setGuardando(false);
+                return;
+            }
 
-            Swal.fire({
-                title: '¡Guardado!',
-                text: 'Observaciones registradas correctamente.',
-                icon: 'success',
-                timer: 2000,
-                showConfirmButton: false
-            });
+            await api.post('/reportes/guardar-todo', { conclusiones: listaParaEnviar });
+            Swal.fire({ title: '¡Guardado!', text: 'Observaciones registradas correctamente.', icon: 'success', timer: 2000, showConfirmButton: false });
         } catch (error) {
+            console.error(error);
             Swal.fire('Error', 'No se pudo guardar.', 'error');
         } finally {
             setGuardando(false);

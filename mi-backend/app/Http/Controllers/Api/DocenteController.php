@@ -61,20 +61,63 @@ class DocenteController extends Controller
     }
 
     // ==========================================
-    // 1. MIS CURSOS (DASHBOARD PRINCIPAL)
+    // 1. MIS CURSOS (CORREGIDO PARA EL FRONTEND)
     // ==========================================
     public function misCursos(Request $request)
     {
         $user = $request->user();
         
-        // Obtener asignaciones del docente
+        // 1. Identificar Periodo Activo
+        $periodo = PeriodoAcademico::where('activo', true)->first();
+        $nombrePeriodo = $periodo ? $periodo->nombre : 'Sin Periodo Activo';
+
+        // 2. Buscar Asignaciones del Docente en ese Periodo
+        $asignaciones = Asignacion::with(['asignatura.carrera', 'asignatura.ciclo'])
+            ->where('docente_id', $user->id)
+            ->where('periodo', $nombrePeriodo)
+            ->get();
+
+        // 3. Agrupar por Ciclo (Estructura requerida por MisCursos.jsx)
+        $grupos = $asignaciones->groupBy(function($item) {
+            return $item->asignatura->ciclo->nombre ?? 'Varios';
+        });
+
+        $resultadoCursos = [];
+        foreach ($grupos as $ciclo => $items) {
+            $materias = $items->map(function($item) {
+                return [
+                    'asignatura_id' => $item->asignatura->id,
+                    'nombre' => $item->asignatura->nombre,
+                    'paralelo' => $item->paralelo,
+                    'carrera' => $item->asignatura->carrera->nombre ?? 'N/A'
+                ];
+            })->values();
+
+            $resultadoCursos[] = [
+                'ciclo' => $ciclo,
+                'materias' => $materias
+            ];
+        }
+
+        // 4. Retornar JSON con la estructura { periodo: "...", cursos: [...] }
+        return response()->json([
+            'periodo' => $nombrePeriodo,
+            'cursos' => $resultadoCursos
+        ]);
+    }
+
+    // ==========================================
+    // 2. LISTADO PARA COMBOS (Estructura plana)
+    // ==========================================
+    public function misAsignaturas(Request $request)
+    {
+        $user = $request->user();
         $asignaciones = Asignacion::with(['asignatura.carrera', 'asignatura.ciclo'])
             ->where('docente_id', $user->id)
             ->get();
 
         return $asignaciones->map(function ($asig) {
             if (!$asig->asignatura) return null;
-            
             return [
                 'id' => $asig->asignatura->id,
                 'nombre' => $asig->asignatura->nombre,
@@ -84,14 +127,6 @@ class DocenteController extends Controller
                 'periodo' => $asig->periodo,
             ];
         })->filter()->values();
-    }
-
-    // ==========================================
-    // 2. LISTADO PARA COMBOS
-    // ==========================================
-    public function misAsignaturas(Request $request)
-    {
-        return $this->misCursos($request); // Reutilizamos la lógica
     }
 
     // ==========================================
@@ -121,7 +156,7 @@ class DocenteController extends Controller
     }
 
     // ==========================================
-    // 4. VER ESTUDIANTES (GESTIÓN ESPECÍFICA)
+    // 4. VER ESTUDIANTES (Alias)
     // ==========================================
     public function verEstudiantes(Request $request, $asignaturaId)
     {
@@ -174,18 +209,15 @@ class DocenteController extends Controller
         $periodo = PeriodoAcademico::where('nombre', $request->periodo)->first();
         if (!$periodo) return response()->json(['message' => 'Periodo no encontrado'], 404);
 
-        // Obtener estudiantes válidos
         $todosLosEstudiantes = $this->_getEstudiantes($request->asignatura_id, $periodo->id)
             ->sortBy(fn($e) => $e->apellidos . ' ' . $e->nombres);
         
-        // Obtener planificación actual
         $planificacion = Planificacion::where('asignatura_id', $request->asignatura_id)
             ->where('docente_id', $user->id)
             ->where('periodo_academico', $request->periodo)
             ->where('parcial', $request->parcial)
             ->first();
 
-        // Obtener notas actuales
         $evaluaciones = collect();
         if ($planificacion) {
             $evaluaciones = Evaluacion::where('planificacion_id', $planificacion->id)
@@ -193,7 +225,7 @@ class DocenteController extends Controller
                 ->get();
         }
 
-        // Si es Parcial 2, obtener notas de Parcial 1 como referencia
+        // Notas Parcial 1 (Referencia)
         $evaluacionesP1 = collect();
         if ($request->parcial == '2') {
              $planP1 = Planificacion::where('asignatura_id', $request->asignatura_id)
@@ -208,7 +240,6 @@ class DocenteController extends Controller
              }
         }
 
-        // Obtener actividades planificadas
         $actividades = [];
         if ($planificacion) {
              $detalle = $planificacion->detalles()
@@ -219,7 +250,6 @@ class DocenteController extends Controller
              }
         }
 
-        // Construir respuesta
         $listaFinal = $todosLosEstudiantes->map(function($est) use ($evaluaciones, $evaluacionesP1) {
             $nota = $evaluaciones->where('estudiante_id', $est->id)->first();
             $notaP1 = $evaluacionesP1->where('estudiante_id', $est->id)->first();
@@ -310,14 +340,12 @@ class DocenteController extends Controller
         $habilidadesIds = $planP1->detalles()->pluck('habilidad_blanda_id');
 
         foreach ($habilidadesIds as $habilidadId) {
-            // P1
             $conteoP1 = Evaluacion::where('planificacion_id', $planP1->id)
                 ->where('habilidad_blanda_id', $habilidadId)
                 ->whereIn('estudiante_id', $estudiantes->pluck('id'))
                 ->count();
             $completoP1 = $conteoP1 >= $totalEstudiantes;
 
-            // P2
             $completoP2 = false;
             if ($planP2) {
                 $conteoP2 = Evaluacion::where('planificacion_id', $planP2->id)
@@ -329,7 +357,7 @@ class DocenteController extends Controller
 
             $progreso[] = [
                 'habilidad_id' => $habilidadId,
-                'completado' => ($completoP1 && $completoP2), // AMBOS listos
+                'completado' => ($completoP1 && $completoP2),
                 'p1_ok' => $completoP1,
                 'p2_ok' => $completoP2
             ];

@@ -8,85 +8,141 @@ use App\Models\User;
 use App\Models\Asignatura;
 use App\Models\Asignacion;
 use App\Models\Planificacion;
-use App\Models\Estudiante;       // Importante
-use App\Models\Matricula;        // Importante
-use App\Models\PeriodoAcademico; // Importante
+use App\Models\Estudiante;
+use App\Models\Matricula;
+use App\Models\PeriodoAcademico;
 use App\Models\HabilidadBlanda;
+use App\Models\Reporte;
+use App\Models\DetalleMatricula;
 use Illuminate\Support\Facades\DB;
-use App\Models\Carrera;
 
 class DashboardController extends Controller
 {
     public function index(Request $request)
     {
         $user = $request->user();
+        
+        // 1. Get Active Period
         $periodoActivo = PeriodoAcademico::where('activo', true)->first();
         
+        // Default values if no active period exists
         if (!$periodoActivo) {
-            return response()->json(['asignaciones'=>0, 'alumnos_activos'=>0, 'cumplimiento'=>0]);
+            return response()->json([
+                'usuarios' => 0, 'estudiantes' => 0, 'asignaturas' => 0, 'habilidades' => 0,
+                'asignaciones' => 0, 'planificaciones' => 0, 'cumplimiento' => 0, 'reportes' => 0,
+                'mis_materias' => 0, 'mis_planes' => 0, 'mis_alumnos' => 0
+            ]);
         }
 
-        $idPeriodo = $periodoActivo->id;
         $nombrePeriodo = $periodoActivo->nombre;
-
+        $idPeriodo = $periodoActivo->id;
         $stats = [];
 
-        // --- COORDINADOR (CON FILTRO DE CARRERA) ---
+        // ==========================================
+        // COORDINATOR VIEW (Filtered by Career)
+        // ==========================================
         if ($user->rol === 'coordinador') {
             
-            // 1. Obtener Asignaciones (Filtrando por Carrera si el Coordinador la tiene)
+            // A. Assignments (Academic Load) for the period
             $queryAsignaciones = Asignacion::with('asignatura')
                 ->where('periodo', $nombrePeriodo);
 
-            // [FILTRO MÁGICO] Si el coordinador tiene carrera asignada, filtramos
+            // Filter by career if coordinator has one assigned
             if ($user->carrera_id) {
                 $queryAsignaciones->whereHas('asignatura', function($q) use ($user) {
                     $q->where('carrera_id', $user->carrera_id);
                 });
             }
-
             $asignaciones = $queryAsignaciones->get();
-            
-            // --- Cálculos de cumplimiento (se mantienen igual, pero usan $asignaciones ya filtradas) ---
             $totalCargas = $asignaciones->count();
-            $totalPlanificaciones = 0;
-            $reportesFinalizados = 0;
-            $totalItems = 0;
-            $sumaPuntos = 0;
 
-            foreach ($asignaciones as $asig) {
-                // ... (Tu misma lógica de conteo de puntos y planes) ...
-                // Esta parte no cambia, porque ya estamos iterando sobre asignaciones filtradas.
-            }
+            // B. Planning (Based on filtered subjects)
+            $idsAsignaturas = $asignaciones->pluck('asignatura_id');
             
-            // ... (Cálculo de $cumplimiento) ...
+            $totalPlanificaciones = Planificacion::where('periodo_academico', $nombrePeriodo)
+                ->whereIn('asignatura_id', $idsAsignaturas)
+                ->count();
 
-            // 2. Alumnos Activos (Filtro por Carrera)
-            $queryAlumnos = Matricula::where('periodo_id', $idPeriodo)
-                                     ->where('estado', 'Activo');
+            // C. Compliance (Goal: 2 plans per subject -> Partial 1 & 2)
+            $metaEsperada = $totalCargas * 2; 
+            $cumplimiento = ($metaEsperada > 0) ? round(($totalPlanificaciones / $metaEsperada) * 100, 1) : 0;
 
+            // D. Final Reports (Generated acts)
+            $reportesFinalizados = Reporte::whereHas('planificacion', function($q) use ($nombrePeriodo, $idsAsignaturas) {
+                $q->where('periodo_academico', $nombrePeriodo)
+                  ->whereIn('asignatura_id', $idsAsignaturas);
+            })->count();
+
+            // E. Active Students
+            $queryAlumnos = Matricula::where('periodo_id', $idPeriodo)->where('estado', 'Activo');
+            
             if ($user->carrera_id) {
-                // Buscamos el NOMBRE de la carrera del coordinador (ej: "Software")
-                // porque en 'estudiantes' guardamos el nombre string (según tu lógica actual)
                 $nombreCarrera = $user->carrera->nombre ?? '';
-                
-                $queryAlumnos->whereHas('estudiante', function($q) use ($nombreCarrera) {
-                    $q->where('carrera', $nombreCarrera);
-                });
+                if ($nombreCarrera) {
+                    $queryAlumnos->whereHas('estudiante', function($q) use ($nombreCarrera) {
+                        $q->where('carrera', $nombreCarrera);
+                    });
+                }
             }
-
             $totalAlumnos = $queryAlumnos->count();
-
+            
             $stats = [
                 'asignaciones'    => $totalCargas,
-                'planificaciones' => $totalPlanificaciones, // Ahora son solo las de SU carrera
+                'planificaciones' => $totalPlanificaciones,
                 'cumplimiento'    => $cumplimiento,
                 'reportes'        => $reportesFinalizados,
-                'alumnos_activos' => $totalAlumnos // Solo los de SU carrera
+                'alumnos_activos' => $totalAlumnos
             ];
         }
 
-        // ... (Admin y Docente siguen igual) ...
+        // ==========================================
+        // TEACHER VIEW (Personal Data)
+        // ==========================================
+        elseif ($user->rol === 'docente') {
+            
+            // My Subjects
+            $misAsignaciones = Asignacion::where('docente_id', $user->id)
+                ->where('periodo', $nombrePeriodo)
+                ->count();
+            
+            // My Planning
+            $misPlanes = Planificacion::where('docente_id', $user->id)
+                ->where('periodo_academico', $nombrePeriodo)
+                ->count();
+
+            // My Students (Approximate: count unique enrollments in my courses)
+            $misEstudiantes = DetalleMatricula::whereHas('asignacion', function($q) use ($user, $nombrePeriodo) {
+                    $q->where('docente_id', $user->id)->where('periodo', $nombrePeriodo);
+                })
+                ->orWhereIn('asignatura_id', function($q) use ($user, $nombrePeriodo) {
+                    $q->select('asignatura_id')
+                      ->from('asignaciones')
+                      ->where('docente_id', $user->id)
+                      ->where('periodo', $nombrePeriodo);
+                })
+                ->where('estado_materia', 'Cursando')
+                ->distinct('matricula_id')
+                ->count('matricula_id');
+
+            $stats = [
+                'mis_materias' => $misAsignaciones,
+                'mis_planes'   => $misPlanes,
+                'mis_alumnos'  => $misEstudiantes
+            ];
+        }
+
+        // ==========================================
+        // ADMIN VIEW (Global Data)
+        // ==========================================
+        else {
+            $stats = [
+                'usuarios'    => User::count(),
+                'estudiantes' => Estudiante::count(),
+                'asignaturas' => Asignatura::count(),
+                'habilidades' => HabilidadBlanda::count(),
+                'periodos'    => PeriodoAcademico::count()
+            ];
+        }
 
         return response()->json($stats);
     }
