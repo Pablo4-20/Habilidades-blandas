@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\VerificationController;
 use App\Http\Controllers\Api\NewPasswordController;
 use App\Http\Controllers\Api\CatalogoController;
 use App\Http\Controllers\Api\MatriculaController;
+use App\Http\Controllers\Api\ReporteGeneralController;
 
 // 1. LOGIN (Público)
 Route::post('/login', [AuthController::class, 'login']);
@@ -106,6 +107,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Reportes Docente (CORREGIDOS A ReporteController)
     Route::post('/reportes/generar', [ReporteController::class, 'generar']);
     
+    Route::get('/reportes/general-coordinador', [ReporteGeneralController::class, 'index']);
     // 1. Ruta para Actas Individuales
     Route::post('/reportes/pdf-data', [ReporteController::class, 'datosParaPdf']); 
     

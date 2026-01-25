@@ -5,7 +5,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { 
     PresentationChartLineIcon, PrinterIcon, FunnelIcon,
-    CheckCircleIcon, XCircleIcon, ClockIcon, CalendarDaysIcon, ExclamationCircleIcon
+    CheckCircleIcon, ClockIcon, CalendarDaysIcon, ExclamationCircleIcon
 } from '@heroicons/react/24/outline';
 import logoIzq from '../assets/facultad.png'; 
 import logoDer from '../assets/software.png';
@@ -26,7 +26,7 @@ const ReportesCoordinador = () => {
         { value: 'TI', label: 'Tecnologías de la Información' }
     ];
 
-    // 1. CARGA INICIAL (PERIODOS)
+    // 1. CARGA INICIAL
     useEffect(() => {
         const fetchInicial = async () => {
             try {
@@ -57,13 +57,18 @@ const ReportesCoordinador = () => {
     const cargarReporte = async () => {
         setLoading(true);
         try {
-            const res = await api.get(`/reportes/general`, {
+            // --- CAMBIO AQUÍ: Apuntamos al nuevo controlador ---
+            const res = await api.get(`/reportes/general-coordinador`, { 
                 params: {
                     carrera: filtroCarrera,
                     periodo: filtroPeriodo
                 }
             });
-            setReporteData(Array.isArray(res.data) ? res.data : []); 
+            
+            // Extraer filas de la estructura { info: ..., filas: [...] }
+            const datos = res.data.filas || [];
+            setReporteData(datos); 
+
         } catch (error) {
             console.error("Error cargando reporte:", error);
             setReporteData([]);
@@ -102,15 +107,21 @@ const ReportesCoordinador = () => {
             doc.text(`Periodo: ${filtroPeriodo} | Carrera: ${filtroCarrera}`, pageWidth / 2, 32, { align: "center" });
         };
 
-        ciclosOrdenados.forEach((ciclo, index) => {
-            if (index > 0) doc.addPage();
+        let primero = true;
+        ciclosOrdenados.forEach((ciclo) => {
+            if (!primero) doc.addPage();
+            primero = false;
             dibujarEncabezado();
             
             doc.setFontSize(12); doc.setTextColor(220, 38, 38);
             doc.text(`CICLO: ${ciclo}`, 15, 45);
 
             const body = gruposPorCiclo[ciclo].map(r => [
-                r.asignatura, r.docente, r.habilidad, r.estado, r.progreso + '%'
+                r.asignatura, 
+                r.docente || 'Sin Asignar', 
+                r.habilidad || 'No definida', 
+                r.estado, 
+                (r.progreso !== undefined ? r.progreso : 0) + '%'
             ]);
 
             autoTable(doc, {
@@ -119,8 +130,8 @@ const ReportesCoordinador = () => {
                 body: body,
                 theme: 'grid',
                 headStyles: { fillColor: [41, 128, 185], halign: 'center' },
-                styles: { fontSize: 9, halign: 'center' },
-                columnStyles: { 0: { halign: 'left' }, 1: { halign: 'left' } }
+                styles: { fontSize: 9, halign: 'center', valign: 'middle' },
+                columnStyles: { 0: { halign: 'left' }, 1: { halign: 'left' }, 2: { halign: 'left' } }
             });
         });
         
@@ -140,18 +151,12 @@ const ReportesCoordinador = () => {
         return <ExclamationCircleIcon className="h-4 w-4"/>;
     };
 
-    const opcionesPeriodos = periodos.map(p => ({ 
-        value: p.nombre, 
-        label: p.nombre, 
-        subtext: p.activo ? 'Activo' : '' 
-    }));
+    const opcionesPeriodos = periodos.map(p => ({ value: p.nombre, label: p.nombre, subtext: p.activo ? 'Activo' : '' }));
 
-    // --- CÁLCULOS ESTADÍSTICOS  ---
     const total = reporteData.length;
     const completados = reporteData.filter(r => r.estado === 'Completado').length;
-    // Agrupamos 'En Proceso' y 'Planificado' en la tarjeta azul
     const enProceso = reporteData.filter(r => r.estado === 'En Proceso' || r.estado === 'Planificado').length;
-    const pendientes = reporteData.filter(r => r.estado === 'Sin Planificar').length;
+    const pendientes = reporteData.filter(r => r.estado === 'Sin Planificar' || r.estado === 'Sin Estudiantes').length;
 
     return (
         <div className="space-y-6 animate-fade-in">
@@ -168,8 +173,6 @@ const ReportesCoordinador = () => {
 
             {/* Filtros y Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                
-                {/* Filtros */}
                 <div className="md:col-span-1 space-y-4">
                     <div className="bg-white p-1 rounded-2xl shadow-sm border border-gray-100">
                         <CustomSelect label="Carrera" icon={FunnelIcon} options={opcionesCarrera} value={filtroCarrera} onChange={setFiltroCarrera} />
@@ -179,66 +182,35 @@ const ReportesCoordinador = () => {
                     </div>
                 </div>
 
-                {/* 3 TARJETAS DE RESUMEN */}
                 <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-4 h-full">
-                    
-                    {/* 1. COMPLETADOS (Verde) */}
                     <div className="bg-white p-5 rounded-2xl border-l-4 border-green-500 shadow-sm flex flex-col justify-center">
                         <div className="flex justify-between items-start">
-                            <div>
-                                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Completados</p>
-                                <p className="text-3xl font-bold text-green-600 mt-1">{completados}</p>
-                            </div>
-                            <div className="p-2 bg-green-50 rounded-lg text-green-600">
-                                <CheckCircleIcon className="h-6 w-6"/>
-                            </div>
+                            <div><p className="text-xs font-bold text-gray-400 uppercase">Completados</p><p className="text-3xl font-bold text-green-600 mt-1">{completados}</p></div>
+                            <div className="p-2 bg-green-50 rounded-lg text-green-600"><CheckCircleIcon className="h-6 w-6"/></div>
                         </div>
-                        <div className="w-full bg-gray-100 rounded-full h-1.5 mt-4">
-                            <div className="bg-green-500 h-1.5 rounded-full transition-all" style={{ width: `${total > 0 ? (completados/total)*100 : 0}%` }}></div>
-                        </div>
+                        <div className="w-full bg-gray-100 rounded-full h-1.5 mt-4"><div className="bg-green-500 h-1.5 rounded-full" style={{ width: `${total > 0 ? (completados/total)*100 : 0}%` }}></div></div>
                     </div>
-
-                    {/* 2. EN PROCESO (Azul) */}
                     <div className="bg-white p-5 rounded-2xl border-l-4 border-blue-500 shadow-sm flex flex-col justify-center">
                         <div className="flex justify-between items-start">
-                            <div>
-                                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">En Proceso</p>
-                                <p className="text-3xl font-bold text-blue-600 mt-1">{enProceso}</p>
-                            </div>
-                            <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
-                                <ClockIcon className="h-6 w-6"/>
-                            </div>
+                            <div><p className="text-xs font-bold text-gray-400 uppercase">En Proceso</p><p className="text-3xl font-bold text-blue-600 mt-1">{enProceso}</p></div>
+                            <div className="p-2 bg-blue-50 rounded-lg text-blue-600"><ClockIcon className="h-6 w-6"/></div>
                         </div>
-                        <div className="w-full bg-gray-100 rounded-full h-1.5 mt-4">
-                            <div className="bg-blue-500 h-1.5 rounded-full transition-all" style={{ width: `${total > 0 ? (enProceso/total)*100 : 0}%` }}></div>
-                        </div>
+                        <div className="w-full bg-gray-100 rounded-full h-1.5 mt-4"><div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${total > 0 ? (enProceso/total)*100 : 0}%` }}></div></div>
                     </div>
-
-                    {/* 3. PENDIENTES (Rojo) */}
                     <div className="bg-white p-5 rounded-2xl border-l-4 border-red-500 shadow-sm flex flex-col justify-center">
                         <div className="flex justify-between items-start">
-                            <div>
-                                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Sin Planificar</p>
-                                <p className="text-3xl font-bold text-red-600 mt-1">{pendientes}</p>
-                            </div>
-                            <div className="p-2 bg-red-50 rounded-lg text-red-600">
-                                <ExclamationCircleIcon className="h-6 w-6"/>
-                            </div>
+                            <div><p className="text-xs font-bold text-gray-400 uppercase">Sin Planificar</p><p className="text-3xl font-bold text-red-600 mt-1">{pendientes}</p></div>
+                            <div className="p-2 bg-red-50 rounded-lg text-red-600"><ExclamationCircleIcon className="h-6 w-6"/></div>
                         </div>
-                        <div className="w-full bg-gray-100 rounded-full h-1.5 mt-4">
-                            <div className="bg-red-500 h-1.5 rounded-full transition-all" style={{ width: `${total > 0 ? (pendientes/total)*100 : 0}%` }}></div>
-                        </div>
+                        <div className="w-full bg-gray-100 rounded-full h-1.5 mt-4"><div className="bg-red-500 h-1.5 rounded-full" style={{ width: `${total > 0 ? (pendientes/total)*100 : 0}%` }}></div></div>
                     </div>
-
                 </div>
             </div>
 
             {/* Tabla */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="p-5 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
-                    <h3 className="font-bold text-gray-700 flex items-center gap-2">
-                        <PresentationChartLineIcon className="h-5 w-5 text-blue-600"/> Detalle de Cumplimiento
-                    </h3>
+                    <h3 className="font-bold text-gray-700 flex items-center gap-2"><PresentationChartLineIcon className="h-5 w-5 text-blue-600"/> Detalle de Cumplimiento</h3>
                     {filtroPeriodo && <span className="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded-full font-bold">{filtroPeriodo}</span>}
                 </div>
                 
@@ -265,14 +237,19 @@ const ReportesCoordinador = () => {
                                             <span className="bg-gray-100 px-2 py-0.5 rounded">{r.ciclo}</span>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 align-top text-sm text-gray-700 font-medium">{r.docente}</td>
+                                    <td className="px-6 py-4 align-top text-sm text-gray-700 font-medium">
+                                        {r.docente || <span className="text-gray-400 italic">Sin asignar</span>}
+                                    </td>
+                                    
+                                    {/* CORRECCIÓN VISUAL: Manejo de valores nulos o vacíos */}
                                     <td className="px-6 py-4 align-top text-sm">
-                                        {r.habilidad === 'No definida' || r.habilidad === 'Sin seleccionar' ? (
-                                            <span className="text-gray-400 italic font-light">{r.habilidad}</span>
+                                        {(!r.habilidad || r.habilidad === 'No definida') ? (
+                                            <span className="text-gray-400 italic font-light">No definida</span>
                                         ) : (
                                             <span className="text-blue-600 font-medium">{r.habilidad}</span>
                                         )}
                                     </td>
+
                                     <td className="px-6 py-4 align-top text-center">
                                         <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${getBadgeColor(r.estado)}`}>
                                             {getIcon(r.estado)} {r.estado}
@@ -281,9 +258,9 @@ const ReportesCoordinador = () => {
                                     <td className="px-6 py-4 align-top">
                                         <div className="flex items-center gap-3">
                                             <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                                                <div className={`h-2 rounded-full ${r.progreso === 100 ? 'bg-green-500' : 'bg-blue-500'}`} style={{width: `${r.progreso}%`}}></div>
+                                                <div className={`h-2 rounded-full ${r.progreso >= 100 ? 'bg-green-500' : 'bg-blue-500'}`} style={{width: `${r.progreso || 0}%`}}></div>
                                             </div>
-                                            <span className="text-xs font-bold text-gray-600 w-8 text-right">{r.progreso}%</span>
+                                            <span className="text-xs font-bold text-gray-600 w-8 text-right">{r.progreso || 0}%</span>
                                         </div>
                                     </td>
                                 </tr>
