@@ -12,17 +12,21 @@ import {
     SparklesIcon,
     BookOpenIcon,
     CalendarDaysIcon,
-    DocumentCheckIcon 
+    DocumentCheckIcon,
+    ClipboardDocumentListIcon // <--- ÍCONO NUEVO AGREGADO
 } from '@heroicons/react/24/outline';
 import { UserPlusIcon } from '@heroicons/react/24/outline';
 
 const Sidebar = ({ isOpen, toggleSidebar }) => {
-    const user = JSON.parse(localStorage.getItem('user'));
+    // Lectura segura del usuario (evita error si es null)
+    const userStored = localStorage.getItem('user');
+    const user = userStored ? JSON.parse(userStored) : null;
     const role = user?.rol;
+    
     const navigate = useNavigate();
     const location = useLocation();
 
-    // --- FUNCIÓN DE CIERRE DE SESIÓN ---
+    // --- FUNCIÓN DE CIERRE DE SESIÓN (Original) ---
     const handleLogout = () => {
         Swal.fire({
             title: '¿Cerrar Sesión?',
@@ -53,9 +57,11 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
         ],
         coordinador: [
             { name: 'Inicio', path: '/dashboard', icon: HomeIcon },
-            { name: 'Asignar Materias', path: '/dashboard/asignaciones', icon: AcademicCapIcon }, // MOVIDO ARRIBA
-            { name: 'Matriculación', path: '/dashboard/matriculacion', icon: UserPlusIcon },     // MOVIDO ABAJO
+            { name: 'Asignar Materias', path: '/dashboard/asignaciones', icon: AcademicCapIcon },
+            { name: 'Matriculación', path: '/dashboard/matriculacion', icon: UserPlusIcon },      
             { name: 'Reportes Generales', path: '/dashboard/reportes', icon: DocumentChartBarIcon },
+            // --- NUEVA OPCIÓN AGREGADA ---
+            { name: 'Ficha Resumen', path: '/dashboard/ficha-resumen-coordinador', icon: ClipboardDocumentListIcon },
         ],
         docente: [
             { name: 'Inicio', path: '/dashboard', icon: HomeIcon },

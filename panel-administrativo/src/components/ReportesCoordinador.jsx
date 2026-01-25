@@ -5,7 +5,8 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { 
     PresentationChartLineIcon, PrinterIcon, FunnelIcon,
-    CheckCircleIcon, ClockIcon, CalendarDaysIcon, ExclamationCircleIcon
+    CheckCircleIcon, ClockIcon, CalendarDaysIcon, ExclamationCircleIcon,
+    ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 import logoIzq from '../assets/facultad.png'; 
 import logoDer from '../assets/software.png';
@@ -57,15 +58,13 @@ const ReportesCoordinador = () => {
     const cargarReporte = async () => {
         setLoading(true);
         try {
-            // --- CAMBIO AQUÍ: Apuntamos al nuevo controlador ---
-            const res = await api.get(`/reportes/general-coordinador`, { 
+            const res = await api.get(`/reportes/general-coordinador`, {
                 params: {
                     carrera: filtroCarrera,
                     periodo: filtroPeriodo
                 }
             });
             
-            // Extraer filas de la estructura { info: ..., filas: [...] }
             const datos = res.data.filas || [];
             setReporteData(datos); 
 
@@ -119,7 +118,7 @@ const ReportesCoordinador = () => {
             const body = gruposPorCiclo[ciclo].map(r => [
                 r.asignatura, 
                 r.docente || 'Sin Asignar', 
-                r.habilidad || 'No definida', 
+                r.habilidad, 
                 r.estado, 
                 (r.progreso !== undefined ? r.progreso : 0) + '%'
             ]);
@@ -131,32 +130,35 @@ const ReportesCoordinador = () => {
                 theme: 'grid',
                 headStyles: { fillColor: [41, 128, 185], halign: 'center' },
                 styles: { fontSize: 9, halign: 'center', valign: 'middle' },
-                columnStyles: { 0: { halign: 'left' }, 1: { halign: 'left' }, 2: { halign: 'left' } }
+                columnStyles: { 0: { halign: 'left' }, 1: { halign: 'left' } }
             });
         });
         
         doc.save(`Reporte_Habilidades_${filtroPeriodo}.pdf`);
     };
 
-    // --- HELPERS ---
+    // --- HELPERS VISUALES ---
     const getBadgeColor = (estado) => {
         if (estado === 'Completado') return 'bg-green-100 text-green-700 border-green-200';
         if (estado === 'En Proceso' || estado === 'Planificado') return 'bg-blue-100 text-blue-700 border-blue-200';
-        return 'bg-red-50 text-red-600 border-red-100';
+        if (estado === 'Pendiente') return 'bg-red-100 text-red-700 border-red-200';
+        return 'bg-gray-100 text-gray-600 border-gray-200';
     };
 
     const getIcon = (estado) => {
         if (estado === 'Completado') return <CheckCircleIcon className="h-4 w-4"/>;
         if (estado === 'En Proceso' || estado === 'Planificado') return <ClockIcon className="h-4 w-4"/>;
+        if (estado === 'Pendiente') return <ExclamationTriangleIcon className="h-4 w-4"/>;
         return <ExclamationCircleIcon className="h-4 w-4"/>;
     };
 
     const opcionesPeriodos = periodos.map(p => ({ value: p.nombre, label: p.nombre, subtext: p.activo ? 'Activo' : '' }));
 
+    // --- CÁLCULOS ESTADÍSTICOS ---
     const total = reporteData.length;
     const completados = reporteData.filter(r => r.estado === 'Completado').length;
     const enProceso = reporteData.filter(r => r.estado === 'En Proceso' || r.estado === 'Planificado').length;
-    const pendientes = reporteData.filter(r => r.estado === 'Sin Planificar' || r.estado === 'Sin Estudiantes').length;
+    const pendientes = reporteData.filter(r => r.estado === 'Sin Planificar' || r.estado === 'Sin Estudiantes' || r.estado === 'Pendiente').length;
 
     return (
         <div className="space-y-6 animate-fade-in">
@@ -173,6 +175,8 @@ const ReportesCoordinador = () => {
 
             {/* Filtros y Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                
+                {/* Filtros */}
                 <div className="md:col-span-1 space-y-4">
                     <div className="bg-white p-1 rounded-2xl shadow-sm border border-gray-100">
                         <CustomSelect label="Carrera" icon={FunnelIcon} options={opcionesCarrera} value={filtroCarrera} onChange={setFiltroCarrera} />
@@ -182,7 +186,10 @@ const ReportesCoordinador = () => {
                     </div>
                 </div>
 
+                {/* 3 TARJETAS DE RESUMEN */}
                 <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-4 h-full">
+                    
+                    {/* Completados */}
                     <div className="bg-white p-5 rounded-2xl border-l-4 border-green-500 shadow-sm flex flex-col justify-center">
                         <div className="flex justify-between items-start">
                             <div><p className="text-xs font-bold text-gray-400 uppercase">Completados</p><p className="text-3xl font-bold text-green-600 mt-1">{completados}</p></div>
@@ -190,6 +197,8 @@ const ReportesCoordinador = () => {
                         </div>
                         <div className="w-full bg-gray-100 rounded-full h-1.5 mt-4"><div className="bg-green-500 h-1.5 rounded-full" style={{ width: `${total > 0 ? (completados/total)*100 : 0}%` }}></div></div>
                     </div>
+
+                    {/* En Proceso */}
                     <div className="bg-white p-5 rounded-2xl border-l-4 border-blue-500 shadow-sm flex flex-col justify-center">
                         <div className="flex justify-between items-start">
                             <div><p className="text-xs font-bold text-gray-400 uppercase">En Proceso</p><p className="text-3xl font-bold text-blue-600 mt-1">{enProceso}</p></div>
@@ -197,6 +206,8 @@ const ReportesCoordinador = () => {
                         </div>
                         <div className="w-full bg-gray-100 rounded-full h-1.5 mt-4"><div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${total > 0 ? (enProceso/total)*100 : 0}%` }}></div></div>
                     </div>
+
+                    {/* Pendientes */}
                     <div className="bg-white p-5 rounded-2xl border-l-4 border-red-500 shadow-sm flex flex-col justify-center">
                         <div className="flex justify-between items-start">
                             <div><p className="text-xs font-bold text-gray-400 uppercase">Sin Planificar</p><p className="text-3xl font-bold text-red-600 mt-1">{pendientes}</p></div>
@@ -204,6 +215,7 @@ const ReportesCoordinador = () => {
                         </div>
                         <div className="w-full bg-gray-100 rounded-full h-1.5 mt-4"><div className="bg-red-500 h-1.5 rounded-full" style={{ width: `${total > 0 ? (pendientes/total)*100 : 0}%` }}></div></div>
                     </div>
+
                 </div>
             </div>
 
@@ -241,10 +253,10 @@ const ReportesCoordinador = () => {
                                         {r.docente || <span className="text-gray-400 italic">Sin asignar</span>}
                                     </td>
                                     
-                                    {/* CORRECCIÓN VISUAL: Manejo de valores nulos o vacíos */}
+                                    {/* COLUMNA HABILIDAD: Muestra "Sin Planificar" explícitamente */}
                                     <td className="px-6 py-4 align-top text-sm">
-                                        {(!r.habilidad || r.habilidad === 'No definida') ? (
-                                            <span className="text-gray-400 italic font-light">No definida</span>
+                                        {(!r.habilidad || r.habilidad === 'No definida' || r.habilidad === 'Sin Planificar') ? (
+                                            <span className="text-red-400 italic font-medium">Sin Planificar</span>
                                         ) : (
                                             <span className="text-blue-600 font-medium">{r.habilidad}</span>
                                         )}
@@ -255,12 +267,20 @@ const ReportesCoordinador = () => {
                                             {getIcon(r.estado)} {r.estado}
                                         </span>
                                     </td>
+
+                                    {/* COLUMNA AVANCE: Barra vacía y 0% */}
                                     <td className="px-6 py-4 align-top">
                                         <div className="flex items-center gap-3">
                                             <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                                                <div className={`h-2 rounded-full ${r.progreso >= 100 ? 'bg-green-500' : 'bg-blue-500'}`} style={{width: `${r.progreso || 0}%`}}></div>
+                                                {/* Si no tiene habilidad, el ancho es 0 */}
+                                                <div 
+                                                    className={`h-2 rounded-full ${r.progreso >= 100 ? 'bg-green-500' : 'bg-blue-500'}`} 
+                                                    style={{width: `${(!r.habilidad || r.habilidad === 'Sin Planificar' || r.habilidad === 'No definida') ? 0 : (r.progreso || 0)}%`}}
+                                                ></div>
                                             </div>
-                                            <span className="text-xs font-bold text-gray-600 w-8 text-right">{r.progreso || 0}%</span>
+                                            <span className="text-xs font-bold text-gray-600 w-8 text-right">
+                                                {(!r.habilidad || r.habilidad === 'Sin Planificar' || r.habilidad === 'No definida') ? 0 : (r.progreso || 0)}%
+                                            </span>
                                         </div>
                                     </td>
                                 </tr>

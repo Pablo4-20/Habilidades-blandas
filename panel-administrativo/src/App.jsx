@@ -15,8 +15,8 @@ import GestionPeriodos from './components/GestionPeriodos';
 import CambiarPasswordInicial from './components/CambiarPasswordInicial';
 import FichaResumen from './components/FichaResumen';
 import Matriculacion from './components/Matriculacion'; 
-// 👇 IMPORTAR EL NUEVO COMPONENTE
 import MisCursos from './components/MisCursos'; 
+import FichaResumenCoordinador from './components/FichaResumenCoordinador';
 
 import RecuperarPassword from './components/RecuperarPassword';
 import RestablecerPassword from './components/RestablecerPassword';
@@ -73,6 +73,7 @@ function App() {
                 <Route path="asignaciones" element={<AsignarMaterias />} />
                 <Route path="reportes" element={<ReportesCoordinador />} />
                 <Route path="matriculacion" element={<Matriculacion />} />
+                <Route path="ficha-resumen-coordinador" element={<FichaResumenCoordinador />} />
             </Route>
 
         </Route>
