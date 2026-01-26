@@ -13,6 +13,7 @@ use App\Models\Matricula;
 use App\Models\Evaluacion;
 use App\Models\Reporte;
 use App\Models\HabilidadBlanda;
+use App\Models\Carrera; // <--- Importante
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -22,6 +23,8 @@ class ReporteGeneralController extends Controller
     {
         try {
             $request->validate(['periodo' => 'required']);
+            
+            $user = $request->user(); // Obtenemos el usuario autenticado
             
             $periodoObj = PeriodoAcademico::where('nombre', $request->periodo)->first();
             if (!$periodoObj) return response()->json(['message' => 'Periodo no encontrado'], 404);
@@ -33,17 +36,40 @@ class ReporteGeneralController extends Controller
                 ->select('asignaciones.*') 
                 ->orderBy('asignaturas.nombre');
 
-            if ($request->has('carrera') && $request->carrera !== 'Todas') {
+            $nombreCarreraReporte = 'General';
+
+            // --- LÓGICA DE FILTRO AUTOMÁTICO ---
+            if ($user->carrera_id) {
+                // Si es Coordinador con carrera asignada, filtramos por SU carrera
+                $asignacionesQuery->whereHas('asignatura.carrera', function($q) use ($user) {
+                    $q->where('id', $user->carrera_id);
+                });
+                
+                $carreraObj = Carrera::find($user->carrera_id);
+                $nombreCarreraReporte = $carreraObj ? $carreraObj->nombre : 'Tu Carrera';
+
+            } elseif ($request->has('carrera') && $request->carrera !== 'Todas') {
+                // Si es Admin (sin carrera_id) y manda filtro manual
                 $asignacionesQuery->whereHas('asignatura.carrera', function($q) use ($request) {
                     $q->where('nombre', 'like', '%' . $request->carrera . '%');
                 });
+                $nombreCarreraReporte = $request->carrera;
             }
 
             $asignaciones = $asignacionesQuery->get();
 
-            $carreras = $asignaciones->map(fn($a) => $a->asignatura->carrera->nombre ?? null)->filter()->unique()->implode(', ');
+            // Si no definimos nombre arriba (caso Admin 'Todas'), intentamos deducirlo o dejar 'General'
+            if ($nombreCarreraReporte === 'General' && $asignaciones->isNotEmpty()) {
+                $nombresUnicos = $asignaciones->map(fn($a) => $a->asignatura->carrera->nombre ?? null)->filter()->unique();
+                if ($nombresUnicos->count() === 1) {
+                    $nombreCarreraReporte = $nombresUnicos->first();
+                } elseif ($nombresUnicos->count() > 1) {
+                    $nombreCarreraReporte = 'Todas las Carreras';
+                }
+            }
+
             $info = [
-                'carrera' => $carreras ?: 'General',
+                'carrera' => $nombreCarreraReporte,
                 'periodo' => $request->periodo
             ];
 
@@ -66,6 +92,7 @@ class ReporteGeneralController extends Controller
                 if ($planes->isEmpty()) {
                     $filas[] = [
                         'asignatura' => $asignacion->asignatura->nombre,
+                        'carrera' => $asignacion->asignatura->carrera->nombre ?? '', // Dato útil para frontend
                         'ciclo' => $nombreCiclo,
                         'docente' => $nombreDocente,
                         'habilidad' => 'Sin Planificar',
@@ -73,7 +100,7 @@ class ReporteGeneralController extends Controller
                         'progreso' => 0,
                         'promedio' => 0,
                         'conclusion' => 'Docente no ha planificado.',
-                        'detalle_estudiantes' => [], // Sin estudiantes
+                        'detalle_estudiantes' => [], 
                         'sort_asignatura' => $asignacion->asignatura->nombre,
                         'sort_parcial' => 0
                     ];
@@ -123,7 +150,7 @@ class ReporteGeneralController extends Controller
 
                             $listaEstudiantes[] = [
                                 'nombre' => $est->apellidos . ' ' . $est->nombres,
-                                'nota' => $valorNota > 0 ? $valorNota : '-' // Guion si no tiene nota
+                                'nota' => $valorNota > 0 ? $valorNota : '-' 
                             ];
                         }
 
@@ -146,6 +173,7 @@ class ReporteGeneralController extends Controller
 
                         $filas[] = [
                             'asignatura' => $nombreAsignaturaPlan,
+                            'carrera' => $asignacion->asignatura->carrera->nombre ?? '',
                             'ciclo' => $nombreCiclo,
                             'docente' => $nombreDocente,
                             'habilidad' => $nombreHabilidad,
@@ -153,7 +181,7 @@ class ReporteGeneralController extends Controller
                             'progreso' => $progreso,
                             'promedio' => $promedioCurso,
                             'conclusion' => $reporteDB ? $reporteDB->conclusion_progreso : 'Sin observaciones',
-                            'detalle_estudiantes' => $listaEstudiantes, // AQUÍ VA LA LISTA COMPLETA
+                            'detalle_estudiantes' => $listaEstudiantes,
                             'sort_asignatura' => $asignacion->asignatura->nombre,
                             'sort_parcial' => $plan->parcial
                         ];

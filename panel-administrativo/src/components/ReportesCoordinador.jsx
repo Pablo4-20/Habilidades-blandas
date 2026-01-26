@@ -14,18 +14,12 @@ import logoDer from '../assets/software.png';
 const ReportesCoordinador = () => {
     // --- ESTADOS ---
     const [reporteData, setReporteData] = useState([]);
+    const [reporteInfo, setReporteInfo] = useState(null); // Info del backend (carrera, etc)
     const [periodos, setPeriodos] = useState([]);
     const [loading, setLoading] = useState(false);
     
-    // --- FILTROS ---
-    const [filtroCarrera, setFiltroCarrera] = useState('Todas');
+    // --- FILTROS (Solo Periodo, Carrera es automática) ---
     const [filtroPeriodo, setFiltroPeriodo] = useState('');
-
-    const opcionesCarrera = [
-        { value: 'Todas', label: 'Todas las Carreras' },
-        { value: 'Software', label: 'Software' },
-        { value: 'TI', label: 'Tecnologías de la Información' }
-    ];
 
     // 1. CARGA INICIAL
     useEffect(() => {
@@ -53,20 +47,21 @@ const ReportesCoordinador = () => {
         if (filtroPeriodo) {
             cargarReporte();
         }
-    }, [filtroCarrera, filtroPeriodo]);
+    }, [filtroPeriodo]);
 
     const cargarReporte = async () => {
         setLoading(true);
         try {
             const res = await api.get(`/reportes/general-coordinador`, {
                 params: {
-                    carrera: filtroCarrera,
                     periodo: filtroPeriodo
+                    // No enviamos carrera, el backend la detecta
                 }
             });
             
             const datos = res.data.filas || [];
             setReporteData(datos); 
+            setReporteInfo(res.data.info || {}); // Guardamos info para mostrar nombre carrera
 
         } catch (error) {
             console.error("Error cargando reporte:", error);
@@ -80,6 +75,7 @@ const ReportesCoordinador = () => {
     const descargarPDF = () => {
         const doc = new jsPDF('l'); 
         const pageWidth = doc.internal.pageSize.getWidth();
+        const nombreCarrera = reporteInfo?.carrera || 'Carrera Desconocida';
 
         const gruposPorCiclo = reporteData.reduce((acc, curr) => {
             const ciclo = curr.ciclo || 'Sin Ciclo';
@@ -103,7 +99,7 @@ const ReportesCoordinador = () => {
             doc.setFontSize(10); doc.setTextColor(0);
             doc.text("REPORTE DE CUMPLIMIENTO - HABILIDADES BLANDAS", pageWidth / 2, 25, { align: "center" });
             doc.setFontSize(9); doc.setTextColor(100);
-            doc.text(`Periodo: ${filtroPeriodo} | Carrera: ${filtroCarrera}`, pageWidth / 2, 32, { align: "center" });
+            doc.text(`Periodo: ${filtroPeriodo} | Carrera: ${nombreCarrera}`, pageWidth / 2, 32, { align: "center" });
         };
 
         let primero = true;
@@ -178,9 +174,22 @@ const ReportesCoordinador = () => {
                 
                 {/* Filtros */}
                 <div className="md:col-span-1 space-y-4">
+                    
+                    {/* Visualizador de Carrera (Input Deshabilitado) */}
                     <div className="bg-white p-1 rounded-2xl shadow-sm border border-gray-100">
-                        <CustomSelect label="Carrera" icon={FunnelIcon} options={opcionesCarrera} value={filtroCarrera} onChange={setFiltroCarrera} />
+                        <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <FunnelIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                            </div>
+                            <input
+                                type="text"
+                                disabled
+                                value={reporteInfo?.carrera || "Cargando carrera..."}
+                                className="block w-full pl-10 pr-3 py-2 text-base border-0 focus:ring-0 sm:text-sm bg-gray-100 text-gray-500 cursor-not-allowed font-medium rounded-xl"
+                            />
+                        </div>
                     </div>
+
                     <div className="bg-white p-1 rounded-2xl shadow-sm border border-gray-100">
                         <CustomSelect label="Periodo" icon={CalendarDaysIcon} options={opcionesPeriodos} value={filtroPeriodo} onChange={setFiltroPeriodo} placeholder="Cargando..." />
                     </div>

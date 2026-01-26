@@ -9,28 +9,21 @@ class Reporte extends Model
 {
     use HasFactory;
 
+    protected $table = 'reportes';
+
     protected $fillable = [
         'planificacion_id',
         'habilidad_blanda_id',
-        'conclusion_progreso',
+        'conclusion_progreso',     // Lo que llena el docente
+        'observacion_coordinador', // <--- ¡IMPORTANTE! Agregar este campo
         'fecha_generacion'
     ];
 
-    // ==========================================
-    // RELACIONES (Esto es lo que faltaba)
-    // ==========================================
-    
-    /**
-     * Un reporte pertenece a una planificación específica.
-     */
     public function planificacion()
     {
-        return $this->belongsTo(Planificacion::class, 'planificacion_id');
+        return $this->belongsTo(Planificacion::class);
     }
 
-    /**
-     * Opcional: Si quieres acceder a la habilidad directamente desde el reporte
-     */
     public function habilidad()
     {
         return $this->belongsTo(HabilidadBlanda::class, 'habilidad_blanda_id');
