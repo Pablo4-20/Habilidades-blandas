@@ -504,7 +504,7 @@ const GestionUsuarios = () => {
                                         <select className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white outline-none" value={formUser.rol} onChange={e => setFormUser({...formUser, rol: e.target.value})}>
                                             <option value="docente">Docente</option><option value="coordinador">Coordinador</option><option value="admin">Administrador</option>
                                         </select>
-                                        <input type="password" placeholder={editingId ? "Clave (vacío = actual)" : "Contraseña"} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white outline-none" value={formUser.password} onChange={e => setFormUser({...formUser, password: e.target.value})} />
+                                        <input type="password" placeholder={editingId ? "Clave " : "Contraseña"} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white outline-none" value={formUser.password} onChange={e => setFormUser({...formUser, password: e.target.value})} />
                                     </div>
 
                                     {formUser.rol === 'coordinador' && (

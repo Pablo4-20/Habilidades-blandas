@@ -5,20 +5,18 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { 
     PrinterIcon, FunnelIcon, CalendarDaysIcon, 
-    DocumentTextIcon, TableCellsIcon, CheckCircleIcon,
-    ChartBarIcon
+    TableCellsIcon, ChartBarIcon, DocumentTextIcon
 } from '@heroicons/react/24/outline';
 import logoIzq from '../assets/facultad.png'; 
 import logoDer from '../assets/software.png';
 
 const FichaResumenCoordinador = () => {
     const [reporteData, setReporteData] = useState([]);
-    const [reporteInfo, setReporteInfo] = useState(null); // Para guardar info de carrera del backend
+    const [reporteInfo, setReporteInfo] = useState(null);
     const [periodos, setPeriodos] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [guardando, setGuardando] = useState(false);
     
-    // Solo manejamos filtro de periodo, carrera es automática
+    // Solo manejamos filtro de periodo, carrera es automática por el usuario logueado
     const [filtroPeriodo, setFiltroPeriodo] = useState('');
 
     useEffect(() => {
@@ -46,36 +44,12 @@ const FichaResumenCoordinador = () => {
                 periodo: filtroPeriodo
             });
             setReporteData(res.data.filas || []);
-            setReporteInfo(res.data.info || {}); // Capturamos nombre de carrera
+            setReporteInfo(res.data.info || {}); 
         } catch (error) {
             console.error("Error cargando ficha:", error);
             setReporteData([]);
         } finally {
             setLoading(false);
-        }
-    };
-
-    const handleObservacionChange = (index, nuevoValor) => {
-        const nuevosDatos = [...reporteData];
-        nuevosDatos[index].observacion = nuevoValor;
-        setReporteData(nuevosDatos);
-    };
-
-    const guardarCambios = async () => {
-        setGuardando(true);
-        try {
-            const conclusiones = reporteData.map(r => ({
-                id: r.id_planificacion,
-                habilidad_id: r.id_habilidad,
-                texto: r.observacion
-            }));
-            await api.post('/reportes/guardar-todo', { conclusiones });
-            alert("Observaciones guardadas correctamente.");
-        } catch (error) {
-            console.error("Error al guardar:", error);
-            alert("Error al guardar cambios.");
-        } finally {
-            setGuardando(false);
         }
     };
 
@@ -124,13 +98,11 @@ const FichaResumenCoordinador = () => {
     }, [reporteData]);
 
     // ===============================================
-    // GENERAR PDF
+    // GENERAR PDF (Solo Lectura)
     // ===============================================
     const generarFichaPDF = () => {
         if (!datosProcesados) return;
         const { porCiclo, ciclosOrdenados, totalesPorCiclo, totalCiclos, totalAsignaturas, promedioGeneral } = datosProcesados;
-
-        guardarCambios();
 
         const doc = new jsPDF('l', 'mm', 'a4');
         const pageWidth = doc.internal.pageSize.getWidth();
@@ -161,9 +133,11 @@ const FichaResumenCoordinador = () => {
             doc.text(`CICLO: ${cicloKey}`, 16, finalY + 5);
             finalY += 7;
 
+            // Mapeamos los datos usando 'conclusion' (Docente) para el PDF
             const bodyTable = filasCiclo.map(r => [
                 r.asignatura, r.habilidad, r.n1, r.n2, r.n3, r.n4, r.n5, 
-                r.observacion, r.cumplimiento
+                r.conclusion || 'Sin observación', // <--- Dato del docente
+                r.cumplimiento
             ]);
             
             bodyTable.push([
@@ -173,7 +147,7 @@ const FichaResumenCoordinador = () => {
 
             autoTable(doc, {
                 startY: finalY,
-                head: [['Asignatura', 'Habilidad', 'N1', 'N2', 'N3', 'N4', 'N5', 'Observaciones', 'Cumpl.']],
+                head: [['Asignatura', 'Habilidad', 'N1', 'N2', 'N3', 'N4', 'N5', 'Observaciones Docente', 'Cumpl.']],
                 body: bodyTable,
                 theme: 'grid',
                 styles: { fontSize: 8, cellPadding: 2, valign: 'middle' },
@@ -213,22 +187,22 @@ const FichaResumenCoordinador = () => {
                         <DocumentTextIcon className="h-7 w-7 text-blue-700"/>
                         Ficha Resumen del Coordinador
                     </h2>
-                    <p className="text-sm text-gray-500 mt-1">Edite las observaciones y genere el reporte oficial.</p>
+                    <p className="text-sm text-gray-500 mt-1">
+                        Vista consolidada de los reportes y observaciones de los docentes.
+                    </p>
                 </div>
                 <div className="flex gap-3">
-                    <button onClick={guardarCambios} disabled={loading || reporteData.length === 0} className="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-lg shadow flex items-center gap-2 text-sm font-semibold transition-all">
-                        <CheckCircleIcon className="h-5 w-5"/> {guardando ? 'Guardando...' : 'Guardar Observaciones'}
-                    </button>
+                    {/* BOTÓN DE GUARDAR ELIMINADO */}
                     <button onClick={generarFichaPDF} disabled={reporteData.length === 0 || loading} className="bg-gray-800 hover:bg-gray-900 text-white px-5 py-2 rounded-lg shadow flex items-center gap-2 text-sm font-semibold transition-all disabled:opacity-50">
                         <PrinterIcon className="h-5 w-5"/> Descargar PDF
                     </button>
                 </div>
             </div>
 
-            {/* FILTROS (CARRERA DESHABILITADA + PERIODO) */}
+            {/* FILTROS */}
             <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4">
                 
-                {/* Visualizador de Carrera (Falso Input Deshabilitado) */}
+                {/* Visualizador de Carrera */}
                 <div className="w-full md:w-1/2">
                     <label className="block text-sm font-medium text-gray-700 mb-1">Carrera</label>
                     <div className="relative">
@@ -244,7 +218,7 @@ const FichaResumenCoordinador = () => {
                     </div>
                 </div>
 
-                {/* Selector de Periodo (Activo) */}
+                {/* Selector de Periodo */}
                 <div className="w-full md:w-1/2">
                     <CustomSelect label="Periodo" icon={CalendarDaysIcon} options={periodos.map(p => ({value: p.nombre, label: p.nombre}))} value={filtroPeriodo} onChange={setFiltroPeriodo} />
                 </div>
@@ -272,35 +246,32 @@ const FichaResumenCoordinador = () => {
                                             <th className="px-1 py-3 text-center">N3</th>
                                             <th className="px-1 py-3 text-center">N4</th>
                                             <th className="px-1 py-3 text-center">N5</th>
-                                            <th className="px-4 py-3 w-1/3">Observaciones (Coordinador)</th>
+                                            <th className="px-4 py-3 w-1/3">Observaciones Docente</th>
                                             <th className="px-4 py-3 text-center">Cumpl.</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {datosProcesados.porCiclo[ciclo].map((fila, idx) => {
-                                            const realIndex = reporteData.indexOf(fila);
-                                            return (
-                                                <tr key={idx} className="border-b hover:bg-gray-50">
-                                                    <td className="px-4 py-2 font-medium">{fila.asignatura}</td>
-                                                    <td className="px-4 py-2 text-gray-600">{fila.habilidad}</td>
-                                                    <td className="px-1 text-center">{fila.n1}</td>
-                                                    <td className="px-1 text-center">{fila.n2}</td>
-                                                    <td className="px-1 text-center">{fila.n3}</td>
-                                                    <td className="px-1 text-center">{fila.n4}</td>
-                                                    <td className="px-1 text-center">{fila.n5}</td>
-                                                    <td className="px-2 py-1">
-                                                        <textarea 
-                                                            className="w-full text-xs border border-gray-300 rounded p-1 focus:ring-1 focus:ring-blue-500 outline-none resize-none"
-                                                            rows="2"
-                                                            placeholder="Observación..."
-                                                            value={fila.observacion || ''}
-                                                            onChange={(e) => handleObservacionChange(realIndex, e.target.value)}
-                                                        />
-                                                    </td>
-                                                    <td className="px-4 py-2 text-center font-bold text-blue-700">{fila.cumplimiento}</td>
-                                                </tr>
-                                            );
-                                        })}
+                                        {datosProcesados.porCiclo[ciclo].map((fila, idx) => (
+                                            <tr key={idx} className="border-b hover:bg-gray-50">
+                                                <td className="px-4 py-2 font-medium">{fila.asignatura}</td>
+                                                <td className="px-4 py-2 text-gray-600">{fila.habilidad}</td>
+                                                <td className="px-1 text-center">{fila.n1}</td>
+                                                <td className="px-1 text-center">{fila.n2}</td>
+                                                <td className="px-1 text-center">{fila.n3}</td>
+                                                <td className="px-1 text-center">{fila.n4}</td>
+                                                <td className="px-1 text-center">{fila.n5}</td>
+                                                <td className="px-4 py-2">
+                                                    {/* MODO LECTURA: Se muestra el texto directamente */}
+                                                    <div className="text-gray-700 italic text-xs whitespace-pre-line min-w-[150px]">
+                                                        {fila.conclusion && fila.conclusion !== 'Sin observaciones' 
+                                                            ? fila.conclusion 
+                                                            : <span className="text-gray-400">Sin observación registrada</span>
+                                                        }
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-2 text-center font-bold text-blue-700">{fila.cumplimiento}</td>
+                                            </tr>
+                                        ))}
                                         <tr className="bg-gray-100 font-bold border-t-2 border-gray-300">
                                             <td colSpan="8" className="px-4 py-2 text-right text-gray-700">PROMEDIO CUMPLIMIENTO CICLO:</td>
                                             <td className="px-4 py-2 text-center text-green-800 text-base border-l border-gray-300">

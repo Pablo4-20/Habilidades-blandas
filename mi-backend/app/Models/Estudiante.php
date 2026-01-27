@@ -16,7 +16,7 @@ class Estudiante extends Model
         'apellidos',
         'email', 
         'carrera',
-        'ciclo_actual',
+        
         // 'email_verified_at' // Eliminado
     ];
 

@@ -13,7 +13,7 @@ use App\Models\Matricula;
 use App\Models\Evaluacion;
 use App\Models\Reporte;
 use App\Models\HabilidadBlanda;
-use App\Models\Carrera; // <--- Importante
+use App\Models\Carrera;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -24,12 +24,12 @@ class ReporteGeneralController extends Controller
         try {
             $request->validate(['periodo' => 'required']);
             
-            $user = $request->user(); // Obtenemos el usuario autenticado
+            $user = $request->user(); 
             
             $periodoObj = PeriodoAcademico::where('nombre', $request->periodo)->first();
             if (!$periodoObj) return response()->json(['message' => 'Periodo no encontrado'], 404);
 
-            // 1. OBTENER ASIGNACIONES (BASE)
+            // 1. OBTENER ASIGNACIONES
             $asignacionesQuery = Asignacion::with(['asignatura.carrera', 'asignatura.ciclo', 'docente'])
                 ->where('periodo', $request->periodo)
                 ->join('asignaturas', 'asignaciones.asignatura_id', '=', 'asignaturas.id')
@@ -38,18 +38,14 @@ class ReporteGeneralController extends Controller
 
             $nombreCarreraReporte = 'General';
 
-            // --- LÓGICA DE FILTRO AUTOMÁTICO ---
             if ($user->carrera_id) {
-                // Si es Coordinador con carrera asignada, filtramos por SU carrera
                 $asignacionesQuery->whereHas('asignatura.carrera', function($q) use ($user) {
                     $q->where('id', $user->carrera_id);
                 });
-                
                 $carreraObj = Carrera::find($user->carrera_id);
                 $nombreCarreraReporte = $carreraObj ? $carreraObj->nombre : 'Tu Carrera';
 
             } elseif ($request->has('carrera') && $request->carrera !== 'Todas') {
-                // Si es Admin (sin carrera_id) y manda filtro manual
                 $asignacionesQuery->whereHas('asignatura.carrera', function($q) use ($request) {
                     $q->where('nombre', 'like', '%' . $request->carrera . '%');
                 });
@@ -58,7 +54,6 @@ class ReporteGeneralController extends Controller
 
             $asignaciones = $asignacionesQuery->get();
 
-            // Si no definimos nombre arriba (caso Admin 'Todas'), intentamos deducirlo o dejar 'General'
             if ($nombreCarreraReporte === 'General' && $asignaciones->isNotEmpty()) {
                 $nombresUnicos = $asignaciones->map(fn($a) => $a->asignatura->carrera->nombre ?? null)->filter()->unique();
                 if ($nombresUnicos->count() === 1) {
@@ -88,11 +83,12 @@ class ReporteGeneralController extends Controller
                     ->where('periodo_academico', $request->periodo)
                     ->get();
 
-                // SI NO HAY PLANES (PENDIENTE)
                 if ($planes->isEmpty()) {
                     $filas[] = [
+                        'id_planificacion' => null,
+                        'id_habilidad' => null,
                         'asignatura' => $asignacion->asignatura->nombre,
-                        'carrera' => $asignacion->asignatura->carrera->nombre ?? '', // Dato útil para frontend
+                        'carrera' => $asignacion->asignatura->carrera->nombre ?? '',
                         'ciclo' => $nombreCiclo,
                         'docente' => $nombreDocente,
                         'habilidad' => 'Sin Planificar',
@@ -107,7 +103,6 @@ class ReporteGeneralController extends Controller
                     continue;
                 }
 
-                // OBTENER ESTUDIANTES DEL CURSO
                 $estudiantes = $this->_getEstudiantes($asignacion->asignatura_id, $periodoObj->id);
                 $totalEstudiantes = $estudiantes->count();
                 $idsEstudiantes = $estudiantes->pluck('id');
@@ -118,7 +113,6 @@ class ReporteGeneralController extends Controller
                     if ($plan->detalles->isEmpty()) continue;
 
                     foreach ($plan->detalles as $detalle) {
-                        // Nombre Habilidad
                         $nombreHabilidad = 'No definida';
                         if ($detalle->habilidad) $nombreHabilidad = $detalle->habilidad->nombre;
                         elseif ($detalle->habilidad_blanda_id) {
@@ -126,13 +120,11 @@ class ReporteGeneralController extends Controller
                             if ($hab) $nombreHabilidad = $hab->nombre;
                         }
 
-                        // Evaluaciones
                         $evaluaciones = Evaluacion::where('planificacion_id', $plan->id)
                             ->whereIn('estudiante_id', $idsEstudiantes)
                             ->where('habilidad_blanda_id', $detalle->habilidad_blanda_id)
                             ->get();
 
-                        // --- DETALLE DE ESTUDIANTES Y PROMEDIO ---
                         $listaEstudiantes = [];
                         $sumaNotas = 0;
                         $countNotas = 0;
@@ -156,7 +148,6 @@ class ReporteGeneralController extends Controller
 
                         $promedioCurso = $countNotas > 0 ? round($sumaNotas / $countNotas, 2) : 0;
 
-                        // Datos Reporte (Observación)
                         $reporteDB = Reporte::where('planificacion_id', $plan->id)
                             ->where('habilidad_blanda_id', $detalle->habilidad_blanda_id)
                             ->first();
@@ -164,7 +155,6 @@ class ReporteGeneralController extends Controller
                         $tieneConclusion = $reporteDB && !empty($reporteDB->conclusion_progreso);
                         $evaluadosCount = $evaluaciones->count();
 
-                        // Estado
                         $progreso = 25; $estado = 'Planificado';
                         if ($evaluadosCount > 0) { $progreso = 50; $estado = 'En Proceso'; }
                         if ($totalEstudiantes > 0 && $evaluadosCount >= $totalEstudiantes && $tieneConclusion) {
@@ -172,6 +162,8 @@ class ReporteGeneralController extends Controller
                         }
 
                         $filas[] = [
+                            'id_planificacion' => $plan->id, // NECESARIO PARA FRONTEND
+                            'id_habilidad' => $detalle->habilidad_blanda_id, // NECESARIO PARA FRONTEND
                             'asignatura' => $nombreAsignaturaPlan,
                             'carrera' => $asignacion->asignatura->carrera->nombre ?? '',
                             'ciclo' => $nombreCiclo,
@@ -180,7 +172,8 @@ class ReporteGeneralController extends Controller
                             'estado' => $estado,
                             'progreso' => $progreso,
                             'promedio' => $promedioCurso,
-                            'conclusion' => $reporteDB ? $reporteDB->conclusion_progreso : 'Sin observaciones',
+                            // AQUÍ ENVIAMOS LA OBSERVACIÓN DEL DOCENTE
+                            'conclusion' => $reporteDB ? $reporteDB->conclusion_progreso : '', 
                             'detalle_estudiantes' => $listaEstudiantes,
                             'sort_asignatura' => $asignacion->asignatura->nombre,
                             'sort_parcial' => $plan->parcial
@@ -189,7 +182,6 @@ class ReporteGeneralController extends Controller
                 }
             }
 
-            // Ordenar: Asignatura -> Parcial
             $filasOrdenadas = collect($filas)->sortBy([
                 ['sort_asignatura', 'asc'],
                 ['sort_parcial', 'asc']
@@ -203,7 +195,6 @@ class ReporteGeneralController extends Controller
         }
     }
 
-    // --- HELPER PARA OBTENER ESTUDIANTES ---
     private function _getEstudiantes($asignaturaId, $periodoId)
     {
         $asignatura = Asignatura::with(['carrera', 'ciclo'])->find($asignaturaId);
