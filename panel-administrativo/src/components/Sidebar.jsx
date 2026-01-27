@@ -42,7 +42,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
         }).then((result) => {
             if (result.isConfirmed) {
                 localStorage.clear();
-                window.location.href = '/';
+                window.location.replace('/');
             }
         });
     };

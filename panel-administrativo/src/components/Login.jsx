@@ -21,6 +21,25 @@ const Login = () => {
     const navigate = useNavigate();
     const location = useLocation(); 
 
+    // --- NUEVO EFECTO: BLOQUEAR BOTÓN ATRÁS ---
+    // Esto impide que el usuario regrese al dashboard después de cerrar sesión
+    useEffect(() => {
+        // 1. Empujamos el estado actual al historial
+        window.history.pushState(null, null, window.location.href);
+
+        // 2. Escuchamos cuando el usuario intente ir atrás
+        const handlePopState = () => {
+            // 3. Volvemos a empujar el estado para mantenerlo en el Login
+            window.history.pushState(null, null, window.location.href);
+        };
+
+        window.addEventListener('popstate', handlePopState);
+
+        return () => {
+            window.removeEventListener('popstate', handlePopState);
+        };
+    }, []);
+
     // --- EFECTO: Mensajes de Verificación ---
     useEffect(() => {
         const queryParams = new URLSearchParams(location.search);
