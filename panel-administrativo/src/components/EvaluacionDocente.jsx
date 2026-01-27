@@ -52,12 +52,12 @@ const EvaluacionDocente = () => {
         }
     }, [selectedAsignatura, selectedParcial, selectedPeriodo]);
 
-    // --- CARGAR ESTUDIANTES (CORREGIDO: Ahora recarga al cambiar Parcial) ---
+    // --- CARGAR ESTUDIANTES ---
     useEffect(() => {
         if (selectedAsignatura && habilidadActiva && selectedParcial) {
             cargarEstudiantesYNotas();
         }
-    }, [habilidadActiva, selectedParcial]); // <--- AQUI ESTABA EL ERROR (Faltaba selectedParcial)
+    }, [habilidadActiva, selectedParcial]);
 
     const cargarPlanificacionYProgreso = async (forzarAvance = false) => {
         setLoading(true);
@@ -68,7 +68,12 @@ const EvaluacionDocente = () => {
                 const guardadas = resPlan.data.actividades_guardadas || {};
                 const catalogo = resPlan.data.habilidades || [];
                 const idsSeleccionados = resPlan.data.habilidades_seleccionadas || [];
-                const habilidadesListas = catalogo.filter(h => idsSeleccionados.includes(h.id));
+                
+                // --- CORRECCIÓN CRÍTICA AQUÍ ---
+                // Convertimos todo a String para comparar, evitando error de tipos en servidor
+                const habilidadesListas = catalogo.filter(h => 
+                    idsSeleccionados.some(selId => String(selId) === String(h.id))
+                );
                 
                 setHabilidadesPlanificadas(habilidadesListas);
                 setActividadesContexto(guardadas);
@@ -78,33 +83,42 @@ const EvaluacionDocente = () => {
                 });
                 
                 const mapaProgreso = {};
-                resProgreso.data.forEach(p => { mapaProgreso[p.habilidad_id] = p.completado; });
+                resProgreso.data.forEach(p => { mapaProgreso[String(p.habilidad_id)] = p.completado; });
                 setProgresoHabilidades(mapaProgreso);
 
                 if (habilidadesListas.length > 0) {
-                    const primeraPendiente = habilidadesListas.find(h => !mapaProgreso[h.id]);
+                    // Buscar la primera pendiente (comparando como String por seguridad)
+                    const primeraPendiente = habilidadesListas.find(h => !mapaProgreso[String(h.id)]);
                     const siguienteId = primeraPendiente ? primeraPendiente.id : habilidadesListas[0].id;
 
                     if (forzarAvance) {
-                        if (habilidadActiva && mapaProgreso[habilidadActiva] && siguienteId !== habilidadActiva) {
+                        // Comparación segura
+                        if (habilidadActiva && mapaProgreso[String(habilidadActiva)] && String(siguienteId) !== String(habilidadActiva)) {
                             setHabilidadActiva(siguienteId);
-                            setSelectedParcial('1'); 
+                            // Si estamos forzando avance (guardado exitoso) y era la última, podríamos manejar lógica extra aquí
                             Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Pasando a siguiente habilidad...', showConfirmButton: false, timer: 2000 });
                         }
                     } else {
-                        const activaEsValida = habilidadesListas.some(h => h.id === habilidadActiva);
+                        // Validar si la activa actual sigue siendo válida en la nueva lista
+                        const activaEsValida = habilidadesListas.some(h => String(h.id) === String(habilidadActiva));
+                        
                         if (!habilidadActiva || !activaEsValida) {
                             setHabilidadActiva(siguienteId);
                         }
                     }
+                } else {
+                    // Si no hay habilidades planificadas (lista vacía)
+                    setHabilidadActiva(null);
                 }
             } else {
                 setHabilidadesPlanificadas([]);
+                setHabilidadActiva(null);
             }
         } catch (error) { console.error(error); } finally { setLoading(false); }
     };
 
     const cargarEstudiantesYNotas = async () => {
+        if (!habilidadActiva) return; // Protección extra
         setLoading(true);
         try {
             const res = await api.post('/docente/rubrica', {
@@ -189,7 +203,7 @@ const EvaluacionDocente = () => {
     };
 
     const getNombreHabilidadActiva = () => {
-        const hab = habilidadesPlanificadas.find(h => h.id === habilidadActiva);
+        const hab = habilidadesPlanificadas.find(h => String(h.id) === String(habilidadActiva));
         return hab ? hab.nombre : '';
     };
     
@@ -235,9 +249,10 @@ const EvaluacionDocente = () => {
                         <div className="space-y-2">
                             <h3 className="text-xs font-bold text-gray-400 uppercase px-1">Progreso de Habilidades</h3>
                             {habilidadesPlanificadas.map((hab, index) => {
-                                const completado = progresoHabilidades[hab.id]; 
-                                const activo = habilidadActiva === hab.id;
-                                const anteriorCompletada = index === 0 || progresoHabilidades[habilidadesPlanificadas[index - 1].id];
+                                // Aseguramos comparación string
+                                const completado = progresoHabilidades[String(hab.id)]; 
+                                const activo = String(habilidadActiva) === String(hab.id);
+                                const anteriorCompletada = index === 0 || progresoHabilidades[String(habilidadesPlanificadas[index - 1].id)];
                                 const bloqueado = !anteriorCompletada;
 
                                 return (
