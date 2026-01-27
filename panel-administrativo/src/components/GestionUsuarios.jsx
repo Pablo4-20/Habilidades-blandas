@@ -17,7 +17,9 @@ import {
     CheckCircleIcon, 
     ClockIcon,
     ExclamationCircleIcon,
-    DocumentTextIcon 
+    DocumentTextIcon,
+    ChevronLeftIcon,   // <--- NUEVO
+    ChevronRightIcon   // <--- NUEVO
 } from '@heroicons/react/24/outline';
 
 // --- VALIDACIÓN CÉDULA ECUADOR ---
@@ -56,9 +58,11 @@ const GestionUsuarios = () => {
     const [loading, setLoading] = useState(false);
     const [editingId, setEditingId] = useState(null); 
 
-    // Filtros
+    // Filtros y Paginación
     const [busqueda, setBusqueda] = useState('');
-    const [filtroRol, setFiltroRol] = useState('');          
+    const [filtroRol, setFiltroRol] = useState('');
+    const [currentPage, setCurrentPage] = useState(1); // <--- ESTADO PAGINACIÓN
+    const ITEMS_PER_PAGE = 7; // <--- CANTIDAD POR PÁGINA (Ajustable)
     
     // Modales y Archivos
     const [showModal, setShowModal] = useState(false);       
@@ -106,6 +110,7 @@ const GestionUsuarios = () => {
         setBusqueda(''); setFiltroRol(''); 
         setFileToUpload(null); setFileName('');
         setErrors({});
+        setCurrentPage(1); // Resetear página al cambiar tab
     }, [activeTab]);
 
     const handleTabChange = (tab) => {
@@ -116,7 +121,7 @@ const GestionUsuarios = () => {
         }
     };
 
-    // --- MANEJO DE INPUTS ---
+    // --- MANEJO DE INPUTS (Sin cambios) ---
     const handleInputCedula = (e, isUser) => {
         const val = e.target.value.replace(/\D/g, '').slice(0, 10); 
         if (isUser) setFormUser({ ...formUser, cedula: val });
@@ -158,7 +163,7 @@ const GestionUsuarios = () => {
         }
     };
 
-    // --- GUARDAR ---
+    // --- GUARDAR (Sin cambios mayores) ---
     const handleGuardar = async (e) => {
         e.preventDefault();
         
@@ -207,7 +212,7 @@ const GestionUsuarios = () => {
         }
     };
 
-    // --- IMPORTACIÓN Y PLANTILLAS ---
+    // --- IMPORTACIÓN Y PLANTILLAS (Sin cambios) ---
     const downloadTemplate = () => {
         let data = [];
         let name = "";
@@ -315,13 +320,37 @@ const GestionUsuarios = () => {
         });
     };
 
-    const filteredData = dataList.filter(item => {
-        const term = busqueda.toLowerCase();
-        const fullName = `${item.nombres} ${item.apellidos}`.toLowerCase();
-        const matchesText = fullName.includes(term) || (item.email || '').toLowerCase().includes(term) || (item.cedula || '').includes(term);
-        if (activeTab === 'administrativo') return matchesText && (filtroRol ? item.rol === filtroRol : true);
-        else return matchesText;
-    });
+    // --- LÓGICA DE FILTRADO Y PAGINACIÓN ---
+    const getFilteredAndSortedData = () => {
+        // 1. Filtrar
+        let filtered = dataList.filter(item => {
+            const term = busqueda.toLowerCase();
+            const fullName = `${item.nombres} ${item.apellidos}`.toLowerCase();
+            const matchesText = fullName.includes(term) || (item.email || '').toLowerCase().includes(term) || (item.cedula || '').includes(term);
+            if (activeTab === 'administrativo') return matchesText && (filtroRol ? item.rol === filtroRol : true);
+            else return matchesText;
+        });
+
+        // 2. Ordenar Alfabéticamente (A-Z por Apellidos)
+        filtered.sort((a, b) => {
+            const nameA = `${a.apellidos} ${a.nombres}`.toLowerCase();
+            const nameB = `${b.apellidos} ${b.nombres}`.toLowerCase();
+            if (nameA < nameB) return -1;
+            if (nameA > nameB) return 1;
+            return 0;
+        });
+
+        return filtered;
+    };
+
+    // Datos procesados
+    const processedData = getFilteredAndSortedData();
+    
+    // Cálculos de Paginación
+    const totalPages = Math.ceil(processedData.length / ITEMS_PER_PAGE);
+    const indexOfLastItem = currentPage * ITEMS_PER_PAGE;
+    const indexOfFirstItem = indexOfLastItem - ITEMS_PER_PAGE;
+    const currentItems = processedData.slice(indexOfFirstItem, indexOfLastItem);
 
     const getInitials = (n) => n ? n.charAt(0).toUpperCase() : '?';
     const getRoleStyle = (r) => {
@@ -339,7 +368,7 @@ const GestionUsuarios = () => {
     };
 
     return (
-        <div className="space-y-6 animate-fade-in">
+        <div className="space-y-6 animate-fade-in flex flex-col h-full">
             {/* CABECERA */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
@@ -372,89 +401,130 @@ const GestionUsuarios = () => {
             <div className="flex flex-col md:flex-row gap-4 bg-gray-50 p-4 rounded-xl border border-gray-200">
                 <div className="relative flex-1">
                     <MagnifyingGlassIcon className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-                    <input type="text" className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-100" placeholder="Buscar..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+                    <input 
+                        type="text" 
+                        className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-100" 
+                        placeholder="Buscar..." 
+                        value={busqueda} 
+                        onChange={(e) => { setBusqueda(e.target.value); setCurrentPage(1); }} // Reset página al buscar
+                    />
                 </div>
                 {activeTab === 'administrativo' && (
-                    <div className="w-full md:w-48"><select value={filtroRol} onChange={(e) => setFiltroRol(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white outline-none text-sm text-gray-600"><option value="">Todos los Roles</option><option value="docente">Docentes</option><option value="coordinador">Coordinadores</option><option value="admin">Administradores</option></select></div>
+                    <div className="w-full md:w-48">
+                        <select 
+                            value={filtroRol} 
+                            onChange={(e) => { setFiltroRol(e.target.value); setCurrentPage(1); }} 
+                            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white outline-none text-sm text-gray-600"
+                        >
+                            <option value="">Todos los Roles</option>
+                            <option value="docente">Docentes</option>
+                            <option value="coordinador">Coordinadores</option>
+                            <option value="admin">Administradores</option>
+                        </select>
+                    </div>
                 )}
-                {(busqueda || filtroRol) && <button onClick={() => { setBusqueda(''); setFiltroRol(''); }} className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg">Limpiar</button>}
+                {(busqueda || filtroRol) && <button onClick={() => { setBusqueda(''); setFiltroRol(''); setCurrentPage(1); }} className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg">Limpiar</button>}
             </div>
 
-            {/* TABLA PRINCIPAL */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-100">
-                    <thead className="bg-gray-50">
-                        <tr>
-                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Cédula</th>
-                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Nombres y Apellidos</th>
-                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Correo</th>
-                            
-                            {/* COLUMNA DINÁMICA: Rol para admins, Carrera para estudiantes */}
-                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">
-                                {activeTab === 'administrativo' ? 'Rol' : 'Carrera'}
-                            </th>
-
-                            <th className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-50">
-                        {loading ? <tr><td colSpan={5} className="text-center py-10 text-gray-500">Cargando...</td></tr> : filteredData.length === 0 ? (
-                            <tr><td colSpan={5} className="text-center py-12 text-gray-400">Sin resultados.</td></tr>
-                        ) : filteredData.map((item) => (
-                            <tr key={item.id} className="hover:bg-gray-50 transition">
-                                <td className="px-6 py-4 text-sm text-gray-600 font-mono">{item.cedula}</td>
-                                <td className="px-6 py-4 flex items-center gap-3">
-                                    <div className="h-8 w-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">{getInitials(item.nombres)}</div>
-                                    <div className="flex flex-col">
-                                        <div className="text-sm font-semibold text-gray-900">{item.apellidos} {item.nombres}</div>
-                                        {item.rol === 'coordinador' && item.carrera && (
-                                            <span className="text-xs text-blue-600 font-medium">
-                                                Coord. {typeof item.carrera === 'object' ? item.carrera.nombre : item.carrera}
+            {/* TABLA PRINCIPAL CON PAGINACIÓN */}
+            <div className="flex flex-col flex-1 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="overflow-auto flex-1">
+                    <table className="min-w-full divide-y divide-gray-100">
+                        <thead className="bg-gray-50 sticky top-0 z-10">
+                            <tr>
+                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Cédula</th>
+                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Nombres y Apellidos</th>
+                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Correo</th>
+                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">
+                                    {activeTab === 'administrativo' ? 'Rol' : 'Carrera'}
+                                </th>
+                                <th className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-50">
+                            {loading ? <tr><td colSpan={5} className="text-center py-10 text-gray-500">Cargando...</td></tr> : currentItems.length === 0 ? (
+                                <tr><td colSpan={5} className="text-center py-12 text-gray-400">Sin resultados.</td></tr>
+                            ) : currentItems.map((item) => (
+                                <tr key={item.id} className="hover:bg-gray-50 transition">
+                                    <td className="px-6 py-4 text-sm text-gray-600 font-mono">{item.cedula}</td>
+                                    <td className="px-6 py-4 flex items-center gap-3">
+                                        <div className="h-8 w-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs flex-shrink-0">{getInitials(item.nombres)}</div>
+                                        <div className="flex flex-col min-w-0">
+                                            <div className="text-sm font-semibold text-gray-900 truncate">{item.apellidos} {item.nombres}</div>
+                                            {item.rol === 'coordinador' && item.carrera && (
+                                                <span className="text-xs text-blue-600 font-medium truncate">
+                                                    Coord. {typeof item.carrera === 'object' ? item.carrera.nombre : item.carrera}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex flex-col">
+                                            <div className="flex items-center gap-2 text-sm text-gray-500"><EnvelopeIcon className="h-4 w-4 text-gray-400"/>{item.email}</div>
+                                            {activeTab === 'administrativo' && (
+                                                <div className="mt-1">
+                                                    {item.email_verified_at ? <span className="inline-flex items-center gap-1 text-[10px] bg-green-50 text-green-700 px-2 py-0.5 rounded-full border border-green-200"><CheckCircleIcon className="h-3 w-3" /> Verificado</span> : <span className="inline-flex items-center gap-1 text-[10px] bg-yellow-50 text-yellow-700 px-2 py-0.5 rounded-full border border-yellow-200"><ClockIcon className="h-3 w-3" /> Pendiente</span>}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-sm">
+                                        {activeTab === 'administrativo' ? (
+                                            <span className={`px-2 py-1 text-xs font-bold uppercase rounded-full border ${getRoleStyle(item.rol)}`}>
+                                                {item.rol}
                                             </span>
-                                        )}
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4">
-                                    <div className="flex flex-col">
-                                        <div className="flex items-center gap-2 text-sm text-gray-500"><EnvelopeIcon className="h-4 w-4 text-gray-400"/>{item.email}</div>
-                                        
-                                        {/* 👇 LOGICA CAMBIADA: SOLO MOSTRAR VERIFICACIÓN SI ES ADMINISTRATIVO */}
-                                        {activeTab === 'administrativo' && (
-                                            <div className="mt-1">
-                                                {item.email_verified_at ? <span className="inline-flex items-center gap-1 text-[10px] bg-green-50 text-green-700 px-2 py-0.5 rounded-full border border-green-200"><CheckCircleIcon className="h-3 w-3" /> Verificado</span> : <span className="inline-flex items-center gap-1 text-[10px] bg-yellow-50 text-yellow-700 px-2 py-0.5 rounded-full border border-yellow-200"><ClockIcon className="h-3 w-3" /> Pendiente</span>}
+                                        ) : (
+                                            <div className="flex items-center gap-2">
+                                                <AcademicCapIcon className="h-4 w-4 text-gray-400" />
+                                                <span className="text-gray-700 font-medium truncate max-w-[150px]">
+                                                    {getCarreraDisplay(item)}
+                                                </span>
                                             </div>
                                         )}
-                                    </div>
-                                </td>
-                                
-                                <td className="px-6 py-4 text-sm">
-                                    {activeTab === 'administrativo' ? (
-                                        <span className={`px-2 py-1 text-xs font-bold uppercase rounded-full border ${getRoleStyle(item.rol)}`}>
-                                            {item.rol}
-                                        </span>
-                                    ) : (
-                                        <div className="flex items-center gap-2">
-                                            <AcademicCapIcon className="h-4 w-4 text-gray-400" />
-                                            <span className="text-gray-700 font-medium">
-                                                {getCarreraDisplay(item)}
-                                            </span>
-                                        </div>
-                                    )}
-                                </td>
-                                
-                                <td className="px-6 py-4 text-right flex justify-end gap-2">
-                                    <button onClick={() => handleEditar(item)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-full"><PencilSquareIcon className="h-5 w-5" /></button>
-                                    {(activeTab === 'estudiantil' || item.id !== currentUser.id) && (
-                                        <button onClick={() => handleEliminar(item.id)} className="p-2 text-gray-400 hover:text-red-600 rounded-full"><TrashIcon className="h-5 w-5" /></button>
-                                    )}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+                                    </td>
+                                    <td className="px-6 py-4 text-right flex justify-end gap-2">
+                                        <button onClick={() => handleEditar(item)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-full"><PencilSquareIcon className="h-5 w-5" /></button>
+                                        {(activeTab === 'estudiantil' || item.id !== currentUser.id) && (
+                                            <button onClick={() => handleEliminar(item.id)} className="p-2 text-gray-400 hover:text-red-600 rounded-full"><TrashIcon className="h-5 w-5" /></button>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                {/* --- CONTROLES DE PAGINACIÓN --- */}
+                <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+                    <span className="text-sm text-gray-500">
+                        Mostrando <span className="font-bold text-gray-800">{currentItems.length > 0 ? indexOfFirstItem + 1 : 0}</span> a <span className="font-bold text-gray-800">{Math.min(indexOfLastItem, processedData.length)}</span> de <span className="font-bold text-gray-800">{processedData.length}</span> registros
+                    </span>
+                    
+                    <div className="flex items-center gap-2">
+                        <button 
+                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                            disabled={currentPage === 1}
+                            className={`p-2 rounded-lg border transition ${currentPage === 1 ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-gray-300 text-gray-600 hover:bg-white hover:shadow-sm'}`}
+                        >
+                            <ChevronLeftIcon className="h-4 w-4" />
+                        </button>
+                        
+                        <span className="text-sm font-medium text-gray-600 px-2">
+                            Página {currentPage} de {totalPages || 1}
+                        </span>
+
+                        <button 
+                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                            disabled={currentPage === totalPages || totalPages === 0}
+                            className={`p-2 rounded-lg border transition ${currentPage === totalPages || totalPages === 0 ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-gray-300 text-gray-600 hover:bg-white hover:shadow-sm'}`}
+                        >
+                            <ChevronRightIcon className="h-4 w-4" />
+                        </button>
+                    </div>
+                </div>
             </div>
 
-            {/* MODAL CREAR/EDITAR */}
+            {/* MODAL CREAR/EDITAR (Sin cambios funcionales, solo estilo) */}
             {showModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-fade-in">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
@@ -568,12 +638,11 @@ const GestionUsuarios = () => {
                 </div>
             )}
 
-            {/* MODAL IMPORTAR MASIVO (DISEÑO TIPO ASIGNATURAS) */}
+            {/* MODAL IMPORTAR MASIVO (Sin cambios, solo diseño mantenido) */}
             {showImportModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-4 animate-fade-in">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-8 text-center relative overflow-hidden">
                         
-                        {/* Icono de Nube Animado */}
                         <div className="mx-auto w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mb-4 border border-green-100">
                             <CloudArrowUpIcon className="h-10 w-10 text-green-600" />
                         </div>
@@ -582,7 +651,6 @@ const GestionUsuarios = () => {
                             Importar {activeTab === 'administrativo' ? 'Personal' : 'Estudiantes'}
                         </h3>
                         
-                        {/* 1. SECCIÓN DE ESTRUCTURA VISUAL (TABLA DINÁMICA) */}
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6 mt-4 text-left">
                             <div className="flex justify-between items-center mb-3">
                                 <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide">Estructura del Excel/CSV:</h4>
@@ -618,13 +686,8 @@ const GestionUsuarios = () => {
                                     </tbody>
                                 </table>
                             </div>
-                            <p className="text-[10px] text-slate-400 mt-2 flex items-center gap-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
-                                El sistema validará cédulas y correos automáticamente.
-                            </p>
                         </div>
 
-                        {/* 2. ZONA DE CARGA PUNTEADA (CLICKABLE) */}
                         <div 
                             onClick={handleClickUploadArea}
                             className="border-2 border-dashed border-green-300 bg-green-50/50 rounded-xl p-8 cursor-pointer hover:bg-green-50 transition-colors group mb-6 relative"
