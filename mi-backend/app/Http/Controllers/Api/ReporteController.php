@@ -11,7 +11,7 @@ use App\Models\Asignatura;
 use App\Models\PeriodoAcademico;
 use App\Models\DetalleMatricula;
 use App\Models\Matricula;
-use App\Models\Carrera; // Necesario para obtener el nombre de la carrera
+use App\Models\Carrera;
 use Illuminate\Support\Facades\DB;
 
 class ReporteController extends Controller
@@ -63,26 +63,24 @@ class ReporteController extends Controller
     }
 
     // ==========================================
-    // HELPER: Convertir Romano a Arábigo (Para Ordenar)
+    // HELPER: Convertir Romano a Arábigo
     // ==========================================
     private function _convertirCiclo($nombreCiclo)
     {
-        // Si ya tiene número (ej: "Ciclo 5")
         preg_match('/\d+/', $nombreCiclo, $matches);
         if (!empty($matches[0])) return (int)$matches[0];
 
-        // Si es romano
         $romanos = [
             'I' => 1, 'II' => 2, 'III' => 3, 'IV' => 4, 'V' => 5,
             'VI' => 6, 'VII' => 7, 'VIII' => 8, 'IX' => 9, 'X' => 10
         ];
         
         $limpio = strtoupper(trim(str_replace(['Ciclo', 'CICLO'], '', $nombreCiclo)));
-        return $romanos[$limpio] ?? 0; // 0 si no encuentra
+        return $romanos[$limpio] ?? 0;
     }
 
     // ==========================================
-    // 1. ACTAS INDIVIDUALES (Para el Docente)
+    // 1. ACTAS INDIVIDUALES (Para el Docente - PDF Vertical)
     // ==========================================
     public function datosParaPdf(Request $request)
     {
@@ -171,7 +169,7 @@ class ReporteController extends Controller
     }
 
     // ==========================================
-    // 2. FICHA RESUMEN COORDINADOR (COMPLETO CON FILTRO Y CÁLCULOS)
+    // 2. FICHA RESUMEN GENERAL (PDF Horizontal - Corrección Observación Docente)
     // ==========================================
     public function pdfDataGeneral(Request $request)
     {
@@ -181,26 +179,20 @@ class ReporteController extends Controller
         $periodoObj = PeriodoAcademico::where('nombre', $request->periodo)->first();
         if (!$periodoObj) return response()->json(['message' => 'Periodo no encontrado'], 404);
 
-        // Consulta base: Planificaciones del periodo, Parcial 2 (o final)
         $query = Planificacion::with(['asignatura.carrera', 'asignatura.ciclo', 'docente', 'detalles.habilidad'])
             ->where('periodo_academico', $request->periodo)
             ->where('parcial', '2'); 
 
         $nombreCarreraReporte = 'General';
 
-        // LÓGICA DE FILTRO AUTOMÁTICO
         if ($user->carrera_id) {
-            // 1. Si el usuario (Coordinador) tiene carrera asignada, filtramos por su ID
             $query->whereHas('asignatura.carrera', function($q) use ($user) {
                 $q->where('id', $user->carrera_id);
             });
-            
-            // Obtenemos el nombre para mostrar en el reporte
             $carreraObj = Carrera::find($user->carrera_id);
             $nombreCarreraReporte = $carreraObj ? $carreraObj->nombre : 'Tu Carrera';
 
         } elseif ($request->has('carrera') && $request->carrera !== 'Todas') {
-            // 2. Si no tiene carrera (Admin), permitimos filtro manual
             $nombre = $request->carrera;
             $query->whereHas('asignatura.carrera', function($q) use ($nombre) {
                 $q->where('nombre', $nombre);
@@ -210,12 +202,9 @@ class ReporteController extends Controller
         
         $planes = $query->get();
 
-        // Ordenamiento personalizado: Primero Ciclo Numérico, luego Nombre Asignatura
         $planes = $planes->sort(function($a, $b) {
             $cicloA = $this->_convertirCiclo($a->asignatura->ciclo->nombre ?? '');
             $cicloB = $this->_convertirCiclo($b->asignatura->ciclo->nombre ?? '');
-            
-            // Si son del mismo ciclo, ordenar por nombre de materia
             if ($cicloA === $cicloB) {
                 return strcmp($a->asignatura->nombre, $b->asignatura->nombre);
             }
@@ -242,7 +231,6 @@ class ReporteController extends Controller
                     ->whereIn('estudiante_id', $idsEstudiantes)
                     ->get();
 
-                // Estadísticas N1-N5 y Promedio
                 $conteos = [1=>0, 2=>0, 3=>0, 4=>0, 5=>0];
                 $sumaNotas = 0;
                 $totalEval = 0;
@@ -256,19 +244,16 @@ class ReporteController extends Controller
                 }
                 
                 $promedio = $totalEval > 0 ? round($sumaNotas / $totalEval, 2) : 0;
-                
-                // LÓGICA DE CUMPLIMIENTO (REGLA DE NEGOCIO):
-                // 100% si hay evaluaciones, 50% si solo está planificado
                 $progreso = ($evaluaciones->count() > 0) ? 100 : 50;
 
-                // Obtener Reporte para leer observación
+                // BUSCAMOS EL REPORTE DEL DOCENTE
                 $reporteDB = Reporte::where('planificacion_id', $plan->id)
                     ->where('habilidad_blanda_id', $detalle->habilidad_blanda_id)
                     ->first();
 
                 $filas[] = [
-                    'id_planificacion' => $plan->id, // ID para guardar
-                    'id_habilidad' => $detalle->habilidad_blanda_id, // ID para guardar
+                    'id_planificacion' => $plan->id,
+                    'id_habilidad' => $detalle->habilidad_blanda_id,
                     'ciclo'      => $cicloNumerico,
                     'asignatura' => $plan->asignatura->nombre,
                     'habilidad'  => $detalle->habilidad->nombre,
@@ -278,8 +263,11 @@ class ReporteController extends Controller
                     'n4' => $conteos[4],
                     'n5' => $conteos[5],
                     'promedio' => $promedio,
-                    // IMPORTANTE: Leemos 'observacion_coordinador', no la del docente
-                    'observacion' => $reporteDB ? $reporteDB->observacion_coordinador : '', 
+
+                    // 👇 AQUÍ ESTÁ LA CORRECCIÓN CLAVE:
+                    // Enviamos la 'conclusion_progreso' (Docente) bajo la llave 'conclusion'
+                    'conclusion' => $reporteDB ? ($reporteDB->conclusion_progreso ?? '') : '', 
+                    
                     'cumplimiento' => $progreso . '%'
                 ];
             }
@@ -299,28 +287,23 @@ class ReporteController extends Controller
             DB::beginTransaction();
 
             foreach($request->conclusiones as $item) {
-                // Validamos que vengan los IDs necesarios
                 if (empty($item['id']) || empty($item['habilidad_id'])) continue;
 
                 $texto = $item['texto'] ?? '';
 
-                // 1. Buscamos si ya existe el reporte o creamos una instancia nueva
                 $reporte = Reporte::firstOrNew([
                     'planificacion_id' => $item['id'],
                     'habilidad_blanda_id' => $item['habilidad_id']
                 ]);
 
-                // 2. Asignamos la observación del COORDINADOR (Tu campo)
+                // Aquí guardamos la observación del coordinador (campo separado)
                 $reporte->observacion_coordinador = $texto;
 
-                // 3. SOLUCIÓN AL ERROR SQL:
-                // Si el reporte es NUEVO, el campo del docente ('conclusion_progreso') está null.
-                // Como la BD no permite nulls, le ponemos un espacio vacío temporalmente.
+                // Parche: Si es nuevo, evitar error NOT NULL en campo docente
                 if (!$reporte->exists) {
-                    $reporte->conclusion_progreso = ' '; // Espacio vacío para cumplir la regla NOT NULL
+                    $reporte->conclusion_progreso = ' '; 
                 }
 
-                // 4. Asignamos fecha si no tiene
                 if (!$reporte->fecha_generacion) {
                     $reporte->fecha_generacion = now();
                 }
@@ -333,7 +316,6 @@ class ReporteController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
-            // Loguear el error real para depuración si es necesario
             \Log::error("Error guardando reporte coordinador: " . $e->getMessage());
             return response()->json(['message' => 'Error al guardar: ' . $e->getMessage()], 500);
         }

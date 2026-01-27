@@ -6,19 +6,16 @@ import autoTable from 'jspdf-autotable';
 import CustomSelect from './ui/CustomSelect'; 
 import { 
     PrinterIcon, BookOpenIcon, CalendarDaysIcon, 
-    LockClosedIcon, DocumentCheckIcon, TableCellsIcon, DocumentTextIcon
+    DocumentCheckIcon, TableCellsIcon, DocumentTextIcon
 } from '@heroicons/react/24/outline';
 
 const FichaResumen = () => {
     const [asignacionesRaw, setAsignacionesRaw] = useState([]);
     const [selectedMateriaId, setSelectedMateriaId] = useState('');
     const [selectedPeriodo, setSelectedPeriodo] = useState('');
-    
-    // Estados de carga
     const [loadingGeneral, setLoadingGeneral] = useState(false);
     const [loadingIndividual, setLoadingIndividual] = useState(false);
 
-    // 1. CARGA INICIAL
     useEffect(() => {
         const cargarDatos = async () => {
             try {
@@ -35,7 +32,7 @@ const FichaResumen = () => {
     }, []);
 
     // ------------------------------------------------------------------------
-    // OPCIÓN 1: FICHA RESUMEN GENERAL (PDF HORIZONTAL)
+    // OPCIÓN 1: FICHA RESUMEN GENERAL (PDF HORIZONTAL) - CORREGIDO
     // ------------------------------------------------------------------------
     const descargarFichaResumen = async () => {
         if (!selectedPeriodo) return;
@@ -51,7 +48,7 @@ const FichaResumen = () => {
 
             const doc = new jsPDF({ orientation: "landscape" }); 
             const pageWidth = doc.internal.pageSize.getWidth();
-            const pageHeight = doc.internal.pageSize.getHeight(); // Altura total
+            const pageHeight = doc.internal.pageSize.getHeight(); 
 
             const fechaActual = new Date().toLocaleString('es-ES', {
                 year: 'numeric', month: 'long', day: 'numeric',
@@ -75,30 +72,36 @@ const FichaResumen = () => {
                 columnStyles: { 0: { fontStyle: 'bold', cellWidth: 20 }, 2: { fontStyle: 'bold', cellWidth: 35 } }
             });
 
-            // Tabla
+            // 👇 SOLUCIÓN EXACTA: Mapeo directo de la conclusión del docente
             const cuerpoTabla = filas.map(f => [
-                f.asignatura, f.ciclo, f.habilidad,
-                f.n1, f.n2, f.n3, f.n4, f.n5, f.conclusion
+                f.asignatura, 
+                f.ciclo, 
+                f.habilidad,
+                f.n1, f.n2, f.n3, f.n4, f.n5, 
+                f.conclusion || " " // Solo mostramos la conclusión (observación) traída de la BD
             ]);
 
             autoTable(doc, {
                 startY: doc.lastAutoTable.finalY + 5,
                 head: [['Asignatura', 'Ciclo', 'Habilidad Blanda', 'N1', 'N2', 'N3', 'N4', 'N5', 'Conclusión']],
                 body: cuerpoTabla, theme: 'grid',
-                headStyles: { fillColor: [220, 230, 241], textColor: 0, fontSize: 9, halign: 'center', valign: 'middle', lineColor: [150,150,150], lineWidth: 0.1 },
-                bodyStyles: { fontSize: 8, valign: 'middle', halign: 'center' },
-                columnStyles: { 0: { halign: 'left', cellWidth: 50 }, 2: { halign: 'left', cellWidth: 40 }, 8: { halign: 'left', cellWidth: 80 } }
+                headStyles: { fillColor: [220, 230, 241], textColor: 0, fontSize: 8, halign: 'center', valign: 'middle', lineColor: [150,150,150], lineWidth: 0.1 },
+                bodyStyles: { fontSize: 7, valign: 'middle', halign: 'center' },
+                columnStyles: { 
+                    0: { halign: 'left', cellWidth: 35 }, 
+                    2: { halign: 'left', cellWidth: 35 },
+                    // Ajuste para que la conclusión tenga buen espacio
+                    8: { halign: 'left', cellWidth: 'auto' } 
+                }
             });
 
-            // PIE DE PÁGINA (FIRMA IZQUIERDA - FECHA DERECHA AL FINAL)
-            // Calculamos Y para que quede al final de la hoja, o después de la tabla si es muy larga
+            // Pie de Página
             let finalY = doc.lastAutoTable.finalY + 30;
             if (finalY > pageHeight - 20) {
                 doc.addPage();
-                finalY = 40; // Margen superior nueva página
+                finalY = 40; 
             }
             
-            // Firma (Izquierda)
             doc.setDrawColor(0); 
             doc.line(14, finalY, 80, finalY); 
             doc.setFont("helvetica", "normal");
@@ -106,10 +109,8 @@ const FichaResumen = () => {
             doc.setTextColor(0);
             doc.text("Firma del Docente", 14, finalY + 5);
 
-            // Fecha (Derecha - Extremo opuesto)
             doc.setFontSize(8);
             doc.setTextColor(100);
-            // Usamos (pageWidth - 14) como X y align: 'right' para pegarlo al margen derecho
             doc.text(`Generado el: ${fechaActual}`, pageWidth - 14, finalY + 5, { align: "right" });
 
             doc.save(`Ficha_Resumen_${info.periodo}.pdf`);
@@ -118,7 +119,7 @@ const FichaResumen = () => {
     };
 
     // ------------------------------------------------------------------------
-    // OPCIÓN 2: ACTAS INDIVIDUALES (PDF VERTICAL)
+    // OPCIÓN 2: ACTAS INDIVIDUALES (SIN CAMBIOS)
     // ------------------------------------------------------------------------
     const descargarActasIndividuales = async () => {
         if (!selectedMateriaId || !selectedPeriodo) return Swal.fire('Error', 'Selecciona una materia.', 'warning');
@@ -214,15 +215,13 @@ const FichaResumen = () => {
                         }
                     });
 
-                    // PIE DE PÁGINA (FIRMA IZQUIERDA - FECHA DERECHA)
+                    // Pie de Página
                     let fy = doc.lastAutoTable.finalY + 30; 
-                    // Si se sale de la hoja, nueva página
                     if (fy > pageHeight - 20) {
                         doc.addPage();
                         fy = 40;
                     }
                     
-                    // Firma (Izquierda)
                     doc.setDrawColor(0); 
                     doc.line(14, fy, 80, fy); 
                     doc.setFont("helvetica", "normal");
@@ -230,10 +229,8 @@ const FichaResumen = () => {
                     doc.setTextColor(0);
                     doc.text("Firma del Docente", 14, fy + 5);
 
-                    // Fecha (Derecha - Alineada al final)
                     doc.setFontSize(8);
                     doc.setTextColor(100);
-                    // pageWidth - 14 (margen derecho)
                     doc.text(`Generado el: ${fechaActual}`, pageWidth - 14, fy + 5, { align: "right" });
                 }
             });
@@ -270,7 +267,6 @@ const FichaResumen = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                
                 {/* OPCIÓN 1 */}
                 <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center text-center hover:shadow-md transition duration-300 group relative">
                     <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-t-3xl"></div>
@@ -303,7 +299,6 @@ const FichaResumen = () => {
                         {loadingIndividual ? 'Generando...' : <><PrinterIcon className="h-5 w-5"/> Descargar Actas</>}
                     </button>
                 </div>
-
             </div>
         </div>
     );
