@@ -5,59 +5,88 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\HabilidadBlanda;
+use App\Models\ActividadHabilidad; // Importante: Importar el modelo
+use Illuminate\Support\Facades\DB; // Para transacciones
 
 class HabilidadBlandaController extends Controller
 {
-    // 1. LISTAR (GET)
+    // 1. LISTAR (Con Actividades)
     public function index()
     {
-        // Ordenamos alfabéticamente para el catálogo
-        return HabilidadBlanda::orderBy('nombre', 'asc')->get();
+        return HabilidadBlanda::with('actividades') // Trae la relación
+            ->orderBy('nombre', 'asc')
+            ->get();
     }
 
-    // 2. CREAR (POST)
+    // 2. CREAR (Manual desde Admin)
     public function store(Request $request)
     {
-        
         $request->validate([
             'nombre' => 'required|unique:habilidades_blandas,nombre',
-            'descripcion' => 'nullable|string'
+            'descripcion' => 'nullable|string',
+            'actividades' => 'nullable|array' // Array de textos
         ]);
 
-        $habilidad = HabilidadBlanda::create([
-            'nombre' => $this->formatearTexto($request->nombre),
-            'descripcion' => $request->descripcion
-        ]);
+        return DB::transaction(function () use ($request) {
+            $habilidad = HabilidadBlanda::create([
+                'nombre' => $this->formatearTexto($request->nombre),
+                'descripcion' => $request->descripcion
+            ]);
 
-        return response()->json($habilidad, 201);
+            // Guardar actividades si vienen
+            if (!empty($request->actividades)) {
+                foreach ($request->actividades as $actividadTexto) {
+                    if (trim($actividadTexto) !== '') {
+                        $habilidad->actividades()->create(['descripcion' => trim($actividadTexto)]);
+                    }
+                }
+            }
+
+            return response()->json($habilidad->load('actividades'), 201);
+        });
     }
 
-    // 3. ACTUALIZAR (PUT)
+    // 3. ACTUALIZAR (Manual desde Admin)
     public function update(Request $request, $id)
     {
         $habilidad = HabilidadBlanda::findOrFail($id);
 
         $request->validate([
             'nombre' => 'required|unique:habilidades_blandas,nombre,' . $id,
-            'descripcion' => 'nullable|string'
+            'descripcion' => 'nullable|string',
+            'actividades' => 'nullable|array'
         ]);
 
-        $habilidad->update([
-            'nombre' => $this->formatearTexto($request->nombre),
-            'descripcion' => $request->descripcion
-        ]);
+        return DB::transaction(function () use ($request, $habilidad) {
+            $habilidad->update([
+                'nombre' => $this->formatearTexto($request->nombre),
+                'descripcion' => $request->descripcion
+            ]);
 
-        return response()->json($habilidad);
+            // Sincronizar Actividades: Borramos las viejas y creamos las nuevas
+            // (Estrategia simple para evitar inconsistencias)
+            $habilidad->actividades()->delete();
+
+            if (!empty($request->actividades)) {
+                foreach ($request->actividades as $actividadTexto) {
+                    if (trim($actividadTexto) !== '') {
+                        $habilidad->actividades()->create(['descripcion' => trim($actividadTexto)]);
+                    }
+                }
+            }
+
+            return response()->json($habilidad->load('actividades'));
+        });
     }
 
-    // 4. ELIMINAR (DELETE)
+    // 4. ELIMINAR
     public function destroy($id)
     {
-        HabilidadBlanda::destroy($id);
+        HabilidadBlanda::destroy($id); // Por la relación cascade, se borran las actividades solas
         return response()->json(['message' => 'Eliminado correctamente']);
     }
 
-    // 5. IMPORTAR MASIVA (POST)
+    // 5. IMPORTAR MASIVA (CSV con Actividades)
     public function import(Request $request)
     {
         $request->validate(['file' => 'required|file']);
@@ -65,16 +94,14 @@ class HabilidadBlandaController extends Controller
         $file = $request->file('file');
         $contenido = file_get_contents($file->getRealPath());
         
-        // Manejo de encoding (tildes)
         if (!mb_detect_encoding($contenido, 'UTF-8', true)) {
             $contenido = mb_convert_encoding($contenido, 'UTF-8', 'ISO-8859-1');
         }
 
-      
         $lines = preg_split("/\r\n|\n|\r/", $contenido);
         $separador = ',';
 
-        
+        // Detectar separador
         foreach ($lines as $linea) {
             if (trim($linea) !== '') {
                 if (substr_count($linea, ';') > substr_count($linea, ',')) $separador = ';';
@@ -83,30 +110,49 @@ class HabilidadBlandaController extends Controller
         }
 
         $creados = 0;
-        foreach ($lines as $linea) {
-            if (trim($linea) === '') continue;
-            
-            $row = str_getcsv($linea, $separador);
-            
-            // Ignorar cabecera o filas vacías
-            if (!isset($row[0]) || strtolower(trim($row[0])) === 'nombre') continue;
+        $actualizados = 0;
 
-            $nombre = $this->formatearTexto($row[0]);
-            $descripcion = isset($row[1]) ? trim($row[1]) : '';
+        DB::transaction(function () use ($lines, $separador, &$creados, &$actualizados) {
+            foreach ($lines as $linea) {
+                if (trim($linea) === '') continue;
+                
+                $row = str_getcsv($linea, $separador);
+                
+                // Formato CSV esperado: Nombre | Descripción | Actividad 1 | Actividad 2 | ...
+                if (!isset($row[0]) || strtolower(trim($row[0])) === 'nombre') continue;
 
-            // Guardar si no existe
-            $habilidad = HabilidadBlanda::firstOrCreate(
-                ['nombre' => $nombre],
-                ['descripcion' => $descripcion]
-            );
+                $nombre = $this->formatearTexto($row[0]);
+                $descripcion = isset($row[1]) ? trim($row[1]) : '';
 
-            if ($habilidad->wasRecentlyCreated) $creados++;
-        }
+                // Buscar o Crear la Habilidad
+                $habilidad = HabilidadBlanda::firstOrCreate(
+                    ['nombre' => $nombre],
+                    ['descripcion' => $descripcion]
+                );
 
-        return response()->json(['message' => "Importación exitosa. $creados habilidades nuevas."]);
+                if ($habilidad->wasRecentlyCreated) {
+                    $creados++;
+                } else {
+                    $actualizados++;
+                }
+
+                // Procesar Actividades (Columnas 2 en adelante)
+                // Se agregan solo si no existen para no duplicar en cargas sucesivas
+                for ($i = 2; $i < count($row); $i++) {
+                    $actDesc = trim($row[$i]);
+                    if (!empty($actDesc)) {
+                        ActividadHabilidad::firstOrCreate([
+                            'habilidad_blanda_id' => $habilidad->id,
+                            'descripcion' => $actDesc
+                        ]);
+                    }
+                }
+            }
+        });
+
+        return response()->json(['message' => "Proceso completado. $creados habilidades nuevas, $actualizados actualizadas con sus actividades."]);
     }
 
-    // AUXILIAR: Formato Título (Title Case)
     private function formatearTexto($texto) {
         return mb_convert_case(trim($texto), MB_CASE_TITLE, "UTF-8");
     }

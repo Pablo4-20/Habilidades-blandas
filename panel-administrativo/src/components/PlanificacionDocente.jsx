@@ -30,54 +30,6 @@ const PlanificacionDocente = () => {
     const [nuevaActividad, setNuevaActividad] = useState(''); 
     const [habilidadParaActividad, setHabilidadParaActividad] = useState(null);
 
-    // --- BASE DE DATOS DE ACTIVIDADES ---
-    const ACTIVIDADES_GUIA = {
-        "Comunicación Efectiva": [
-            "Debates y mesas redondas", "Presentaciones orales y proyectos grupales",
-            "Simulaciones y dramatizaciones", "Análisis de discursos y textos"
-        ],
-        "Resolución de Problemas": [
-            "Observación directa", "Estudio de casos", "Debates y discusiones",
-            "Simulaciones y role-playing", "Proyectos colaborativos", "Autoevaluación y reflexión"
-        ],
-        "Trabajo en Equipo": [
-            "Observación directa", "Estudio de casos", "Debates y discusiones",
-            "Simulaciones y role-playing", "Proyectos colaborativos"
-        ],
-        "Gestión del Tiempo": [
-            "Observación directa", "Análisis de resultados",
-            "Retroalimentación de pares", "Uso de indicadores de desempeño"
-        ],
-        "Adaptabilidad": [
-            "Aprendizaje basado en problemas", "Simulación de escenarios cambiantes",
-            "Proyectos interdisciplinarios", "Uso de metodologías activas"
-        ],
-        "Aprender a Aprender": [
-            "Aprendizaje basado en problemas", "Simulación de escenarios cambiantes",
-            "Proyectos interdisciplinarios"
-        ],
-        "Asertividad": [
-            "Debates y discusiones guiadas", "Sesiones de preguntas y respuestas",
-            "Análisis de casos", "Proyectos de innovación"
-        ],
-        "Creatividad": [
-            "Debates y discusiones guiadas", "Análisis de casos",
-            "Proyectos de innovación", "Evaluación del proceso creativo"
-        ],
-        "Pensamiento Crítico": [
-            "Feedback constructivo", "Análisis de casos",
-            "Debates estructurados", "Ensayos reflexivos"
-        ],
-        "Liderazgo": [
-            "Rubricas de evaluación de liderazgo", "Autoevaluación y metacognición",
-            "Portafolios reflexivos", "Evaluación entre pares"
-        ],
-        "Toma de Decisiones": [
-            "Rubricas de evaluación", "Autoevaluación y metacognición",
-            "Portafolios reflexivos", "Estudio de casos reales"
-        ]
-    };
-
     // 1. CARGA INICIAL
     useEffect(() => {
         const cargarDatos = async () => {
@@ -126,6 +78,7 @@ const PlanificacionDocente = () => {
             });
 
             if (res.data.tiene_asignacion) {
+                // El backend ahora envía habilidades CON sus actividades
                 setCatalogoHabilidades(res.data.habilidades || []);
                 
                 if (res.data.es_edicion) {
@@ -253,18 +206,20 @@ const PlanificacionDocente = () => {
     }));
     const opcionesParciales = [{ value: '1', label: '1er Parcial' }, { value: '2', label: '2do Parcial' }];
 
+    // 👇 FUNCIÓN ACTUALIZADA: Obtiene opciones dinámicamente desde el objeto habilidad
     const getOpcionesActividades = (habilidadId) => {
         const habilidadObj = catalogoHabilidades.find(h => h.id === habilidadId);
-        if (!habilidadObj) return [];
-        const nombreBD = habilidadObj.nombre;
-        let actividades = ACTIVIDADES_GUIA[nombreBD] || [];
         
-        if (actividades.length === 0) {
-            const key = Object.keys(ACTIVIDADES_GUIA).find(k => nombreBD.includes(k) || k.includes(nombreBD));
-            if (key) actividades = ACTIVIDADES_GUIA[key];
+        // Si no hay actividades cargadas desde la BD
+        if (!habilidadObj || !habilidadObj.actividades || habilidadObj.actividades.length === 0) {
+            return [{ value: 'Actividad General', label: 'Actividad General' }];
         }
-        if (actividades.length === 0) return [{ value: 'Actividad General', label: 'Actividad General' }];
-        return actividades.map(act => ({ value: act, label: act }));
+
+        // Mapear las actividades que vienen del backend
+        return habilidadObj.actividades.map(act => ({
+            value: act.descripcion,
+            label: act.descripcion
+        }));
     };
 
     return (
@@ -276,7 +231,6 @@ const PlanificacionDocente = () => {
                 {esEdicion && <span className="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-xs font-bold border border-amber-200">Modo Edición</span>}
             </div>
 
-            {/* SE ELIMINÓ EL GRID PRINCIPAL (COLUMNAS) Y SE DEJÓ SOLO EL CONTENIDO A ANCHO COMPLETO */}
             <div className="w-full space-y-6">
                 
                 {/* FILTROS */}
@@ -301,7 +255,6 @@ const PlanificacionDocente = () => {
                             {form.parcial === '2' ? 'Habilidades Continuas (2do Parcial)' : 'Selecciona las Habilidades (1er Parcial)'}
                         </h3>
                         
-                        {/* GRID DE 2 COLUMNAS PARA LAS HABILIDADES CON 'items-start' PARA EVITAR ESTIRAMIENTO */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                             {catalogoHabilidades
                                 .filter(hab => form.parcial === '1' || habilidadesSeleccionadas.includes(hab.id))

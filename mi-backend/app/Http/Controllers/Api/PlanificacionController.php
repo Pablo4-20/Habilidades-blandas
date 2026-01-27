@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Planificacion;
-use App\Models\HabilidadBlanda; // Asegúrate de que el modelo apunte a 'habilidades_blandas'
+use App\Models\HabilidadBlanda; 
 use App\Models\Asignacion; 
 use Illuminate\Support\Facades\DB;
 
@@ -35,8 +35,12 @@ class PlanificacionController extends Controller
                 ]);
             }
 
-            // 2. Traer Catálogo Global (CORRECCIÓN: Asegurar nombre de tabla correcto en Modelo)
-            $catalogoHabilidades = HabilidadBlanda::select('id', 'nombre', 'descripcion')->get();
+            // 2. Traer Catálogo Global CON ACTIVIDADES
+            // 👇 CAMBIO IMPORTANTE: Agregamos with('actividades')
+            $catalogoHabilidades = HabilidadBlanda::with('actividades')
+                ->select('id', 'nombre', 'descripcion')
+                ->orderBy('nombre', 'asc')
+                ->get();
 
             // 3. Buscar planificación existente
             $queryPlan = Planificacion::with('detalles')
@@ -56,7 +60,7 @@ class PlanificacionController extends Controller
             $datosRespuesta = [
                 'tiene_asignacion' => true,
                 'periodo_detectado' => $asignacion->periodo,
-                'habilidades' => $catalogoHabilidades, // <--- CORREGIDO: Ahora se llama 'habilidades'
+                'habilidades' => $catalogoHabilidades, 
                 'es_edicion' => false,
                 'parcial_guardado' => null,
                 'habilidades_seleccionadas' => [], 
@@ -67,12 +71,9 @@ class PlanificacionController extends Controller
                 $datosRespuesta['es_edicion'] = true;
                 $datosRespuesta['parcial_guardado'] = $planDocente->parcial;
                 
-                // Reconstruir datos desde DETALLES
                 foreach ($planDocente->detalles as $detalle) {
                     $datosRespuesta['habilidades_seleccionadas'][] = $detalle->habilidad_blanda_id;
-                    
-                    // Convertir salto de línea en array para el frontend si es necesario
-                    // O mantener string si tu frontend usa split
+                    // Convertir salto de línea en array
                     $datosRespuesta['actividades_guardadas'][$detalle->habilidad_blanda_id] = explode("\n", $detalle->actividades);
                 }
             }
@@ -108,7 +109,7 @@ class PlanificacionController extends Controller
                 ]
             );
 
-            // 2. Guardar Detalles (Borrar previos para evitar duplicados)
+            // 2. Guardar Detalles
             $planificacion->detalles()->delete();
 
             foreach ($request->detalles as $detalle) {
@@ -116,7 +117,6 @@ class PlanificacionController extends Controller
 
                 $planificacion->detalles()->create([
                     'habilidad_blanda_id' => $detalle['habilidad_blanda_id'],
-                    // Si viene como array, lo unimos. Si es string, lo dejamos.
                     'actividades' => is_array($detalle['actividades']) 
                                      ? implode("\n", $detalle['actividades']) 
                                      : $detalle['actividades']
