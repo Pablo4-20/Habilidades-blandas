@@ -16,7 +16,7 @@ class UsuarioSeeder extends Seeder
                     ->where('nombre', 'like', '%Tecnolog%') // Busca "Tecnologías de la..."
                     ->orWhere('nombre', 'TI')
                     ->value('id') ?? 2;
-                    
+
     // 1. ADMIN
     DB::table('users')->updateOrInsert(
         ['email' => 'admin@ueb.edu.ec'],
@@ -36,12 +36,12 @@ class UsuarioSeeder extends Seeder
 
     // 2. COORDINADOR
     DB::table('users')->updateOrInsert(
-        ['email' => 'coordinador@ueb.edu.ec'],
+        ['email' => 'ggarcia@ueb.edu.ec'],
         [
-            'cedula' => '0200000002',
-            'nombres' => 'Galuth',
-            'apellidos' => 'García',
-            'password' => Hash::make('password'),
+            'cedula' => '0201618253',
+            'nombres' => 'Galuth Irene',
+            'apellidos' => 'García Camacho',
+            'password' => Hash::make('0201618253'),
             'rol' => 'coordinador',
             'email_verified_at' => now(),
             'must_change_password' => false,
@@ -50,12 +50,12 @@ class UsuarioSeeder extends Seeder
         ]
     );
     DB::table('users')->updateOrInsert(
-            ['email' => 'coordinador.tic@ueb.edu.ec'],
+            ['email' => 'dbarreno@ueb.edu.ec'],
             [
-                'cedula' => '0300000003',
-                'nombres' => 'Coordinador',
-                'apellidos' => 'TICs',
-                'password' => Hash::make('password'),
+                'cedula' => '0602571572',
+                'nombres' => 'DANILO GEOVANNY',
+                'apellidos' => 'BARRENO NARANJO',
+                'password' => Hash::make('0602571572'),
                 'rol' => 'coordinador',
                 'carrera_id' => $idTic, // <--- ASIGNADO A TICS
                 'email_verified_at' => now(),
@@ -66,12 +66,12 @@ class UsuarioSeeder extends Seeder
         );
     // 3. DOCENTE
     DB::table('users')->updateOrInsert(
-        ['email' => 'docente@ueb.edu.ec'],
+        ['email' => 'mbonilla@ueb.edu.ec'],
         [
-            'cedula' => '0200000003',
-            'nombres' => 'Docente',
-            'apellidos' => 'Prueba',
-            'password' => Hash::make('password'),
+            'cedula' => '1802628568',
+            'nombres' => 'MONICA ELIZABETH',
+            'apellidos' => 'BONILLA MANOBANDA',
+            'password' => Hash::make('1802628568'),
             'rol' => 'docente',
             'carrera_id' => null,
             'email_verified_at' => now(),
