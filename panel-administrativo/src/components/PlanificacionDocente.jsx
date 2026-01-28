@@ -69,7 +69,7 @@ const PlanificacionDocente = () => {
         setForm(prev => ({ ...prev, asignatura_id: val, parcial: nuevoParcial }));
     };
 
-    // --- LÓGICA PRINCIPAL (MODIFICADA) ---
+    // --- LÓGICA PRINCIPAL ---
     const cargarPlanificacion = async () => {
         setLoading(true);
         try {
@@ -85,26 +85,41 @@ const PlanificacionDocente = () => {
                     
                     let seleccionadas = (res.data.habilidades_seleccionadas || []).map(id => Number(id));
                     
-                    // --- CORRECCIÓN AQUÍ: SINCRONIZACIÓN AUTOMÁTICA ---
-                    // Si estamos en Parcial 2, combinamos lo guardado en P2 con lo que viene de P1
+                    // --- SINCRONIZACIÓN ESTRICTA ---
                     if (form.parcial === '2' && res.data.habilidades_p1 && res.data.habilidades_p1.length > 0) {
                         const idsP1 = res.data.habilidades_p1.map(id => Number(id));
-                        // Unimos los arrays y usamos Set para eliminar duplicados
-                        const combinadas = [...new Set([...seleccionadas, ...idsP1])];
                         
-                        if (combinadas.length > seleccionadas.length) {
+                        // Forzamos que la selección sea idéntica a la del P1.
+                        const nuevaSeleccion = idsP1;
+
+                        const huboCambios = seleccionadas.length !== nuevaSeleccion.length || 
+                                            !seleccionadas.every(s => nuevaSeleccion.includes(s));
+
+                        if (huboCambios) {
                              Swal.mixin({toast: true, position: 'top-end', timer: 3000, showConfirmButton: false})
-                            .fire({icon: 'info', title: 'Se detectaron nuevas habilidades del Parcial 1.'});
+                            .fire({icon: 'info', title: 'Se sincronizaron las habilidades con el Parcial 1.'});
                         }
-                        seleccionadas = combinadas;
+                        
+                        seleccionadas = nuevaSeleccion;
+
+                        // Limpieza de actividades de habilidades que ya no existen
+                        const actividadesLimpias = {};
+                        seleccionadas.forEach(id => {
+                            if (res.data.actividades_guardadas && res.data.actividades_guardadas[id]) {
+                                actividadesLimpias[id] = res.data.actividades_guardadas[id];
+                            }
+                        });
+                        
+                        setActividadesPorHabilidad(actividadesLimpias);
+                    } else {
+                        setActividadesPorHabilidad(res.data.actividades_guardadas || {});
                     }
                     // -------------------------------------------------
 
                     setHabilidadesSeleccionadas(seleccionadas);
-                    setActividadesPorHabilidad(res.data.actividades_guardadas || {});
                     
                 } else if (form.parcial === '2') {
-                    // Si NO existe P2 aun, cargamos todo del P1 (como ya estaba antes)
+                    // Carga inicial P2
                     const idsDelP1 = (res.data.habilidades_p1 || []).map(id => Number(id));
                     
                     if (idsDelP1.length > 0) {
@@ -113,7 +128,7 @@ const PlanificacionDocente = () => {
                         setActividadesPorHabilidad({}); 
                         
                         Swal.mixin({toast: true, position: 'top-end', timer: 3000, showConfirmButton: false})
-                            .fire({icon: 'success', title: 'Habilidades copiadas del P1. Defina las nuevas actividades.'});
+                            .fire({icon: 'success', title: 'Habilidades del P1 cargadas. Defina las actividades.'});
                     } else {
                         setEsEdicion(false);
                         setHabilidadesSeleccionadas([]);
@@ -134,6 +149,10 @@ const PlanificacionDocente = () => {
     };
 
     const toggleHabilidad = (id) => {
+        // --- BLOQUEO: Si es Parcial 2, NO permitir cambios ---
+        if (form.parcial === '2') return;
+        // -----------------------------------------------------
+
         const idNum = Number(id);
         setHabilidadesSeleccionadas(prev => {
             if (prev.includes(idNum)) {
@@ -204,10 +223,7 @@ const PlanificacionDocente = () => {
             });
 
             window.scrollTo({ top: 0, behavior: 'smooth' });
-
-            // Forzamos recarga para ver los cambios aplicados
             cargarPlanificacion();
-            // Actualizamos la lista de materias por si cambió el icono de estado
             api.get('/docente/asignaturas').then(res => setMisAsignaturas(res.data));
 
         } catch (error) {
@@ -268,25 +284,38 @@ const PlanificacionDocente = () => {
                             {form.parcial === '2' ? 'Habilidades Continuas (2do Parcial)' : 'Selecciona las Habilidades (1er Parcial)'}
                         </h3>
                         
+                      
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                             {catalogoHabilidades
                                 .filter(hab => {
                                     if (form.parcial === '1') return true;
+                                    // En P2 solo mostramos las que están seleccionadas (que son las del P1)
+                                    // para no llenar la pantalla de opciones bloqueadas que no pueden usar.
                                     return habilidadesSeleccionadas.includes(Number(hab.id));
                                 })
                                 .map(hab => {
                                     const seleccionado = habilidadesSeleccionadas.includes(Number(hab.id));
                                     const opcionesActividades = getOpcionesActividades(hab.id);
+                                    
+                                    // Variable de bloqueo
+                                    const bloqueado = form.parcial === '2';
+
                                     return (
-                                        <div key={hab.id} className={`border rounded-xl p-4 transition-all flex flex-col ${seleccionado ? 'border-purple-500 bg-purple-50/30' : 'border-gray-200'}`}>
+                                        <div key={hab.id} className={`border rounded-xl p-4 transition-all flex flex-col ${seleccionado ? (bloqueado ? 'border-gray-300 bg-gray-50' : 'border-purple-500 bg-purple-50/30') : 'border-gray-200'}`}>
                                             <div className="flex items-center gap-3 mb-2">
-                                                <input 
-                                                    type="checkbox" 
-                                                    checked={seleccionado} 
-                                                    onChange={() => toggleHabilidad(hab.id)} 
-                                                    className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500 cursor-pointer"
-                                                />
-                                                <div>
+                                                <div className="relative flex items-center">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        checked={seleccionado} 
+                                                        onChange={() => toggleHabilidad(hab.id)} 
+                                                        disabled={bloqueado} // Deshabilita el click
+                                                        className={`w-5 h-5 rounded focus:ring-purple-500 ${bloqueado ? 'text-gray-400 cursor-not-allowed bg-gray-200 border-gray-300' : 'text-purple-600 cursor-pointer'}`}
+                                                    />
+                                                    {/* Ícono de candado visual */}
+                                                    {bloqueado && seleccionado && <LockClosedIcon className="h-3 w-3 text-gray-500 absolute -top-1 -right-1 bg-white rounded-full ring-1 ring-gray-200 shadow-sm"/>}
+                                                </div>
+
+                                                <div className={bloqueado ? 'opacity-80' : ''}>
                                                     <p className="font-bold text-gray-800">{hab.nombre}</p>
                                                     <p className="text-xs text-gray-500 line-clamp-2">{hab.descripcion}</p>
                                                 </div>

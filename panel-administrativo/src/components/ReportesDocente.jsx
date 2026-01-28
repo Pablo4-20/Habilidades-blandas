@@ -125,25 +125,21 @@ const ReportesDocente = () => {
         if (pasoActual > 0) setPasoActual(prev => prev - 1);
     };
 
-    // 6. AUTO GUARDADO INDIVIDUAL (La solución al problema)
+    // 6. AUTO GUARDADO INDIVIDUAL
     const handleAutoSave = async () => {
         if (!itemActual) return;
         
-        // Identificar qué planificacion ID usar (P2 tiene prioridad)
         const planID = itemActual.p2?.planificacion_id || itemActual.p1?.planificacion_id;
         const habID = itemActual.habilidad_id;
         const texto = conclusiones[keyTextAreaActual];
 
-        // Solo guardar si hay texto y tenemos IDs válidos
         if (planID && habID && texto !== undefined) {
-            setAutoGuardado(true); // Mostrar indicador "Guardando..."
+            setAutoGuardado(true);
             try {
-                // Enviamos formato de lista pero con un solo elemento
                 await api.post('/reportes/guardar-todo', { 
                     conclusiones: [{ id: planID, habilidad_id: habID, texto: texto }] 
                 });
                 
-                // Si existe P1 y P2, actualizamos ambos para consistencia (opcional)
                 if (itemActual.p1 && itemActual.p2) {
                      await api.post('/reportes/guardar-todo', { 
                         conclusiones: [{ id: itemActual.p1.planificacion_id, habilidad_id: habID, texto: texto }] 
@@ -261,10 +257,44 @@ const ReportesDocente = () => {
 
             {!loading && itemActual && (
                 <div className="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden flex flex-col transition-all duration-300">
-                    <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 flex justify-between items-center">
-                        <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Habilidad {pasoActual + 1} / {reportesAgrupados.length}</span>
-                        <div className="flex gap-1.5">{reportesAgrupados.map((_, idx) => (<div key={idx} className={`h-1.5 rounded-full transition-all duration-300 ${idx === pasoActual ? 'w-8 bg-blue-600' : 'w-2 bg-gray-300'}`}></div>))}</div>
+                    
+                    {/* --- HEADER MODIFICADO: AHORA INCLUYE LOS BOTONES --- */}
+                    <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 flex flex-col gap-4">
+                        {/* Fila 1: Progreso */}
+                        <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Habilidad {pasoActual + 1} / {reportesAgrupados.length}</span>
+                            <div className="flex gap-1.5">{reportesAgrupados.map((_, idx) => (<div key={idx} className={`h-1.5 rounded-full transition-all duration-300 ${idx === pasoActual ? 'w-8 bg-blue-600' : 'w-2 bg-gray-300'}`}></div>))}</div>
+                        </div>
+
+                        {/* Fila 2: Controles de Navegación (Movidos Arriba) */}
+                        <div className="flex justify-between items-center pt-1">
+                            <button 
+                                onClick={handleAnterior} 
+                                disabled={pasoActual === 0} 
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs transition ${pasoActual === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-white hover:shadow-sm hover:text-gray-900 border border-transparent hover:border-gray-200'}`}
+                            >
+                                <ArrowLeftIcon className="h-4 w-4"/> Anterior
+                            </button>
+
+                            {pasoActual < reportesAgrupados.length - 1 ? (
+                                <button 
+                                    onClick={handleSiguiente} 
+                                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-bold text-xs shadow-lg shadow-blue-200/50 flex items-center gap-2 transform active:scale-95 transition"
+                                >
+                                    Siguiente <ArrowRightIcon className="h-4 w-4"/>
+                                </button>
+                            ) : (
+                                <button 
+                                    onClick={guardarTodo} 
+                                    disabled={guardando} 
+                                    className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-bold text-xs shadow-lg shadow-green-200/50 flex items-center gap-2 transform active:scale-95 transition"
+                                >
+                                    {guardando ? 'Guardando...' : <><ArrowDownTrayIcon className="h-4 w-4"/> Finalizar</>}
+                                </button>
+                            )}
+                        </div>
                     </div>
+                    {/* ---------------------------------------------------- */}
 
                     <div className="p-6 md:p-8 space-y-8">
                         <div className="flex items-center gap-4">
@@ -287,27 +317,18 @@ const ReportesDocente = () => {
                                 className="w-full px-4 py-3 border border-blue-200 rounded-xl bg-white focus:ring-4 focus:ring-blue-100 focus:border-blue-300 outline-none text-sm resize-none transition-all"
                                 placeholder={`Describa el avance del grupo en la habilidad "${itemActual.habilidad}"...`}
                                 value={conclusiones[keyTextAreaActual] || ''}
-                                // Actualización Local Segura
                                 onChange={(e) => {
                                     if (keyTextAreaActual) {
                                         setConclusiones(prev => ({ ...prev, [keyTextAreaActual]: e.target.value }));
                                     }
                                 }}
-                                // Guardado Automático al salir del campo
                                 onBlur={handleAutoSave}
                             />
                             <p className="text-xs text-gray-400 mt-2 text-right">Se guarda automáticamente al cambiar de campo.</p>
                         </div>
                     </div>
 
-                    <div className="bg-gray-50 p-5 border-t border-gray-100 flex justify-between items-center">
-                        <button onClick={handleAnterior} disabled={pasoActual === 0} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition ${pasoActual === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-white hover:shadow-sm hover:text-gray-900 border border-transparent hover:border-gray-200'}`}><ArrowLeftIcon className="h-4 w-4"/> Anterior</button>
-                        {pasoActual < reportesAgrupados.length - 1 ? (
-                            <button onClick={handleSiguiente} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl font-bold text-sm shadow-lg shadow-blue-200/50 flex items-center gap-2 transform active:scale-95 transition">Siguiente Habilidad <ArrowRightIcon className="h-4 w-4"/></button>
-                        ) : (
-                            <button onClick={guardarTodo} disabled={guardando} className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 rounded-xl font-bold text-sm shadow-lg shadow-green-200/50 flex items-center gap-2 transform active:scale-95 transition">{guardando ? 'Guardando...' : <><ArrowDownTrayIcon className="h-5 w-5"/> Finalizar Reporte</>}</button>
-                        )}
-                    </div>
+                    {/* Footer removido ya que los botones están arriba ahora */}
                 </div>
             )}
             
