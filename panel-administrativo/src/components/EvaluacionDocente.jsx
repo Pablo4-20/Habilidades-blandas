@@ -22,7 +22,7 @@ const EvaluacionDocente = () => {
     const [estudiantes, setEstudiantes] = useState([]);
     const [loading, setLoading] = useState(false);
     const [mostrarRubrica, setMostrarRubrica] = useState(true); 
-    const [actividadesRubrica, setActividadesRubrica] = useState([]); 
+    // const [actividadesRubrica, setActividadesRubrica] = useState([]); // YA NO LO USAMOS PARA LA VISTA
 
     const [selectedPeriodo, setSelectedPeriodo] = useState(''); 
     const [selectedAsignatura, setSelectedAsignatura] = useState('');
@@ -123,12 +123,10 @@ const EvaluacionDocente = () => {
                     mapaProgreso[Number(p.habilidad_id)] = (p.completado === 1 || p.completado === true || p.completado === '1'); 
                 });
 
-                // Forzamos visualmente la que acabamos de terminar
                 if (idRecienCompletado) {
                     mapaProgreso[Number(idRecienCompletado)] = true;
                 }
 
-                // CORRECCIÓN CLAVE: Fusionamos con el estado anterior para evitar que se borren
                 setProgresoHabilidades(prev => ({
                     ...prev,
                     ...mapaProgreso
@@ -138,7 +136,6 @@ const EvaluacionDocente = () => {
                 if (habilidadesListas.length > 0) {
                     const activaEsValida = habilidadesListas.some(h => Number(h.id) === Number(habilidadActiva));
                     if (!habilidadActiva || !activaEsValida) {
-                         // Buscar la primera que NO esté completa en el mapa nuevo
                          const primeraPendiente = habilidadesListas.find(h => !mapaProgreso[Number(h.id)]);
                          const siguienteId = primeraPendiente ? Number(primeraPendiente.id) : Number(habilidadesListas[0].id);
                          setHabilidadActiva(siguienteId);
@@ -162,10 +159,8 @@ const EvaluacionDocente = () => {
             
             if (res.data && res.data.estudiantes) {
                 setEstudiantes(res.data.estudiantes);
-                let acts = res.data.actividades;
-                if (typeof acts === 'string') { try { acts = JSON.parse(acts); } catch { acts = []; } }
-                if (!Array.isArray(acts)) acts = [];
-                setActividadesRubrica(acts);
+                // NOTA: Ignoramos las actividades que devuelve este endpoint para la visualización,
+                // ya que pueden estar desactualizadas. Usaremos 'actividadesContexto'.
                 setMostrarRubrica(true);
             } else {
                 setEstudiantes([]);
@@ -195,7 +190,6 @@ const EvaluacionDocente = () => {
             const pendientesLocal = estudiantes.filter(e => !e.nivel).length;
             const habilidadCompletada = (pendientesLocal === 0);
 
-            // Verificación general del parcial
             const todasCompletadas = habilidadesPlanificadas.every(h => {
                 const idH = Number(h.id);
                 if (idH === Number(habilidadActiva)) return habilidadCompletada;
@@ -203,7 +197,6 @@ const EvaluacionDocente = () => {
             });
 
             if (habilidadCompletada) {
-                // Actualizar estado local inmediatamente para evitar parpadeo
                 setProgresoHabilidades(prev => ({
                     ...prev,
                     [Number(habilidadActiva)]: true
@@ -256,7 +249,6 @@ const EvaluacionDocente = () => {
                 });
             }
 
-            // Recargar datos asegurando que el ID actual se mantenga como completado
             await cargarPlanificacionYProgreso(true, habilidadCompletada ? habilidadActiva : null); 
             
             if (selectedParcial === '1' && todasCompletadas) {
@@ -335,7 +327,6 @@ const EvaluacionDocente = () => {
                     <h2 className="text-2xl font-bold text-gray-900">Evaluación Docente</h2>
                     <p className="text-gray-500 text-sm mt-1">Califica el desempeño en base a las actividades planificadas.</p>
                 </div>
-                
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -369,7 +360,6 @@ const EvaluacionDocente = () => {
                             <h3 className="text-xs font-bold text-gray-400 uppercase px-1">Progreso de Habilidades ({selectedParcial === '1' ? '1er P.' : '2do P.'})</h3>
                             {habilidadesPlanificadas.map((hab) => {
                                 const idHab = Number(hab.id);
-                                // Forzamos conversión a número para evitar fallos por string
                                 const completado = progresoHabilidades[idHab] === true; 
                                 const activo = Number(habilidadActiva) === idHab;
                                 
@@ -387,11 +377,8 @@ const EvaluacionDocente = () => {
                                             {hab.nombre}
                                         </div>
                                         
-                                        {/* 👇 LÓGICA DE ESTRELLA AMARILLA MEJORADA 👇 */}
                                         {completado ? (
                                             <StarIconSolid 
-                                                // Aquí es el cambio importante: Si es Activo = amarillo claro (300).
-                                                // Si NO es activo = amarillo fuerte (500) para que se vea pintado sobre el fondo blanco.
                                                 className={`h-5 w-5 drop-shadow-sm transition-colors duration-300 ${activo ? 'text-yellow-300' : 'text-yellow-500'}`} 
                                                 title="¡Completado!"
                                             />
@@ -408,10 +395,11 @@ const EvaluacionDocente = () => {
                         <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 animate-fade-in">
                             <h4 className="text-sm font-bold text-amber-800 flex items-center gap-2 mb-2"><ListBulletIcon className="h-5 w-5"/> Actividades Planificadas:</h4>
                             <ul className="list-disc list-inside text-xs text-amber-900/80 space-y-1 ml-1 font-medium">
-                                {Array.isArray(actividadesRubrica) && actividadesRubrica.length > 0 ? (
-                                    actividadesRubrica.map((act, idx) => <li key={idx}>{act.descripcion || act}</li>)
-                                ) : (
+                                {/* CORRECCIÓN AQUÍ: Usamos estrictamente 'actividadesContexto' que viene de la planificación actual */}
+                                {(actividadesContexto[habilidadActiva] || []).length > 0 ? (
                                     (actividadesContexto[habilidadActiva] || []).map((act, idx) => <li key={idx}>{act}</li>)
+                                ) : (
+                                    <li className="italic text-amber-700/50">Sin actividades registradas.</li>
                                 )}
                             </ul>
                         </div>
