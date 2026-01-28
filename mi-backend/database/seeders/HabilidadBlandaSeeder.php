@@ -11,7 +11,9 @@ class HabilidadBlandaSeeder extends Seeder
     {
         // 1. DICCIONARIO GLOBAL (Banco de Habilidades)
         // Usamos las claves como 'nombre' y el valor como 'descripcion' (o sugerencias)
-       
+        $habilidades = [
+            
+        ];
 
         // 2. CARGA MASIVA SIMPLE
         // Ya no recorremos materias ($mapa), solo guardamos las habilidades para que existan.
