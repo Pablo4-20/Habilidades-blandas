@@ -281,7 +281,7 @@ const GestionUsuarios = () => {
                 Swal.fire({
                     title: 'Resumen de Carga',
                     html: htmlContent,
-                    icon: (errores && errores.length > 0) ? 'warning' : 'success',
+                   
                     confirmButtonText: 'Entendido'
                 });
             }

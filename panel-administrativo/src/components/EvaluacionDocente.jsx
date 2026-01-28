@@ -22,14 +22,16 @@ const EvaluacionDocente = () => {
     const [estudiantes, setEstudiantes] = useState([]);
     const [loading, setLoading] = useState(false);
     const [mostrarRubrica, setMostrarRubrica] = useState(true); 
-    // const [actividadesRubrica, setActividadesRubrica] = useState([]); // YA NO LO USAMOS PARA LA VISTA
-
+    
     const [selectedPeriodo, setSelectedPeriodo] = useState(''); 
     const [selectedAsignatura, setSelectedAsignatura] = useState('');
     const [selectedParcial, setSelectedParcial] = useState('1');
     const [habilidadActiva, setHabilidadActiva] = useState(null); 
     
     const [p2Habilitado, setP2Habilitado] = useState(false);
+
+    // NUEVO ESTADO: Controla si el docente tiene permiso para calificar (si cumplió requisitos)
+    const [permisoCalificar, setPermisoCalificar] = useState(false);
 
     // --- CARGAS INICIALES ---
     useEffect(() => {
@@ -49,7 +51,7 @@ const EvaluacionDocente = () => {
         fetchInicial();
     }, []);
 
-    // --- VERIFICAR ESTADO DEL PARCIAL 1 ---
+    // --- VERIFICAR ESTADO DEL PARCIAL 1 (Para desbloquear P2) ---
     const verificarEstadoP1 = async () => {
         if (!selectedAsignatura || !selectedPeriodo) return;
         try {
@@ -75,21 +77,67 @@ const EvaluacionDocente = () => {
         }
     };
 
+    // --- NUEVA FUNCIÓN: Verificar Requisitos de Planificación (P1 y P2) ---
+    const verificarRequisitosPrevios = async () => {
+        if (!selectedAsignatura || !selectedPeriodo) return;
+        
+        setPermisoCalificar(false); // Bloquear por defecto hasta verificar
+        setLoading(true);
+
+        try {
+            // Consultamos la planificación de AMBOS parciales
+            const [resP1, resP2] = await Promise.all([
+                api.get(`/planificaciones/verificar/${selectedAsignatura}?parcial=1&periodo=${encodeURIComponent(selectedPeriodo)}`),
+                api.get(`/planificaciones/verificar/${selectedAsignatura}?parcial=2&periodo=${encodeURIComponent(selectedPeriodo)}`)
+            ]);
+
+            // Verificamos que existan y estén guardadas (es_edicion indica que ya se guardó)
+            const p1Completo = resP1.data.tiene_asignacion && resP1.data.es_edicion;
+            const p2Completo = resP2.data.tiene_asignacion && resP2.data.es_edicion;
+
+            if (p1Completo && p2Completo) {
+                setPermisoCalificar(true);
+                verificarEstadoP1(); // Si cumple, verificamos el progreso del P1 para habilitar pestañas
+            } else {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Planificación Incompleta',
+                    text: 'No puedes calificar hasta que hayas seleccionado las habilidades y actividades para el Parcial 1 y Parcial 2 en el módulo de Planificación.',
+                    confirmButtonText: 'Entendido'
+                }).then(() => {
+                    // Reseteamos la selección para obligar al usuario a salir o corregir
+                    setSelectedAsignatura('');
+                    setHabilidadesPlanificadas([]);
+                    setActividadesContexto({});
+                });
+            }
+
+        } catch (error) {
+            console.error("Error verificando requisitos", error);
+            Swal.fire('Error', 'No se pudo verificar la planificación del docente.', 'error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // --- EFECTO AL SELECCIONAR MATERIA ---
     useEffect(() => {
         if(selectedAsignatura && selectedPeriodo) {
-            verificarEstadoP1();
+            verificarRequisitosPrevios(); // Ahora llamamos a la validación estricta primero
             setSelectedParcial('1');
         }
     }, [selectedAsignatura, selectedPeriodo]);
 
+    // --- CARGAR DATOS DE LA VISTA ---
     useEffect(() => {
-        if (selectedAsignatura && selectedParcial && selectedPeriodo) {
+        // Solo cargamos si hay permiso para calificar
+        if (selectedAsignatura && selectedParcial && selectedPeriodo && permisoCalificar) {
             cargarPlanificacionYProgreso(false);
         }
-    }, [selectedAsignatura, selectedParcial, selectedPeriodo]);
+    }, [selectedAsignatura, selectedParcial, selectedPeriodo, permisoCalificar]);
 
     useEffect(() => {
-        if (selectedAsignatura && habilidadActiva && selectedParcial) {
+        if (selectedAsignatura && habilidadActiva && selectedParcial && permisoCalificar) {
             cargarEstudiantesYNotas();
         }
     }, [habilidadActiva, selectedParcial]);
@@ -159,8 +207,6 @@ const EvaluacionDocente = () => {
             
             if (res.data && res.data.estudiantes) {
                 setEstudiantes(res.data.estudiantes);
-                // NOTA: Ignoramos las actividades que devuelve este endpoint para la visualización,
-                // ya que pueden estar desactualizadas. Usaremos 'actividadesContexto'.
                 setMostrarRubrica(true);
             } else {
                 setEstudiantes([]);
@@ -395,7 +441,6 @@ const EvaluacionDocente = () => {
                         <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 animate-fade-in">
                             <h4 className="text-sm font-bold text-amber-800 flex items-center gap-2 mb-2"><ListBulletIcon className="h-5 w-5"/> Actividades Planificadas:</h4>
                             <ul className="list-disc list-inside text-xs text-amber-900/80 space-y-1 ml-1 font-medium">
-                                {/* CORRECCIÓN AQUÍ: Usamos estrictamente 'actividadesContexto' que viene de la planificación actual */}
                                 {(actividadesContexto[habilidadActiva] || []).length > 0 ? (
                                     (actividadesContexto[habilidadActiva] || []).map((act, idx) => <li key={idx}>{act}</li>)
                                 ) : (
