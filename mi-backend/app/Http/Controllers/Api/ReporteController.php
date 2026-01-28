@@ -169,7 +169,7 @@ class ReporteController extends Controller
     }
 
     // ==========================================
-    // 2. FICHA RESUMEN GENERAL (PDF Horizontal - Corrección Observación Docente)
+    // 2. FICHA RESUMEN GENERAL (PDF Horizontal)
     // ==========================================
     public function pdfDataGeneral(Request $request)
     {
@@ -263,11 +263,7 @@ class ReporteController extends Controller
                     'n4' => $conteos[4],
                     'n5' => $conteos[5],
                     'promedio' => $promedio,
-
-                    // 👇 AQUÍ ESTÁ LA CORRECCIÓN CLAVE:
-                    // Enviamos la 'conclusion_progreso' (Docente) bajo la llave 'conclusion'
                     'conclusion' => $reporteDB ? ($reporteDB->conclusion_progreso ?? '') : '', 
-                    
                     'cumplimiento' => $progreso . '%'
                 ];
             }
@@ -277,7 +273,7 @@ class ReporteController extends Controller
     }
 
     // ==========================================
-    // 3. GUARDAR OBSERVACIONES MASIVAS (COORDINADOR)
+    // 3. GUARDAR OBSERVACIONES (CORREGIDO)
     // ==========================================
     public function guardarConclusionesMasivas(Request $request)
     {
@@ -296,13 +292,8 @@ class ReporteController extends Controller
                     'habilidad_blanda_id' => $item['habilidad_id']
                 ]);
 
-                // Aquí guardamos la observación del coordinador (campo separado)
-                $reporte->observacion_coordinador = $texto;
-
-                // Parche: Si es nuevo, evitar error NOT NULL en campo docente
-                if (!$reporte->exists) {
-                    $reporte->conclusion_progreso = ' '; 
-                }
+                // CORRECCIÓN: Guardar en el campo del DOCENTE
+                $reporte->conclusion_progreso = $texto;
 
                 if (!$reporte->fecha_generacion) {
                     $reporte->fecha_generacion = now();
@@ -316,7 +307,7 @@ class ReporteController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
-            \Log::error("Error guardando reporte coordinador: " . $e->getMessage());
+            \Log::error("Error guardando reporte: " . $e->getMessage());
             return response()->json(['message' => 'Error al guardar: ' . $e->getMessage()], 500);
         }
     }
