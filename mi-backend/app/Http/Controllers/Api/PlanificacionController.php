@@ -35,14 +35,13 @@ class PlanificacionController extends Controller
                 ]);
             }
 
-            // 2. Traer Catálogo Global CON ACTIVIDADES
-            // 👇 CAMBIO IMPORTANTE: Agregamos with('actividades')
+            // 2. Traer Catálogo Global
             $catalogoHabilidades = HabilidadBlanda::with('actividades')
                 ->select('id', 'nombre', 'descripcion')
                 ->orderBy('nombre', 'asc')
                 ->get();
 
-            // 3. Buscar planificación existente
+            // 3. Buscar planificación ACTUAL (la solicitada)
             $queryPlan = Planificacion::with('detalles')
                 ->where('asignatura_id', $asignatura_id)
                 ->where('docente_id', $user->id)
@@ -56,6 +55,22 @@ class PlanificacionController extends Controller
 
             $planDocente = $queryPlan->first();
 
+            // --- NUEVO: SI ES PARCIAL 2, TRAER TAMBIÉN LOS IDS DEL PARCIAL 1 ---
+            $idsParcial1 = [];
+            if ($parcialSolicitado == '2') {
+                $planP1 = Planificacion::with('detalles')
+                    ->where('asignatura_id', $asignatura_id)
+                    ->where('docente_id', $user->id)
+                    ->where('periodo_academico', $asignacion->periodo)
+                    ->where('parcial', '1')
+                    ->first();
+                
+                if ($planP1) {
+                    $idsParcial1 = $planP1->detalles->pluck('habilidad_blanda_id')->toArray();
+                }
+            }
+            // -------------------------------------------------------------------
+
             // 4. Respuesta Estructurada
             $datosRespuesta = [
                 'tiene_asignacion' => true,
@@ -64,7 +79,8 @@ class PlanificacionController extends Controller
                 'es_edicion' => false,
                 'parcial_guardado' => null,
                 'habilidades_seleccionadas' => [], 
-                'actividades_guardadas' => []      
+                'actividades_guardadas' => [],
+                'habilidades_p1' => $idsParcial1 // Enviamos esto al frontend
             ];
 
             if ($planDocente) {
@@ -73,7 +89,6 @@ class PlanificacionController extends Controller
                 
                 foreach ($planDocente->detalles as $detalle) {
                     $datosRespuesta['habilidades_seleccionadas'][] = $detalle->habilidad_blanda_id;
-                    // Convertir salto de línea en array
                     $datosRespuesta['actividades_guardadas'][$detalle->habilidad_blanda_id] = explode("\n", $detalle->actividades);
                 }
             }
@@ -96,7 +111,6 @@ class PlanificacionController extends Controller
         ]);
 
         return DB::transaction(function () use ($request) {
-            // 1. Guardar Cabecera
             $planificacion = Planificacion::updateOrCreate(
                 [
                     'asignatura_id' => $request->asignatura_id,
@@ -109,7 +123,6 @@ class PlanificacionController extends Controller
                 ]
             );
 
-            // 2. Guardar Detalles
             $planificacion->detalles()->delete();
 
             foreach ($request->detalles as $detalle) {

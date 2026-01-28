@@ -69,7 +69,7 @@ const PlanificacionDocente = () => {
         setForm(prev => ({ ...prev, asignatura_id: val, parcial: nuevoParcial }));
     };
 
-    // --- LÓGICA PRINCIPAL ---
+    // --- LÓGICA PRINCIPAL (MODIFICADA) ---
     const cargarPlanificacion = async () => {
         setLoading(true);
         try {
@@ -78,28 +78,37 @@ const PlanificacionDocente = () => {
             });
 
             if (res.data.tiene_asignacion) {
-                // El backend ahora envía habilidades CON sus actividades
                 setCatalogoHabilidades(res.data.habilidades || []);
                 
                 if (res.data.es_edicion) {
                     setEsEdicion(true);
-                    // Aseguramos que los IDs sean números para evitar fallos de visualización
-                    const seleccionadasNumericas = (res.data.habilidades_seleccionadas || []).map(id => Number(id));
-                    setHabilidadesSeleccionadas(seleccionadasNumericas);
-                    setActividadesPorHabilidad(res.data.actividades_guardadas || {});
-                    Swal.mixin({toast: true, position: 'top-end', timer: 2000, showConfirmButton: false})
-                        .fire({icon: 'info', title: 'Planificación cargada'});
-                
-                } else if (form.parcial === '2') {
-                    // CARGA AUTOMÁTICA DEL PARCIAL 1
-                    const resP1 = await api.get(`/planificaciones/verificar/${form.asignatura_id}`, {
-                        params: { parcial: '1', periodo: form.periodo_academico }
-                    });
+                    
+                    let seleccionadas = (res.data.habilidades_seleccionadas || []).map(id => Number(id));
+                    
+                    // --- CORRECCIÓN AQUÍ: SINCRONIZACIÓN AUTOMÁTICA ---
+                    // Si estamos en Parcial 2, combinamos lo guardado en P2 con lo que viene de P1
+                    if (form.parcial === '2' && res.data.habilidades_p1 && res.data.habilidades_p1.length > 0) {
+                        const idsP1 = res.data.habilidades_p1.map(id => Number(id));
+                        // Unimos los arrays y usamos Set para eliminar duplicados
+                        const combinadas = [...new Set([...seleccionadas, ...idsP1])];
+                        
+                        if (combinadas.length > seleccionadas.length) {
+                             Swal.mixin({toast: true, position: 'top-end', timer: 3000, showConfirmButton: false})
+                            .fire({icon: 'info', title: 'Se detectaron nuevas habilidades del Parcial 1.'});
+                        }
+                        seleccionadas = combinadas;
+                    }
+                    // -------------------------------------------------
 
-                    if (resP1.data.es_edicion) {
+                    setHabilidadesSeleccionadas(seleccionadas);
+                    setActividadesPorHabilidad(res.data.actividades_guardadas || {});
+                    
+                } else if (form.parcial === '2') {
+                    // Si NO existe P2 aun, cargamos todo del P1 (como ya estaba antes)
+                    const idsDelP1 = (res.data.habilidades_p1 || []).map(id => Number(id));
+                    
+                    if (idsDelP1.length > 0) {
                         setEsEdicion(false); 
-                        // SOLUCIÓN AL BUG: Convertimos todo a Number para que el filtro funcione
-                        const idsDelP1 = (resP1.data.habilidades_seleccionadas || []).map(id => Number(id));
                         setHabilidadesSeleccionadas(idsDelP1);
                         setActividadesPorHabilidad({}); 
                         
@@ -196,8 +205,11 @@ const PlanificacionDocente = () => {
 
             window.scrollTo({ top: 0, behavior: 'smooth' });
 
-            setEsEdicion(true);
+            // Forzamos recarga para ver los cambios aplicados
+            cargarPlanificacion();
+            // Actualizamos la lista de materias por si cambió el icono de estado
             api.get('/docente/asignaturas').then(res => setMisAsignaturas(res.data));
+
         } catch (error) {
             Swal.fire('Error', 'No se pudo guardar la planificación.', 'error');
         }
@@ -259,7 +271,6 @@ const PlanificacionDocente = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                             {catalogoHabilidades
                                 .filter(hab => {
-                                    // FILTRO CORREGIDO: Asegura comparación numérica estricta para evitar errores
                                     if (form.parcial === '1') return true;
                                     return habilidadesSeleccionadas.includes(Number(hab.id));
                                 })
@@ -274,8 +285,6 @@ const PlanificacionDocente = () => {
                                                     checked={seleccionado} 
                                                     onChange={() => toggleHabilidad(hab.id)} 
                                                     className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500 cursor-pointer"
-                                                    // En Parcial 2 no se permite deseleccionar lo que viene del Parcial 1 (opcional, si se quiere estricta continuidad)
-                                                    // disabled={form.parcial === '2'} 
                                                 />
                                                 <div>
                                                     <p className="font-bold text-gray-800">{hab.nombre}</p>

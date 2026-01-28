@@ -14,6 +14,8 @@ const EvaluacionDocente = () => {
     // --- ESTADOS ---
     const [asignaturas, setAsignaturas] = useState([]);
     const [habilidadesPlanificadas, setHabilidadesPlanificadas] = useState([]);
+    
+    // Estado del progreso (IDs completados)
     const [progresoHabilidades, setProgresoHabilidades] = useState({}); 
     
     const [actividadesContexto, setActividadesContexto] = useState({}); 
@@ -111,6 +113,7 @@ const EvaluacionDocente = () => {
                 setHabilidadesPlanificadas(habilidadesListas);
                 setActividadesContexto(guardadas);
 
+                // --- CARGA DE PROGRESO ---
                 const resProgreso = await api.get('/docente/progreso', {
                     params: { asignatura_id: selectedAsignatura, periodo: selectedPeriodo, parcial: selectedParcial }
                 });
@@ -120,31 +123,25 @@ const EvaluacionDocente = () => {
                     mapaProgreso[Number(p.habilidad_id)] = (p.completado === 1 || p.completado === true || p.completado === '1'); 
                 });
 
+                // Forzamos visualmente la que acabamos de terminar
                 if (idRecienCompletado) {
                     mapaProgreso[Number(idRecienCompletado)] = true;
                 }
 
-                setProgresoHabilidades(mapaProgreso);
+                // CORRECCIÓN CLAVE: Fusionamos con el estado anterior para evitar que se borren
+                setProgresoHabilidades(prev => ({
+                    ...prev,
+                    ...mapaProgreso
+                }));
 
+                // Seleccionar automáticamente la primera si no hay activa
                 if (habilidadesListas.length > 0) {
-                    const primeraPendiente = habilidadesListas.find(h => !mapaProgreso[Number(h.id)]);
-                    const siguienteId = primeraPendiente ? Number(primeraPendiente.id) : Number(habilidadesListas[0].id);
-
-                    if (forzarAvance) {
-                        // La lógica de avance ahora se maneja principalmente en handleGuardar para el "Boom"
-                        // Pero mantenemos esto para saltos menores
-                        if (habilidadActiva && mapaProgreso[Number(habilidadActiva)]) {
-                            const idxActual = habilidadesListas.findIndex(h => Number(h.id) === Number(habilidadActiva));
-                            if (idxActual >= 0 && idxActual < habilidadesListas.length - 1) {
-                                const nextId = Number(habilidadesListas[idxActual + 1].id);
-                                setHabilidadActiva(nextId);
-                            }
-                        }
-                    } else {
-                        const activaEsValida = habilidadesListas.some(h => Number(h.id) === Number(habilidadActiva));
-                        if (!habilidadActiva || !activaEsValida) {
-                            setHabilidadActiva(siguienteId);
-                        }
+                    const activaEsValida = habilidadesListas.some(h => Number(h.id) === Number(habilidadActiva));
+                    if (!habilidadActiva || !activaEsValida) {
+                         // Buscar la primera que NO esté completa en el mapa nuevo
+                         const primeraPendiente = habilidadesListas.find(h => !mapaProgreso[Number(h.id)]);
+                         const siguienteId = primeraPendiente ? Number(primeraPendiente.id) : Number(habilidadesListas[0].id);
+                         setHabilidadActiva(siguienteId);
                     }
                 }
             } else {
@@ -195,19 +192,26 @@ const EvaluacionDocente = () => {
                 notas
             });
 
-            // Verificar si completamos la habilidad actual
             const pendientesLocal = estudiantes.filter(e => !e.nivel).length;
             const habilidadCompletada = (pendientesLocal === 0);
 
-            // Verificar si era la ÚLTIMA habilidad de la lista
-            const indexActual = habilidadesPlanificadas.findIndex(h => Number(h.id) === Number(habilidadActiva));
-            const esUltimaHabilidad = indexActual === habilidadesPlanificadas.length - 1;
+            // Verificación general del parcial
+            const todasCompletadas = habilidadesPlanificadas.every(h => {
+                const idH = Number(h.id);
+                if (idH === Number(habilidadActiva)) return habilidadCompletada;
+                return progresoHabilidades[idH];
+            });
 
             if (habilidadCompletada) {
-                if (esUltimaHabilidad) {
-                    // --- EL BOOM FINAL ---
+                // Actualizar estado local inmediatamente para evitar parpadeo
+                setProgresoHabilidades(prev => ({
+                    ...prev,
+                    [Number(habilidadActiva)]: true
+                }));
+
+                if (todasCompletadas) {
                     if (selectedParcial === '1') {
-                        setP2Habilitado(true); // Desbloqueo visual inmediato
+                        setP2Habilitado(true); 
                         Swal.fire({
                             title: '¡Primer Parcial Completado! 🎉',
                             text: 'Has finalizado todas las habilidades. ¿Deseas pasar al Segundo Parcial ahora mismo?',
@@ -217,11 +221,10 @@ const EvaluacionDocente = () => {
                             cancelButtonColor: '#64748b',
                             confirmButtonText: 'Sí, ir al 2do Parcial',
                             cancelButtonText: 'Quedarme aquí',
-                            backdrop: `rgba(0,0,123,0.4) url("/images/confetti.gif") left top no-repeat` // Opcional si tienes gif
                         }).then((result) => {
                             if (result.isConfirmed) {
                                 setSelectedParcial('2');
-                                setHabilidadActiva(null); // Reset para cargar P2
+                                setHabilidadActiva(null); 
                             }
                         });
                     } else {
@@ -233,18 +236,16 @@ const EvaluacionDocente = () => {
                         });
                     }
                 } else {
-                    // --- MENSAJE DE AVANCE NORMAL ---
                     Swal.fire({
                         toast: true,
                         position: 'top-end',
                         icon: 'success',
-                        title: 'Habilidad completada. ¡Siguiente desbloqueada! 🔓',
+                        title: 'Habilidad completada ⭐',
                         showConfirmButton: false,
                         timer: 2000
                     });
                 }
             } else {
-                // Mensaje normal de guardado parcial
                 Swal.fire({
                     toast: true,
                     position: 'top-end',
@@ -255,11 +256,10 @@ const EvaluacionDocente = () => {
                 });
             }
 
-            // Recargar datos asegurando que la actual se marque como completada
+            // Recargar datos asegurando que el ID actual se mantenga como completado
             await cargarPlanificacionYProgreso(true, habilidadCompletada ? habilidadActiva : null); 
             
-            // Re-verificación de seguridad
-            if (selectedParcial === '1' && habilidadCompletada && esUltimaHabilidad) {
+            if (selectedParcial === '1' && todasCompletadas) {
                 verificarEstadoP1();
             }
 
@@ -283,7 +283,6 @@ const EvaluacionDocente = () => {
     const getButtonClass = (est, nivelBoton) => {
         const notaActual = est.nivel ? parseInt(est.nivel) : null;
         const notaP1 = est.nivel_p1 ? parseInt(est.nivel_p1) : null;
-
         const esNotaActual = notaActual === nivelBoton;
         const esRefP1 = selectedParcial === '2' && notaP1 === nivelBoton && !esNotaActual;
 
@@ -336,7 +335,11 @@ const EvaluacionDocente = () => {
                     <h2 className="text-2xl font-bold text-gray-900">Evaluación Docente</h2>
                     <p className="text-gray-500 text-sm mt-1">Califica el desempeño en base a las actividades planificadas.</p>
                 </div>
-               
+                {estudiantes.length > 0 && (
+                    <button onClick={cargarEstudiantesYNotas} className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1 bg-white px-3 py-1 rounded border border-blue-200">
+                        <ArrowPathIcon className="h-4 w-4"/> Refrescar Lista
+                    </button>
+                )}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -368,33 +371,37 @@ const EvaluacionDocente = () => {
                     {habilidadesPlanificadas.length > 0 && (
                         <div className="space-y-2">
                             <h3 className="text-xs font-bold text-gray-400 uppercase px-1">Progreso de Habilidades ({selectedParcial === '1' ? '1er P.' : '2do P.'})</h3>
-                            {habilidadesPlanificadas.map((hab, index) => {
+                            {habilidadesPlanificadas.map((hab) => {
                                 const idHab = Number(hab.id);
-                                const completado = progresoHabilidades[idHab]; 
-                                const activo = habilidadActiva === idHab;
+                                // Forzamos conversión a número para evitar fallos por string
+                                const completado = progresoHabilidades[idHab] === true; 
+                                const activo = Number(habilidadActiva) === idHab;
                                 
-                                const idAnterior = index > 0 ? Number(habilidadesPlanificadas[index - 1].id) : null;
-                                const anteriorCompletada = index === 0 || (idAnterior && progresoHabilidades[idAnterior]);
-                                const bloqueado = !anteriorCompletada;
-
                                 return (
                                     <button
                                         key={hab.id}
-                                        onClick={() => !bloqueado && setHabilidadActiva(idHab)}
-                                        disabled={bloqueado}
+                                        onClick={() => setHabilidadActiva(idHab)}
                                         className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-between group 
                                             ${activo 
                                                 ? 'bg-blue-600 text-white shadow-md shadow-blue-200 ring-2 ring-white ring-offset-2 ring-offset-blue-100' 
-                                                : bloqueado 
-                                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-100' 
-                                                    : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200 hover:border-blue-300' 
+                                                : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200 hover:border-blue-300' 
                                             }`}
                                     >
                                         <div className="flex items-center gap-2">
-                                            {bloqueado && <LockClosedIcon className="h-4 w-4"/>}
                                             {hab.nombre}
                                         </div>
-                                        {completado ? <StarIconSolid className="h-5 w-5 text-yellow-400 drop-shadow-sm"/> : (activo ? <StarIcon className="h-4 w-4 text-white"/> : <StarIcon className="h-4 w-4 text-gray-300"/>)}
+                                        
+                                        {/* 👇 LÓGICA DE ESTRELLA AMARILLA MEJORADA 👇 */}
+                                        {completado ? (
+                                            <StarIconSolid 
+                                                // Aquí es el cambio importante: Si es Activo = amarillo claro (300).
+                                                // Si NO es activo = amarillo fuerte (500) para que se vea pintado sobre el fondo blanco.
+                                                className={`h-5 w-5 drop-shadow-sm transition-colors duration-300 ${activo ? 'text-yellow-300' : 'text-yellow-500'}`} 
+                                                title="¡Completado!"
+                                            />
+                                        ) : (
+                                            activo ? <StarIcon className="h-4 w-4 text-white"/> : <StarIcon className="h-4 w-4 text-gray-300"/>
+                                        )}
                                     </button>
                                 );
                             })}
@@ -500,7 +507,7 @@ const EvaluacionDocente = () => {
                         <div className="h-full min-h-[400px] flex flex-col items-center justify-center bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200 text-gray-400">
                             <UserGroupIcon className="h-16 w-16 mb-4 opacity-20"/>
                             <p className="text-lg font-medium">Selecciona una Habilidad</p>
-                            <p className="text-sm">Completa las habilidades en orden para desbloquear la siguiente.</p>
+                            <p className="text-sm">Completa las habilidades para desbloquear el siguiente parcial.</p>
                         </div>
                     )}
                 </div>
