@@ -336,11 +336,7 @@ const EvaluacionDocente = () => {
                     <h2 className="text-2xl font-bold text-gray-900">Evaluación Docente</h2>
                     <p className="text-gray-500 text-sm mt-1">Califica el desempeño en base a las actividades planificadas.</p>
                 </div>
-                {estudiantes.length > 0 && (
-                    <button onClick={cargarEstudiantesYNotas} className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1 bg-white px-3 py-1 rounded border border-blue-200">
-                        <ArrowPathIcon className="h-4 w-4"/> Refrescar Lista
-                    </button>
-                )}
+               
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
