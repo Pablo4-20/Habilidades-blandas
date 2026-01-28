@@ -317,6 +317,9 @@ class DocenteController extends Controller
 
         $user = $request->user();
         
+        // CORRECCIÓN 1: Capturamos qué parcial está consultando el frontend
+        $parcialConsultado = $request->input('parcial', '1'); 
+        
         $estudiantes = $this->_getEstudiantes($request->asignatura_id, $periodo->id);
         $totalEstudiantes = $estudiantes->count();
 
@@ -340,24 +343,29 @@ class DocenteController extends Controller
         $habilidadesIds = $planP1->detalles()->pluck('habilidad_blanda_id');
 
         foreach ($habilidadesIds as $habilidadId) {
+            // Verificar Parcial 1
             $conteoP1 = Evaluacion::where('planificacion_id', $planP1->id)
                 ->where('habilidad_blanda_id', $habilidadId)
                 ->whereIn('estudiante_id', $estudiantes->pluck('id'))
                 ->count();
-            $completoP1 = $conteoP1 >= $totalEstudiantes;
+            $completoP1 = $totalEstudiantes > 0 && $conteoP1 >= $totalEstudiantes;
 
+            // Verificar Parcial 2
             $completoP2 = false;
             if ($planP2) {
                 $conteoP2 = Evaluacion::where('planificacion_id', $planP2->id)
                     ->where('habilidad_blanda_id', $habilidadId)
                     ->whereIn('estudiante_id', $estudiantes->pluck('id'))
                     ->count();
-                $completoP2 = $conteoP2 >= $totalEstudiantes;
+                $completoP2 = $totalEstudiantes > 0 && $conteoP2 >= $totalEstudiantes;
             }
+
+            // CORRECCIÓN 2: El estado 'completado' depende del parcial actual
+            $estadoFinal = ($parcialConsultado == '2') ? $completoP2 : $completoP1;
 
             $progreso[] = [
                 'habilidad_id' => $habilidadId,
-                'completado' => ($completoP1 && $completoP2),
+                'completado' => $estadoFinal, // <--- Aquí estaba el error antes
                 'p1_ok' => $completoP1,
                 'p2_ok' => $completoP2
             ];
