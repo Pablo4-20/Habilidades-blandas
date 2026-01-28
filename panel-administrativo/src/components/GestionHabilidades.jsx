@@ -6,7 +6,7 @@ import {
     MagnifyingGlassIcon, PlusIcon, PencilSquareIcon, TrashIcon,
     SparklesIcon, CloudArrowUpIcon, XMarkIcon, DocumentTextIcon,
     LightBulbIcon, ArrowDownTrayIcon, ListBulletIcon,
-    ChevronLeftIcon, ChevronRightIcon // <--- ICONOS NUEVOS
+    ChevronLeftIcon, ChevronRightIcon
 } from '@heroicons/react/24/outline';
 
 const GestionHabilidades = () => {
@@ -15,9 +15,9 @@ const GestionHabilidades = () => {
     const [loading, setLoading] = useState(false);
     const [busqueda, setBusqueda] = useState('');
     
-    // Paginación
+    // PAGINACIÓN (AJUSTADO A 7)
     const [currentPage, setCurrentPage] = useState(1);
-    const ITEMS_PER_PAGE = 6; // Mostramos 6 porque las filas son más altas
+    const ITEMS_PER_PAGE = 7; 
 
     const [showModal, setShowModal] = useState(false);
     const [showImportModal, setShowImportModal] = useState(false);

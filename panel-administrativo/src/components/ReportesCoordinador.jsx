@@ -6,7 +6,7 @@ import autoTable from 'jspdf-autotable';
 import { 
     PresentationChartLineIcon, PrinterIcon, FunnelIcon,
     CheckCircleIcon, ClockIcon, CalendarDaysIcon, ExclamationCircleIcon,
-    ExclamationTriangleIcon
+    ExclamationTriangleIcon, ChevronLeftIcon, ChevronRightIcon
 } from '@heroicons/react/24/outline';
 import logoIzq from '../assets/facultad.png'; 
 import logoDer from '../assets/software.png';
@@ -14,11 +14,15 @@ import logoDer from '../assets/software.png';
 const ReportesCoordinador = () => {
     // --- ESTADOS ---
     const [reporteData, setReporteData] = useState([]);
-    const [reporteInfo, setReporteInfo] = useState(null); // Info del backend (carrera, etc)
+    const [reporteInfo, setReporteInfo] = useState(null); 
     const [periodos, setPeriodos] = useState([]);
     const [loading, setLoading] = useState(false);
     
-    // --- FILTROS (Solo Periodo, Carrera es automática) ---
+    // PAGINACIÓN (AJUSTADO A 6)
+    const [currentPage, setCurrentPage] = useState(1);
+    const ITEMS_PER_PAGE = 6; 
+
+    // --- FILTROS ---
     const [filtroPeriodo, setFiltroPeriodo] = useState('');
 
     // 1. CARGA INICIAL
@@ -53,16 +57,12 @@ const ReportesCoordinador = () => {
         setLoading(true);
         try {
             const res = await api.get(`/reportes/general-coordinador`, {
-                params: {
-                    periodo: filtroPeriodo
-                    // No enviamos carrera, el backend la detecta
-                }
+                params: { periodo: filtroPeriodo }
             });
-            
             const datos = res.data.filas || [];
             setReporteData(datos); 
-            setReporteInfo(res.data.info || {}); // Guardamos info para mostrar nombre carrera
-
+            setReporteInfo(res.data.info || {});
+            setCurrentPage(1); // Reset al cambiar periodo
         } catch (error) {
             console.error("Error cargando reporte:", error);
             setReporteData([]);
@@ -70,6 +70,20 @@ const ReportesCoordinador = () => {
             setLoading(false);
         }
     };
+
+    // --- PROCESAMIENTO Y PAGINACIÓN ---
+    const getSortedData = () => {
+        const data = [...reporteData];
+        // Ordenar por Asignatura (A-Z)
+        data.sort((a, b) => a.asignatura.localeCompare(b.asignatura));
+        return data;
+    };
+
+    const processedData = getSortedData();
+    const totalPages = Math.ceil(processedData.length / ITEMS_PER_PAGE);
+    const indexOfLastItem = currentPage * ITEMS_PER_PAGE;
+    const indexOfFirstItem = indexOfLastItem - ITEMS_PER_PAGE;
+    const currentItems = processedData.slice(indexOfFirstItem, indexOfLastItem);
 
     // --- PDF ---
     const descargarPDF = () => {
@@ -133,7 +147,6 @@ const ReportesCoordinador = () => {
         doc.save(`Reporte_Habilidades_${filtroPeriodo}.pdf`);
     };
 
-    // --- HELPERS VISUALES ---
     const getBadgeColor = (estado) => {
         if (estado === 'Completado') return 'bg-green-100 text-green-700 border-green-200';
         if (estado === 'En Proceso' || estado === 'Planificado') return 'bg-blue-100 text-blue-700 border-blue-200';
@@ -150,14 +163,13 @@ const ReportesCoordinador = () => {
 
     const opcionesPeriodos = periodos.map(p => ({ value: p.nombre, label: p.nombre, subtext: p.activo ? 'Activo' : '' }));
 
-    // --- CÁLCULOS ESTADÍSTICOS ---
     const total = reporteData.length;
     const completados = reporteData.filter(r => r.estado === 'Completado').length;
     const enProceso = reporteData.filter(r => r.estado === 'En Proceso' || r.estado === 'Planificado').length;
     const pendientes = reporteData.filter(r => r.estado === 'Sin Planificar' || r.estado === 'Sin Estudiantes' || r.estado === 'Pendiente').length;
 
     return (
-        <div className="space-y-6 animate-fade-in">
+        <div className="space-y-6 animate-fade-in flex flex-col h-full">
             {/* Header */}
             <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
                 <div>
@@ -174,8 +186,6 @@ const ReportesCoordinador = () => {
                 
                 {/* Filtros */}
                 <div className="md:col-span-1 space-y-4">
-                    
-                    {/* Visualizador de Carrera (Input Deshabilitado) */}
                     <div className="bg-white p-1 rounded-2xl shadow-sm border border-gray-100">
                         <div className="relative">
                             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -195,10 +205,8 @@ const ReportesCoordinador = () => {
                     </div>
                 </div>
 
-                {/* 3 TARJETAS DE RESUMEN */}
+                {/* Cards de Resumen */}
                 <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-4 h-full">
-                    
-                    {/* Completados */}
                     <div className="bg-white p-5 rounded-2xl border-l-4 border-green-500 shadow-sm flex flex-col justify-center">
                         <div className="flex justify-between items-start">
                             <div><p className="text-xs font-bold text-gray-400 uppercase">Completados</p><p className="text-3xl font-bold text-green-600 mt-1">{completados}</p></div>
@@ -207,7 +215,6 @@ const ReportesCoordinador = () => {
                         <div className="w-full bg-gray-100 rounded-full h-1.5 mt-4"><div className="bg-green-500 h-1.5 rounded-full" style={{ width: `${total > 0 ? (completados/total)*100 : 0}%` }}></div></div>
                     </div>
 
-                    {/* En Proceso */}
                     <div className="bg-white p-5 rounded-2xl border-l-4 border-blue-500 shadow-sm flex flex-col justify-center">
                         <div className="flex justify-between items-start">
                             <div><p className="text-xs font-bold text-gray-400 uppercase">En Proceso</p><p className="text-3xl font-bold text-blue-600 mt-1">{enProceso}</p></div>
@@ -216,7 +223,6 @@ const ReportesCoordinador = () => {
                         <div className="w-full bg-gray-100 rounded-full h-1.5 mt-4"><div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${total > 0 ? (enProceso/total)*100 : 0}%` }}></div></div>
                     </div>
 
-                    {/* Pendientes */}
                     <div className="bg-white p-5 rounded-2xl border-l-4 border-red-500 shadow-sm flex flex-col justify-center">
                         <div className="flex justify-between items-start">
                             <div><p className="text-xs font-bold text-gray-400 uppercase">Sin Planificar</p><p className="text-3xl font-bold text-red-600 mt-1">{pendientes}</p></div>
@@ -224,20 +230,19 @@ const ReportesCoordinador = () => {
                         </div>
                         <div className="w-full bg-gray-100 rounded-full h-1.5 mt-4"><div className="bg-red-500 h-1.5 rounded-full" style={{ width: `${total > 0 ? (pendientes/total)*100 : 0}%` }}></div></div>
                     </div>
-
                 </div>
             </div>
 
-            {/* Tabla */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            {/* Tabla con Paginación */}
+            <div className="flex flex-col flex-1 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="p-5 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
                     <h3 className="font-bold text-gray-700 flex items-center gap-2"><PresentationChartLineIcon className="h-5 w-5 text-blue-600"/> Detalle de Cumplimiento</h3>
                     {filtroPeriodo && <span className="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded-full font-bold">{filtroPeriodo}</span>}
                 </div>
                 
-                <div className="overflow-x-auto">
+                <div className="overflow-auto flex-1">
                     <table className="min-w-full divide-y divide-gray-100">
-                        <thead className="bg-white">
+                        <thead className="bg-white sticky top-0 z-10">
                             <tr>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Asignatura</th>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Docente</th>
@@ -248,8 +253,8 @@ const ReportesCoordinador = () => {
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-50">
                             {loading ? <tr><td colSpan="5" className="text-center py-12 text-gray-400">Cargando...</td></tr> : 
-                             reporteData.length === 0 ? <tr><td colSpan="5" className="text-center py-12 text-gray-400 italic">No se encontraron datos.</td></tr> :
-                             reporteData.map((r, i) => (
+                             currentItems.length === 0 ? <tr><td colSpan="5" className="text-center py-12 text-gray-400 italic">No se encontraron datos.</td></tr> :
+                             currentItems.map((r, i) => (
                                 <tr key={`${r.id}-${i}`} className="hover:bg-blue-50/30 transition">
                                     <td className="px-6 py-4 align-top">
                                         <div className="font-bold text-gray-800 text-sm">{r.asignatura}</div>
@@ -262,7 +267,6 @@ const ReportesCoordinador = () => {
                                         {r.docente || <span className="text-gray-400 italic">Sin asignar</span>}
                                     </td>
                                     
-                                    {/* COLUMNA HABILIDAD: Muestra "Sin Planificar" explícitamente */}
                                     <td className="px-6 py-4 align-top text-sm">
                                         {(!r.habilidad || r.habilidad === 'No definida' || r.habilidad === 'Sin Planificar') ? (
                                             <span className="text-red-400 italic font-medium">Sin Planificar</span>
@@ -277,11 +281,9 @@ const ReportesCoordinador = () => {
                                         </span>
                                     </td>
 
-                                    {/* COLUMNA AVANCE: Barra vacía y 0% */}
                                     <td className="px-6 py-4 align-top">
                                         <div className="flex items-center gap-3">
                                             <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                                                {/* Si no tiene habilidad, el ancho es 0 */}
                                                 <div 
                                                     className={`h-2 rounded-full ${r.progreso >= 100 ? 'bg-green-500' : 'bg-blue-500'}`} 
                                                     style={{width: `${(!r.habilidad || r.habilidad === 'Sin Planificar' || r.habilidad === 'No definida') ? 0 : (r.progreso || 0)}%`}}
@@ -296,6 +298,35 @@ const ReportesCoordinador = () => {
                             ))}
                         </tbody>
                     </table>
+                </div>
+
+                {/* --- CONTROLES PAGINACIÓN --- */}
+                <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+                    <span className="text-sm text-gray-500">
+                        Mostrando <span className="font-bold text-gray-800">{currentItems.length > 0 ? indexOfFirstItem + 1 : 0}</span> a <span className="font-bold text-gray-800">{Math.min(indexOfLastItem, processedData.length)}</span> de <span className="font-bold text-gray-800">{processedData.length}</span> registros
+                    </span>
+                    
+                    <div className="flex items-center gap-2">
+                        <button 
+                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                            disabled={currentPage === 1}
+                            className={`p-2 rounded-lg border transition ${currentPage === 1 ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-gray-300 text-gray-600 hover:bg-white hover:shadow-sm'}`}
+                        >
+                            <ChevronLeftIcon className="h-4 w-4" />
+                        </button>
+                        
+                        <span className="text-sm font-medium text-gray-600 px-2">
+                            Página {currentPage} de {totalPages || 1}
+                        </span>
+
+                        <button 
+                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                            disabled={currentPage === totalPages || totalPages === 0}
+                            className={`p-2 rounded-lg border transition ${currentPage === totalPages || totalPages === 0 ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-gray-300 text-gray-600 hover:bg-white hover:shadow-sm'}`}
+                        >
+                            <ChevronRightIcon className="h-4 w-4" />
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

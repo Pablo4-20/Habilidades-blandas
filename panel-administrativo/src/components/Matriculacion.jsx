@@ -12,8 +12,9 @@ import {
     FolderOpenIcon,
     DocumentTextIcon,
     ChevronRightIcon,
+    ChevronLeftIcon,
     ComputerDesktopIcon,
-    ExclamationCircleIcon // Icono para alerta
+    ExclamationCircleIcon
 } from '@heroicons/react/24/outline';
 
 const Matriculacion = () => {
@@ -32,6 +33,10 @@ const Matriculacion = () => {
     const [loading, setLoading] = useState(false);
     const [busqueda, setBusqueda] = useState('');
     const [showModalCarga, setShowModalCarga] = useState(false);
+
+    // PAGINACIÓN (AJUSTADO A 6)
+    const [currentPage, setCurrentPage] = useState(1);
+    const ITEMS_PER_PAGE = 6; 
 
     // Carga Masiva
     const fileInputRef = useRef(null);
@@ -52,7 +57,6 @@ const Matriculacion = () => {
                 if (activo) {
                     setPeriodoActivo(activo);
                 } 
-                // Nota: Ya no mostramos alerta invasiva (Swal), solo el indicador visual en el header.
 
                 // B. Ciclos
                 setListaCiclos(resCic.data);
@@ -86,15 +90,33 @@ const Matriculacion = () => {
         } finally { setLoading(false); }
     };
 
-    // --- FILTRADO ---
-    const estudiantesVisibles = matriculados.filter(m => {
-        if (!carreraSeleccionada || !cicloSeleccionado) return false;
-        return (
-            m.carrera === carreraSeleccionada.nombre &&
-            m.ciclo === cicloSeleccionado.nombre &&
-            (m.nombres.toLowerCase().includes(busqueda.toLowerCase()) || m.cedula.includes(busqueda))
-        );
-    });
+    // --- FILTRADO Y PAGINACIÓN ---
+    const getFilteredAndSortedData = () => {
+        if (!carreraSeleccionada || !cicloSeleccionado) return [];
+        
+        let filtered = matriculados.filter(m => {
+            return (
+                m.carrera === carreraSeleccionada.nombre &&
+                m.ciclo === cicloSeleccionado.nombre &&
+                (m.nombres.toLowerCase().includes(busqueda.toLowerCase()) || m.cedula.includes(busqueda))
+            );
+        });
+
+        // Ordenar Alfabéticamente por Nombres
+        filtered.sort((a, b) => a.nombres.localeCompare(b.nombres));
+        return filtered;
+    };
+
+    const processedData = getFilteredAndSortedData();
+    const totalPages = Math.ceil(processedData.length / ITEMS_PER_PAGE);
+    const indexOfLastItem = currentPage * ITEMS_PER_PAGE;
+    const indexOfFirstItem = indexOfLastItem - ITEMS_PER_PAGE;
+    const currentItems = processedData.slice(indexOfFirstItem, indexOfLastItem);
+
+    // Resetear paginación al cambiar filtros
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [carreraSeleccionada, cicloSeleccionado, busqueda]);
 
     // --- IMPORTACIÓN ---
     const downloadTemplate = () => {
@@ -114,7 +136,7 @@ const Matriculacion = () => {
 
     const handleImportar = async () => {
         if (!fileToUpload) return Swal.fire('Error', 'Selecciona un archivo', 'warning');
-        if (!periodoActivo) return Swal.fire('Error', 'No hay periodo activo', 'error'); // Validación doble seguridad
+        if (!periodoActivo) return Swal.fire('Error', 'No hay periodo activo', 'error'); 
         
         Swal.fire({ title: 'Procesando...', text: 'Matriculando...', didOpen: () => Swal.showLoading() });
         
@@ -147,7 +169,7 @@ const Matriculacion = () => {
     return (
         <div className="space-y-6 animate-fade-in p-6 bg-gray-50 min-h-screen flex flex-col">
             
-            {/* 1. ENCABEZADO + PERIODO (Con indicador de estado) */}
+            {/* 1. ENCABEZADO + PERIODO */}
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                 <div>
                     <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
@@ -158,7 +180,6 @@ const Matriculacion = () => {
                     </p>
                 </div>
                 
-                {/* Badge Periodo Activo (CAMBIO AQUÍ: Rojo si no hay periodo) */}
                 <div className={`bg-white border px-5 py-2.5 rounded-xl shadow-sm flex items-center gap-3 transition-colors duration-300
                     ${periodoActivo ? 'border-blue-100' : 'border-red-200 bg-red-50'}
                 `}>
@@ -244,12 +265,11 @@ const Matriculacion = () => {
                                         <span>Ciclo {cicloSeleccionado.nombre}</span>
                                     </h1>
                                     <p className="text-sm text-gray-500 mt-1">
-                                        {estudiantesVisibles.length} estudiantes matriculados
+                                        {processedData.length} estudiantes matriculados
                                     </p>
                                 </div>
                                 
                                 <div className="flex gap-3">
-                                    {/* Buscador */}
                                     <div className="relative">
                                         <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400"/>
                                         <input 
@@ -261,7 +281,6 @@ const Matriculacion = () => {
                                         />
                                     </div>
 
-                                    {/* Botón Carga Masiva (Deshabilitado si no hay periodo) */}
                                     <button 
                                         onClick={() => { 
                                             if(!periodoActivo) return Swal.fire('Alto', 'No hay periodo activo para cargar datos.', 'error');
@@ -292,19 +311,15 @@ const Matriculacion = () => {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-50">
-                                        {estudiantesVisibles.length === 0 ? (
+                                        {currentItems.length === 0 ? (
                                             <tr><td colSpan="3" className="p-12 text-center text-gray-400">
                                                 <div className="flex flex-col items-center gap-3">
                                                     <DocumentTextIcon className="h-12 w-12 text-gray-200"/>
-                                                    <span>
-                                                        {periodoActivo 
-                                                            ? 'No hay estudiantes registrados en este ciclo.' 
-                                                            : 'Seleccione un periodo activo para ver datos.'}
-                                                    </span>
+                                                    <span>No hay resultados.</span>
                                                 </div>
                                             </td></tr>
                                         ) : (
-                                            estudiantesVisibles.map(m => (
+                                            currentItems.map(m => (
                                                 <tr key={m.id} className="hover:bg-blue-50/30 transition group">
                                                     <td className="px-4 py-4 text-sm font-mono text-gray-600">
                                                         {m.cedula}
@@ -324,6 +339,36 @@ const Matriculacion = () => {
                                     </tbody>
                                 </table>
                             </div>
+
+                             {/* --- PAGINACIÓN --- */}
+                             <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+                                <span className="text-sm text-gray-500">
+                                    Mostrando <span className="font-bold text-gray-800">{currentItems.length > 0 ? indexOfFirstItem + 1 : 0}</span> a <span className="font-bold text-gray-800">{Math.min(indexOfLastItem, processedData.length)}</span> de <span className="font-bold text-gray-800">{processedData.length}</span> estudiantes
+                                </span>
+                                
+                                <div className="flex items-center gap-2">
+                                    <button 
+                                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                        disabled={currentPage === 1}
+                                        className={`p-2 rounded-lg border transition ${currentPage === 1 ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-gray-300 text-gray-600 hover:bg-white hover:shadow-sm'}`}
+                                    >
+                                        <ChevronLeftIcon className="h-4 w-4" />
+                                    </button>
+                                    
+                                    <span className="text-sm font-medium text-gray-600 px-2">
+                                        Página {currentPage} de {totalPages || 1}
+                                    </span>
+
+                                    <button 
+                                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                                        disabled={currentPage === totalPages || totalPages === 0}
+                                        className={`p-2 rounded-lg border transition ${currentPage === totalPages || totalPages === 0 ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-gray-300 text-gray-600 hover:bg-white hover:shadow-sm'}`}
+                                    >
+                                        <ChevronRightIcon className="h-4 w-4" />
+                                    </button>
+                                </div>
+                            </div>
+
                         </>
                     ) : (
                         <div className="flex-1 flex flex-col items-center justify-center text-gray-300">
@@ -334,7 +379,7 @@ const Matriculacion = () => {
                 </main>
             </div>
 
-            {/* --- MODAL DE CARGA MASIVA --- */}
+            {/* MODAL CARGA MASIVA */}
             {showModalCarga && cicloSeleccionado && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">

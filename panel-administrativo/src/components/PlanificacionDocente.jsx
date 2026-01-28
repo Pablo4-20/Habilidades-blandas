@@ -83,19 +83,24 @@ const PlanificacionDocente = () => {
                 
                 if (res.data.es_edicion) {
                     setEsEdicion(true);
-                    setHabilidadesSeleccionadas(res.data.habilidades_seleccionadas || []);
+                    // Aseguramos que los IDs sean números para evitar fallos de visualización
+                    const seleccionadasNumericas = (res.data.habilidades_seleccionadas || []).map(id => Number(id));
+                    setHabilidadesSeleccionadas(seleccionadasNumericas);
                     setActividadesPorHabilidad(res.data.actividades_guardadas || {});
                     Swal.mixin({toast: true, position: 'top-end', timer: 2000, showConfirmButton: false})
                         .fire({icon: 'info', title: 'Planificación cargada'});
                 
                 } else if (form.parcial === '2') {
+                    // CARGA AUTOMÁTICA DEL PARCIAL 1
                     const resP1 = await api.get(`/planificaciones/verificar/${form.asignatura_id}`, {
                         params: { parcial: '1', periodo: form.periodo_academico }
                     });
 
                     if (resP1.data.es_edicion) {
                         setEsEdicion(false); 
-                        setHabilidadesSeleccionadas(resP1.data.habilidades_seleccionadas || []);
+                        // SOLUCIÓN AL BUG: Convertimos todo a Number para que el filtro funcione
+                        const idsDelP1 = (resP1.data.habilidades_seleccionadas || []).map(id => Number(id));
+                        setHabilidadesSeleccionadas(idsDelP1);
                         setActividadesPorHabilidad({}); 
                         
                         Swal.mixin({toast: true, position: 'top-end', timer: 3000, showConfirmButton: false})
@@ -120,15 +125,16 @@ const PlanificacionDocente = () => {
     };
 
     const toggleHabilidad = (id) => {
+        const idNum = Number(id);
         setHabilidadesSeleccionadas(prev => {
-            if (prev.includes(id)) {
-                const newState = prev.filter(h => h !== id);
+            if (prev.includes(idNum)) {
+                const newState = prev.filter(h => h !== idNum);
                 const nuevasActividades = { ...actividadesPorHabilidad };
-                delete nuevasActividades[id];
+                delete nuevasActividades[idNum];
                 setActividadesPorHabilidad(nuevasActividades);
                 return newState;
             } else {
-                return [...prev, id];
+                return [...prev, idNum];
             }
         });
     };
@@ -206,16 +212,11 @@ const PlanificacionDocente = () => {
     }));
     const opcionesParciales = [{ value: '1', label: '1er Parcial' }, { value: '2', label: '2do Parcial' }];
 
-    // 👇 FUNCIÓN ACTUALIZADA: Obtiene opciones dinámicamente desde el objeto habilidad
     const getOpcionesActividades = (habilidadId) => {
         const habilidadObj = catalogoHabilidades.find(h => h.id === habilidadId);
-        
-        // Si no hay actividades cargadas desde la BD
         if (!habilidadObj || !habilidadObj.actividades || habilidadObj.actividades.length === 0) {
             return [{ value: 'Actividad General', label: 'Actividad General' }];
         }
-
-        // Mapear las actividades que vienen del backend
         return habilidadObj.actividades.map(act => ({
             value: act.descripcion,
             label: act.descripcion
@@ -257,9 +258,13 @@ const PlanificacionDocente = () => {
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                             {catalogoHabilidades
-                                .filter(hab => form.parcial === '1' || habilidadesSeleccionadas.includes(hab.id))
+                                .filter(hab => {
+                                    // FILTRO CORREGIDO: Asegura comparación numérica estricta para evitar errores
+                                    if (form.parcial === '1') return true;
+                                    return habilidadesSeleccionadas.includes(Number(hab.id));
+                                })
                                 .map(hab => {
-                                    const seleccionado = habilidadesSeleccionadas.includes(hab.id);
+                                    const seleccionado = habilidadesSeleccionadas.includes(Number(hab.id));
                                     const opcionesActividades = getOpcionesActividades(hab.id);
                                     return (
                                         <div key={hab.id} className={`border rounded-xl p-4 transition-all flex flex-col ${seleccionado ? 'border-purple-500 bg-purple-50/30' : 'border-gray-200'}`}>
@@ -269,6 +274,8 @@ const PlanificacionDocente = () => {
                                                     checked={seleccionado} 
                                                     onChange={() => toggleHabilidad(hab.id)} 
                                                     className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500 cursor-pointer"
+                                                    // En Parcial 2 no se permite deseleccionar lo que viene del Parcial 1 (opcional, si se quiere estricta continuidad)
+                                                    // disabled={form.parcial === '2'} 
                                                 />
                                                 <div>
                                                     <p className="font-bold text-gray-800">{hab.nombre}</p>
@@ -302,7 +309,7 @@ const PlanificacionDocente = () => {
                                 })}
                             
                             {/* Mensaje vacío */}
-                            {form.parcial === '2' && catalogoHabilidades.filter(hab => habilidadesSeleccionadas.includes(hab.id)).length === 0 && (
+                            {form.parcial === '2' && catalogoHabilidades.filter(hab => habilidadesSeleccionadas.includes(Number(hab.id))).length === 0 && (
                                 <div className="col-span-1 md:col-span-2 p-8 text-center border-2 border-dashed border-gray-200 rounded-xl">
                                     <p className="text-gray-400 text-sm">No se encontraron habilidades del Primer Parcial para dar continuidad.</p>
                                 </div>

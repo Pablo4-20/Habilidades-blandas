@@ -5,7 +5,7 @@ import CustomSelect from './ui/CustomSelect';
 import { 
     DocumentTextIcon, BookOpenIcon, CalendarDaysIcon,
     ChartBarIcon, ArrowRightIcon, ArrowLeftIcon, ArrowDownTrayIcon, LockClosedIcon,
-    SparklesIcon
+    SparklesIcon, CheckCircleIcon
 } from '@heroicons/react/24/outline';
 
 const ReportesDocente = () => {
@@ -19,6 +19,7 @@ const ReportesDocente = () => {
     
     const [loading, setLoading] = useState(false);
     const [guardando, setGuardando] = useState(false);
+    const [autoGuardado, setAutoGuardado] = useState(false); // Indicador visual
     
     // Paginación
     const [pasoActual, setPasoActual] = useState(0);
@@ -47,45 +48,45 @@ const ReportesDocente = () => {
             setPasoActual(0);
         } else {
             setDataCompleta(null);
+            setConclusiones({});
         }
     }, [selectedMateriaId, selectedPeriodo]);
 
-    // 3. AGRUPAR POR HABILIDAD (Separar Adaptabilidad de Autocontrol, etc.)
+    // 3. AGRUPAR POR HABILIDAD
     const reportesAgrupados = useMemo(() => {
         if (!dataCompleta || !dataCompleta.reportes) return [];
 
         const grupos = {};
         
         dataCompleta.reportes.forEach(r => {
-            // Agrupamos por NOMBRE DE HABILIDAD
             const nombreHab = r.habilidad;
             
             if (!grupos[nombreHab]) {
                 grupos[nombreHab] = {
                     habilidad: nombreHab,
-                    habilidad_id: r.habilidad_id, // Guardamos el ID de la habilidad
+                    habilidad_id: r.habilidad_id,
                     p1: null,
                     p2: null,
-                    // Usamos una clave compuesta para el textarea: PLAN_ID + HABILIDAD_ID
                     uniqueKeyP1: null,
                     uniqueKeyP2: null
                 };
             }
             
-            // Asignamos al parcial correspondiente
+            const key = `${r.planificacion_id}_${r.habilidad_id}`;
+
             if (r.parcial_asignado === '1') {
                 grupos[nombreHab].p1 = r;
-                grupos[nombreHab].uniqueKeyP1 = `${r.planificacion_id}_${r.habilidad_id}`;
+                grupos[nombreHab].uniqueKeyP1 = key;
             } else {
                 grupos[nombreHab].p2 = r;
-                grupos[nombreHab].uniqueKeyP2 = `${r.planificacion_id}_${r.habilidad_id}`;
+                grupos[nombreHab].uniqueKeyP2 = key;
             }
         });
 
         return Object.values(grupos);
     }, [dataCompleta]);
 
-    // 4. PETICIÓN BACKEND
+    // 4. CARGA DE DATOS + POBLAR CONCLUSIONES
     const cargarDatosReporte = async () => {
         setLoading(true);
         try {
@@ -95,10 +96,10 @@ const ReportesDocente = () => {
             });
             setDataCompleta(res.data);
             
+            // Cargar conclusiones existentes en el estado
             const initialConclusiones = {};
             const rawReportes = res.data.reportes || [];
             rawReportes.forEach(r => {
-                // Clave única compuesta para evitar conflictos
                 const key = `${r.planificacion_id}_${r.habilidad_id}`;
                 if (r.conclusion) initialConclusiones[key] = r.conclusion;
             });
@@ -107,9 +108,6 @@ const ReportesDocente = () => {
         } catch (error) {
             console.error(error);
             setDataCompleta(null);
-            if (error.response && error.response.status === 404) {
-                Swal.fire({ toast: true, position: 'top-end', icon: 'info', title: 'No hay evaluaciones.', showConfirmButton: false, timer: 3000 });
-            }
         } finally {
             setLoading(false);
         }
@@ -117,14 +115,49 @@ const ReportesDocente = () => {
 
     // 5. NAVEGACIÓN
     const handleSiguiente = () => {
+        // Forzamos guardado antes de cambiar
+        handleAutoSave(); 
         if (pasoActual < reportesAgrupados.length - 1) setPasoActual(prev => prev + 1);
     };
 
     const handleAnterior = () => {
+        handleAutoSave();
         if (pasoActual > 0) setPasoActual(prev => prev - 1);
     };
 
-    // 6. GUARDAR
+    // 6. AUTO GUARDADO INDIVIDUAL (La solución al problema)
+    const handleAutoSave = async () => {
+        if (!itemActual) return;
+        
+        // Identificar qué planificacion ID usar (P2 tiene prioridad)
+        const planID = itemActual.p2?.planificacion_id || itemActual.p1?.planificacion_id;
+        const habID = itemActual.habilidad_id;
+        const texto = conclusiones[keyTextAreaActual];
+
+        // Solo guardar si hay texto y tenemos IDs válidos
+        if (planID && habID && texto !== undefined) {
+            setAutoGuardado(true); // Mostrar indicador "Guardando..."
+            try {
+                // Enviamos formato de lista pero con un solo elemento
+                await api.post('/reportes/guardar-todo', { 
+                    conclusiones: [{ id: planID, habilidad_id: habID, texto: texto }] 
+                });
+                
+                // Si existe P1 y P2, actualizamos ambos para consistencia (opcional)
+                if (itemActual.p1 && itemActual.p2) {
+                     await api.post('/reportes/guardar-todo', { 
+                        conclusiones: [{ id: itemActual.p1.planificacion_id, habilidad_id: habID, texto: texto }] 
+                    });
+                }
+            } catch (e) {
+                console.error("Error autoguardado", e);
+            } finally {
+                setTimeout(() => setAutoGuardado(false), 1000);
+            }
+        }
+    };
+
+    // 7. GUARDAR TODO (Botón Final)
     const guardarTodo = async () => {
         setGuardando(true);
         try {
@@ -133,33 +166,27 @@ const ReportesDocente = () => {
             reportesAgrupados.forEach(grupo => {
                 const planP1 = grupo.p1?.planificacion_id;
                 const keyP1 = grupo.uniqueKeyP1;
-                
                 const planP2 = grupo.p2?.planificacion_id;
                 const keyP2 = grupo.uniqueKeyP2;
-                
-                // IMPORTANTE: Obtenemos el ID de la habilidad del grupo
                 const habId = grupo.habilidad_id; 
 
                 const texto = conclusiones[keyP2] || conclusiones[keyP1];
 
                 if (texto) {
-                    // AHORA SÍ enviamos 'habilidad_id' al backend
                     if (planP2) listaParaEnviar.push({ id: planP2, habilidad_id: habId, texto });
                     if (planP1) listaParaEnviar.push({ id: planP1, habilidad_id: habId, texto });
                 }
             });
 
-            // Si no hay nada que guardar, avisamos para no llamar a la API en vano
             if (listaParaEnviar.length === 0) {
-                Swal.fire('Aviso', 'No hay observaciones nuevas para guardar.', 'info');
+                Swal.fire('Info', 'No hay datos para guardar.', 'info');
                 setGuardando(false);
                 return;
             }
 
             await api.post('/reportes/guardar-todo', { conclusiones: listaParaEnviar });
-            Swal.fire({ title: '¡Guardado!', text: 'Observaciones registradas correctamente.', icon: 'success', timer: 2000, showConfirmButton: false });
+            Swal.fire({ title: '¡Guardado!', text: 'Reporte actualizado.', icon: 'success', timer: 1500, showConfirmButton: false });
         } catch (error) {
-            console.error(error);
             Swal.fire('Error', 'No se pudo guardar.', 'error');
         } finally {
             setGuardando(false);
@@ -169,7 +196,6 @@ const ReportesDocente = () => {
     // --- COMPONENTE GRAFICO ---
     const MiniGrafico = ({ stats, titulo }) => {
         if (!stats) return <div className="h-40 flex items-center justify-center border-2 border-dashed border-gray-200 rounded-xl bg-gray-50 text-gray-400 text-sm">{titulo}: Pendiente</div>;
-
         const totalEvaluados = Object.values(stats).reduce((a, b) => a + b, 0);
         const maxVal = Math.max(...Object.values(stats)) || 1; 
 
@@ -213,7 +239,6 @@ const ReportesDocente = () => {
     }, [asignacionesRaw, selectedPeriodo]);
 
     const itemActual = reportesAgrupados[pasoActual];
-    // Clave para el textarea actual (Preferimos P2, sino P1)
     const keyTextAreaActual = itemActual ? (itemActual.uniqueKeyP2 || itemActual.uniqueKeyP1) : null;
 
     return (
@@ -252,19 +277,26 @@ const ReportesDocente = () => {
                             <MiniGrafico stats={itemActual.p2?.estadisticas} titulo="Resultados Parcial 2" />
                         </div>
 
-                        <div className="bg-blue-50/50 p-6 rounded-2xl border border-blue-100 relative">
-                            <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center gap-2"><ChartBarIcon className="h-5 w-5 text-blue-600"/> Análisis de Evolución y Conclusiones</label>
+                        <div className="bg-blue-50/50 p-6 rounded-2xl border border-blue-100 relative transition-colors focus-within:bg-blue-50 focus-within:border-blue-300">
+                            <div className="flex justify-between items-center mb-3">
+                                <label className="block text-sm font-bold text-gray-700 flex items-center gap-2"><ChartBarIcon className="h-5 w-5 text-blue-600"/> Análisis de Evolución y Conclusiones</label>
+                                {autoGuardado && <span className="text-xs text-green-600 font-bold flex items-center gap-1 animate-pulse"><CheckCircleIcon className="h-4 w-4"/> Guardando...</span>}
+                            </div>
                             <textarea 
                                 rows="4"
                                 className="w-full px-4 py-3 border border-blue-200 rounded-xl bg-white focus:ring-4 focus:ring-blue-100 focus:border-blue-300 outline-none text-sm resize-none transition-all"
                                 placeholder={`Describa el avance del grupo en la habilidad "${itemActual.habilidad}"...`}
                                 value={conclusiones[keyTextAreaActual] || ''}
+                                // Actualización Local Segura
                                 onChange={(e) => {
                                     if (keyTextAreaActual) {
-                                        setConclusiones({ ...conclusiones, [keyTextAreaActual]: e.target.value });
+                                        setConclusiones(prev => ({ ...prev, [keyTextAreaActual]: e.target.value }));
                                     }
                                 }}
+                                // Guardado Automático al salir del campo
+                                onBlur={handleAutoSave}
                             />
+                            <p className="text-xs text-gray-400 mt-2 text-right">Se guarda automáticamente al cambiar de campo.</p>
                         </div>
                     </div>
 
@@ -273,7 +305,7 @@ const ReportesDocente = () => {
                         {pasoActual < reportesAgrupados.length - 1 ? (
                             <button onClick={handleSiguiente} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl font-bold text-sm shadow-lg shadow-blue-200/50 flex items-center gap-2 transform active:scale-95 transition">Siguiente Habilidad <ArrowRightIcon className="h-4 w-4"/></button>
                         ) : (
-                            <button onClick={guardarTodo} disabled={guardando} className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 rounded-xl font-bold text-sm shadow-lg shadow-green-200/50 flex items-center gap-2 transform active:scale-95 transition">{guardando ? 'Guardando...' : <><ArrowDownTrayIcon className="h-5 w-5"/> Finalizar y Guardar Reporte</>}</button>
+                            <button onClick={guardarTodo} disabled={guardando} className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 rounded-xl font-bold text-sm shadow-lg shadow-green-200/50 flex items-center gap-2 transform active:scale-95 transition">{guardando ? 'Guardando...' : <><ArrowDownTrayIcon className="h-5 w-5"/> Finalizar Reporte</>}</button>
                         )}
                     </div>
                 </div>

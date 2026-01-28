@@ -26,6 +26,8 @@ const EvaluacionDocente = () => {
     const [selectedAsignatura, setSelectedAsignatura] = useState('');
     const [selectedParcial, setSelectedParcial] = useState('1');
     const [habilidadActiva, setHabilidadActiva] = useState(null); 
+    
+    const [p2Habilitado, setP2Habilitado] = useState(false);
 
     // --- CARGAS INICIALES ---
     useEffect(() => {
@@ -45,21 +47,52 @@ const EvaluacionDocente = () => {
         fetchInicial();
     }, []);
 
-    // --- CARGAR PLANIFICACIÓN Y PROGRESO ---
+    // --- VERIFICAR ESTADO DEL PARCIAL 1 ---
+    const verificarEstadoP1 = async () => {
+        if (!selectedAsignatura || !selectedPeriodo) return;
+        try {
+            const [resPlan, resProg] = await Promise.all([
+                api.get(`/planificaciones/verificar/${selectedAsignatura}`, { 
+                    params: { parcial: '1', periodo: selectedPeriodo } 
+                }),
+                api.get('/docente/progreso', {
+                    params: { asignatura_id: selectedAsignatura, periodo: selectedPeriodo, parcial: '1' }
+                })
+            ]);
+
+            const idsPlanificados = (resPlan.data.habilidades_seleccionadas || []).map(id => Number(id));
+            const progresoMap = {};
+            resProg.data.forEach(p => progresoMap[Number(p.habilidad_id)] = (p.completado === 1 || p.completado === true));
+
+            const todoCompleto = idsPlanificados.length > 0 && idsPlanificados.every(id => progresoMap[id] === true);
+            setP2Habilitado(todoCompleto);
+
+        } catch (e) {
+            console.error("Error verificando P1", e);
+            setP2Habilitado(false);
+        }
+    };
+
+    useEffect(() => {
+        if(selectedAsignatura && selectedPeriodo) {
+            verificarEstadoP1();
+            setSelectedParcial('1');
+        }
+    }, [selectedAsignatura, selectedPeriodo]);
+
     useEffect(() => {
         if (selectedAsignatura && selectedParcial && selectedPeriodo) {
             cargarPlanificacionYProgreso(false);
         }
     }, [selectedAsignatura, selectedParcial, selectedPeriodo]);
 
-    // --- CARGAR ESTUDIANTES (CORREGIDO: Ahora recarga al cambiar Parcial) ---
     useEffect(() => {
         if (selectedAsignatura && habilidadActiva && selectedParcial) {
             cargarEstudiantesYNotas();
         }
-    }, [habilidadActiva, selectedParcial]); // <--- AQUI ESTABA EL ERROR (Faltaba selectedParcial)
+    }, [habilidadActiva, selectedParcial]);
 
-    const cargarPlanificacionYProgreso = async (forzarAvance = false) => {
+    const cargarPlanificacionYProgreso = async (forzarAvance = false, idRecienCompletado = null) => {
         setLoading(true);
         try {
             const resPlan = await api.get(`/planificaciones/verificar/${selectedAsignatura}?parcial=${selectedParcial}&periodo=${encodeURIComponent(selectedPeriodo)}`);
@@ -67,8 +100,13 @@ const EvaluacionDocente = () => {
             if (resPlan.data.tiene_asignacion && resPlan.data.es_edicion) {
                 const guardadas = resPlan.data.actividades_guardadas || {};
                 const catalogo = resPlan.data.habilidades || [];
-                const idsSeleccionados = resPlan.data.habilidades_seleccionadas || [];
-                const habilidadesListas = catalogo.filter(h => idsSeleccionados.includes(h.id));
+                
+                const idsSeleccionados = (resPlan.data.habilidades_seleccionadas || []).map(id => Number(id));
+                let habilidadesListas = catalogo.filter(h => idsSeleccionados.includes(Number(h.id)));
+                
+                habilidadesListas.sort((a, b) => {
+                    return idsSeleccionados.indexOf(Number(a.id)) - idsSeleccionados.indexOf(Number(b.id));
+                });
                 
                 setHabilidadesPlanificadas(habilidadesListas);
                 setActividadesContexto(guardadas);
@@ -78,21 +116,32 @@ const EvaluacionDocente = () => {
                 });
                 
                 const mapaProgreso = {};
-                resProgreso.data.forEach(p => { mapaProgreso[p.habilidad_id] = p.completado; });
+                resProgreso.data.forEach(p => { 
+                    mapaProgreso[Number(p.habilidad_id)] = (p.completado === 1 || p.completado === true || p.completado === '1'); 
+                });
+
+                if (idRecienCompletado) {
+                    mapaProgreso[Number(idRecienCompletado)] = true;
+                }
+
                 setProgresoHabilidades(mapaProgreso);
 
                 if (habilidadesListas.length > 0) {
-                    const primeraPendiente = habilidadesListas.find(h => !mapaProgreso[h.id]);
-                    const siguienteId = primeraPendiente ? primeraPendiente.id : habilidadesListas[0].id;
+                    const primeraPendiente = habilidadesListas.find(h => !mapaProgreso[Number(h.id)]);
+                    const siguienteId = primeraPendiente ? Number(primeraPendiente.id) : Number(habilidadesListas[0].id);
 
                     if (forzarAvance) {
-                        if (habilidadActiva && mapaProgreso[habilidadActiva] && siguienteId !== habilidadActiva) {
-                            setHabilidadActiva(siguienteId);
-                            setSelectedParcial('1'); 
-                            Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Pasando a siguiente habilidad...', showConfirmButton: false, timer: 2000 });
+                        // La lógica de avance ahora se maneja principalmente en handleGuardar para el "Boom"
+                        // Pero mantenemos esto para saltos menores
+                        if (habilidadActiva && mapaProgreso[Number(habilidadActiva)]) {
+                            const idxActual = habilidadesListas.findIndex(h => Number(h.id) === Number(habilidadActiva));
+                            if (idxActual >= 0 && idxActual < habilidadesListas.length - 1) {
+                                const nextId = Number(habilidadesListas[idxActual + 1].id);
+                                setHabilidadActiva(nextId);
+                            }
                         }
                     } else {
-                        const activaEsValida = habilidadesListas.some(h => h.id === habilidadActiva);
+                        const activaEsValida = habilidadesListas.some(h => Number(h.id) === Number(habilidadActiva));
                         if (!habilidadActiva || !activaEsValida) {
                             setHabilidadActiva(siguienteId);
                         }
@@ -145,28 +194,101 @@ const EvaluacionDocente = () => {
                 periodo: selectedPeriodo,
                 notas
             });
-            Swal.fire('¡Guardado!', `Calificaciones registradas correctamente.`, 'success');
-            await cargarPlanificacionYProgreso(true); 
+
+            // Verificar si completamos la habilidad actual
+            const pendientesLocal = estudiantes.filter(e => !e.nivel).length;
+            const habilidadCompletada = (pendientesLocal === 0);
+
+            // Verificar si era la ÚLTIMA habilidad de la lista
+            const indexActual = habilidadesPlanificadas.findIndex(h => Number(h.id) === Number(habilidadActiva));
+            const esUltimaHabilidad = indexActual === habilidadesPlanificadas.length - 1;
+
+            if (habilidadCompletada) {
+                if (esUltimaHabilidad) {
+                    // --- EL BOOM FINAL ---
+                    if (selectedParcial === '1') {
+                        setP2Habilitado(true); // Desbloqueo visual inmediato
+                        Swal.fire({
+                            title: '¡Primer Parcial Completado! 🎉',
+                            text: 'Has finalizado todas las habilidades. ¿Deseas pasar al Segundo Parcial ahora mismo?',
+                            icon: 'success',
+                            showCancelButton: true,
+                            confirmButtonColor: '#3085d6',
+                            cancelButtonColor: '#64748b',
+                            confirmButtonText: 'Sí, ir al 2do Parcial',
+                            cancelButtonText: 'Quedarme aquí',
+                            backdrop: `rgba(0,0,123,0.4) url("/images/confetti.gif") left top no-repeat` // Opcional si tienes gif
+                        }).then((result) => {
+                            if (result.isConfirmed) {
+                                setSelectedParcial('2');
+                                setHabilidadActiva(null); // Reset para cargar P2
+                            }
+                        });
+                    } else {
+                        Swal.fire({
+                            title: '¡Excelente Trabajo! 🎓',
+                            text: 'Has completado la evaluación de esta asignatura exitosamente.',
+                            icon: 'success',
+                            confirmButtonColor: '#10B981'
+                        });
+                    }
+                } else {
+                    // --- MENSAJE DE AVANCE NORMAL ---
+                    Swal.fire({
+                        toast: true,
+                        position: 'top-end',
+                        icon: 'success',
+                        title: 'Habilidad completada. ¡Siguiente desbloqueada! 🔓',
+                        showConfirmButton: false,
+                        timer: 2000
+                    });
+                }
+            } else {
+                // Mensaje normal de guardado parcial
+                Swal.fire({
+                    toast: true,
+                    position: 'top-end',
+                    icon: 'success',
+                    title: 'Progreso guardado',
+                    showConfirmButton: false,
+                    timer: 1500
+                });
+            }
+
+            // Recargar datos asegurando que la actual se marque como completada
+            await cargarPlanificacionYProgreso(true, habilidadCompletada ? habilidadActiva : null); 
+            
+            // Re-verificación de seguridad
+            if (selectedParcial === '1' && habilidadCompletada && esUltimaHabilidad) {
+                verificarEstadoP1();
+            }
+
         } catch (error) { Swal.fire('Error', 'No se pudo guardar.', 'error'); }
     };
 
     const pendientes = estudiantes.filter(e => !e.nivel).length;
     const asignaturasFiltradas = asignaturas.filter(a => a.periodo === selectedPeriodo);
-    const opcionesAsignaturas = asignaturasFiltradas.map(a => ({ value: a.id, label: a.nombre, subtext: `${a.carrera} (${a.paralelo})`, periodo: a.periodo }));
-    const opcionesParciales = [{ value: '1', label: 'Primer Parcial' }, { value: '2', label: 'Segundo Parcial' }];
+    
+    const opcionesParciales = [
+        { value: '1', label: 'Primer Parcial' }, 
+        { 
+            value: '2', 
+            label: p2Habilitado ? 'Segundo Parcial' : '🔒 2do Parcial (Bloqueado)', 
+            disabled: !p2Habilitado 
+        }
+    ];
 
-    // --- ESTILOS DE LOS BOTONES ---
+    const opcionesAsignaturas = asignaturasFiltradas.map(a => ({ value: a.id, label: a.nombre, subtext: `${a.carrera} (${a.paralelo})`, periodo: a.periodo }));
+
     const getButtonClass = (est, nivelBoton) => {
         const notaActual = est.nivel ? parseInt(est.nivel) : null;
         const notaP1 = est.nivel_p1 ? parseInt(est.nivel_p1) : null;
 
         const esNotaActual = notaActual === nivelBoton;
-        // Solo es referencia si: Estamos en P2 Y coincide con P1 Y NO es la nota que acabamos de poner en P2
         const esRefP1 = selectedParcial === '2' && notaP1 === nivelBoton && !esNotaActual;
 
         let baseClass = "w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-200 border relative ";
 
-        // 1. SELECCIONADA (SÓLIDO)
         if (esNotaActual) {
             if (nivelBoton === 1) return baseClass + "bg-red-600 border-red-700 text-white shadow-lg shadow-red-200 scale-110 z-10";
             if (nivelBoton === 2) return baseClass + "bg-orange-500 border-orange-600 text-white shadow-lg shadow-orange-200 scale-110 z-10";
@@ -175,7 +297,6 @@ const EvaluacionDocente = () => {
             if (nivelBoton === 5) return baseClass + "bg-green-700 border-green-800 text-white shadow-lg shadow-green-200 scale-110 z-10";
         }
 
-        // 2. REFERENCIA P1 (FANTASMA / CONTORNO)
         if (esRefP1) {
             if (nivelBoton === 1) return baseClass + "bg-white text-red-500 border-red-300 border-2 border-dashed opacity-80";
             if (nivelBoton === 2) return baseClass + "bg-white text-orange-500 border-orange-300 border-2 border-dashed opacity-80";
@@ -184,18 +305,29 @@ const EvaluacionDocente = () => {
             if (nivelBoton === 5) return baseClass + "bg-white text-green-600 border-green-300 border-2 border-dashed opacity-80";
         }
 
-        // 3. INACTIVA
         return baseClass + "bg-white text-gray-300 border-gray-100 hover:border-blue-300 hover:text-blue-500 hover:bg-blue-50";
     };
 
     const getNombreHabilidadActiva = () => {
-        const hab = habilidadesPlanificadas.find(h => h.id === habilidadActiva);
+        const hab = habilidadesPlanificadas.find(h => Number(h.id) === Number(habilidadActiva));
         return hab ? hab.nombre : '';
     };
     
     const nombreNormalizado = getNombreHabilidadActiva().trim();
     const keyRubrica = Object.keys(RUBRICAS).find(k => k.toLowerCase() === nombreNormalizado.toLowerCase()) || nombreNormalizado;
     const rubricaActual = RUBRICAS[keyRubrica] || {};
+
+    const handleCambioParcial = (val) => {
+        if (val === '2' && !p2Habilitado) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Parcial Bloqueado',
+                text: 'Debes completar el 100% de las habilidades del Primer Parcial para desbloquear el Segundo Parcial.'
+            });
+            return;
+        }
+        setSelectedParcial(val);
+    };
 
     return (
         <div className="space-y-6 animate-fade-in pb-20">
@@ -227,23 +359,32 @@ const EvaluacionDocente = () => {
                             <CustomSelect label="Materia" options={opcionesAsignaturas} value={selectedAsignatura} onChange={setSelectedAsignatura} placeholder={asignaturasFiltradas.length > 0 ? "-- Seleccionar Materia --" : "Sin materias en este periodo"} />
                         </div>
                         <div className={!selectedAsignatura ? 'opacity-50 pointer-events-none' : ''}>
-                            <CustomSelect label="Parcial" icon={ClockIcon} options={opcionesParciales} value={selectedParcial} onChange={setSelectedParcial} />
+                            <CustomSelect 
+                                label="Parcial" 
+                                icon={ClockIcon} 
+                                options={opcionesParciales} 
+                                value={selectedParcial} 
+                                onChange={handleCambioParcial} 
+                            />
                         </div>
                     </div>
 
                     {habilidadesPlanificadas.length > 0 && (
                         <div className="space-y-2">
-                            <h3 className="text-xs font-bold text-gray-400 uppercase px-1">Progreso de Habilidades</h3>
+                            <h3 className="text-xs font-bold text-gray-400 uppercase px-1">Progreso de Habilidades ({selectedParcial === '1' ? '1er P.' : '2do P.'})</h3>
                             {habilidadesPlanificadas.map((hab, index) => {
-                                const completado = progresoHabilidades[hab.id]; 
-                                const activo = habilidadActiva === hab.id;
-                                const anteriorCompletada = index === 0 || progresoHabilidades[habilidadesPlanificadas[index - 1].id];
+                                const idHab = Number(hab.id);
+                                const completado = progresoHabilidades[idHab]; 
+                                const activo = habilidadActiva === idHab;
+                                
+                                const idAnterior = index > 0 ? Number(habilidadesPlanificadas[index - 1].id) : null;
+                                const anteriorCompletada = index === 0 || (idAnterior && progresoHabilidades[idAnterior]);
                                 const bloqueado = !anteriorCompletada;
 
                                 return (
                                     <button
                                         key={hab.id}
-                                        onClick={() => !bloqueado && setHabilidadActiva(hab.id)}
+                                        onClick={() => !bloqueado && setHabilidadActiva(idHab)}
                                         disabled={bloqueado}
                                         className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-between group 
                                             ${activo 

@@ -6,7 +6,7 @@ import {
     MagnifyingGlassIcon, PlusIcon, PencilSquareIcon, TrashIcon,
     BookOpenIcon, CloudArrowUpIcon, XMarkIcon, AcademicCapIcon,
     ClockIcon, Square3Stack3DIcon, ArrowDownTrayIcon, DocumentTextIcon,
-    ChevronLeftIcon, ChevronRightIcon // <--- ICONOS NUEVOS
+    ChevronLeftIcon, ChevronRightIcon
 } from '@heroicons/react/24/outline';
 
 const GestionAsignaturas = () => {
@@ -17,9 +17,9 @@ const GestionAsignaturas = () => {
     const [unidades, setUnidades] = useState([]);
     const [loading, setLoading] = useState(false);
     
-    // Paginación
+    // PAGINACIÓN (AJUSTADO A 8)
     const [currentPage, setCurrentPage] = useState(1);
-    const ITEMS_PER_PAGE = 7;
+    const ITEMS_PER_PAGE = 8;
 
     const [showModal, setShowModal] = useState(false);
     const [showImportModal, setShowImportModal] = useState(false);

@@ -4,7 +4,8 @@ import Swal from 'sweetalert2';
 import { 
     BookOpenIcon, FolderIcon, 
     ChevronRightIcon, MagnifyingGlassIcon, ClipboardDocumentListIcon, UserPlusIcon,
-    TrashIcon, XMarkIcon, IdentificationIcon, CheckCircleIcon
+    TrashIcon, XMarkIcon, IdentificationIcon, CheckCircleIcon,
+    ChevronLeftIcon 
 } from '@heroicons/react/24/outline';
 import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid';
 
@@ -17,6 +18,10 @@ const MisCursos = () => {
     const [materiaSeleccionada, setMateriaSeleccionada] = useState(null);
     const [loading, setLoading] = useState(false);
     const [busqueda, setBusqueda] = useState('');
+
+    // PAGINACIÓN (LISTAS DE 9)
+    const [currentPage, setCurrentPage] = useState(1);
+    const ITEMS_PER_PAGE = 9;
 
     // Estados para el Modal
     const [showModal, setShowModal] = useState(false);
@@ -33,13 +38,24 @@ const MisCursos = () => {
         api.get('/docente/mis-cursos')
             .then(res => {
                 setPeriodoNombre(res.data.periodo);
-                setMenuCursos(res.data.cursos || []);
+                
+                // ORDENAR CICLOS (I, II, III...)
+                const ordenCiclos = { 'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5, 'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10 };
+                const cursosOrdenados = (res.data.cursos || []).sort((a, b) => {
+                    const valA = ordenCiclos[a.ciclo] || 99;
+                    const valB = ordenCiclos[b.ciclo] || 99;
+                    return valA - valB;
+                });
+
+                setMenuCursos(cursosOrdenados);
             }).catch(e => console.error("Error cargando menú", e));
     };
 
     const handleSeleccionarMateria = async (materia) => {
         setMateriaSeleccionada(materia);
         setLoading(true);
+        setCurrentPage(1); // Reset paginación
+        setBusqueda('');   // Reset búsqueda
         try {
             const res = await api.get(`/docente/curso/${materia.asignatura_id}/estudiantes`);
             setEstudiantes(res.data);
@@ -72,57 +88,40 @@ const MisCursos = () => {
         }
     };
 
-    // 👇 LOGICA DE FILTRADO MEJORADA 👇
-    // Muestra SIEMPRE los seleccionados primero + los resultados de la búsqueda
+    // LÓGICA DE FILTRADO MODAL
     const estudiantesFiltradosModal = (() => {
         const termino = busquedaModal.toLowerCase();
-
-        // 1. Identificar seleccionados (que no estén ya inscritos en la materia)
         const seleccionados = listaGlobalEstudiantes.filter(e => 
             selectedCedulas.includes(e.cedula) && 
             !estudiantes.some(inscrito => inscrito.cedula === e.cedula)
         );
-
-        // 2. Identificar el resto (filtrados por búsqueda y no seleccionados)
         const resto = listaGlobalEstudiantes.filter(e => {
-            // Excluir si ya está inscrito en la materia
             if (estudiantes.some(inscrito => inscrito.cedula === e.cedula)) return false;
-            // Excluir si ya está en la lista de seleccionados (para no duplicar visualmente)
             if (selectedCedulas.includes(e.cedula)) return false;
-
-            // Filtro de búsqueda normal
             return (e.nombres + ' ' + e.apellidos).toLowerCase().includes(termino) || 
                    e.cedula.includes(termino);
         });
-
-        // 3. Unir: Seleccionados arriba + Resultados de búsqueda abajo
         return [...seleccionados, ...resto].slice(0, 20);
     })();
 
-    // 👇 CAMBIO CLAVE: LIMPIAR BÚSQUEDA AL SELECCIONAR 👇
     const toggleSeleccion = (cedula) => {
         if (selectedCedulas.includes(cedula)) {
             setSelectedCedulas(prev => prev.filter(c => c !== cedula));
         } else {
             setSelectedCedulas(prev => [...prev, cedula]);
-            // Limpiamos el filtro para ver la lista completa (y los seleccionados al inicio)
             setBusquedaModal(''); 
         }
     };
 
     const inscribirMasivo = async () => {
         if (selectedCedulas.length === 0) return;
-
         Swal.fire({
             title: 'Inscribiendo...',
             text: `Procesando ${selectedCedulas.length} estudiantes`,
             allowOutsideClick: false,
             didOpen: () => Swal.showLoading()
         });
-
-        let exitos = 0;
-        let errores = 0;
-
+        let exitos = 0; let errores = 0;
         await Promise.all(selectedCedulas.map(async (cedula) => {
             try {
                 await api.post('/docente/agregar-estudiante', {
@@ -130,17 +129,13 @@ const MisCursos = () => {
                     asignatura_id: materiaSeleccionada.asignatura_id
                 });
                 exitos++;
-            } catch (e) {
-                errores++;
-            }
+            } catch (e) { errores++; }
         }));
-
         Swal.fire({
             title: errores === 0 ? '¡Éxito Total!' : 'Proceso Finalizado',
             text: `Se inscribieron ${exitos} estudiantes correctamente.${errores > 0 ? ` Fallaron ${errores}.` : ''}`,
             icon: errores === 0 ? 'success' : 'warning'
         });
-
         handleSeleccionarMateria(materiaSeleccionada);
         setShowModal(false);
     };
@@ -171,9 +166,24 @@ const MisCursos = () => {
         });
     };
 
-    const filtradosListaClase = estudiantes.filter(e => 
-        e.nombres.toLowerCase().includes(busqueda.toLowerCase()) || e.cedula.includes(busqueda)
-    );
+    // --- LÓGICA DE FILTRADO Y PAGINACIÓN TABLA PRINCIPAL ---
+    const getFilteredData = () => {
+        return estudiantes.filter(e => 
+            e.nombres.toLowerCase().includes(busqueda.toLowerCase()) || e.cedula.includes(busqueda)
+        );
+    };
+
+    const filtradosListaClase = getFilteredData();
+    const totalPages = Math.ceil(filtradosListaClase.length / ITEMS_PER_PAGE);
+    const indexOfLastItem = currentPage * ITEMS_PER_PAGE;
+    const indexOfFirstItem = indexOfLastItem - ITEMS_PER_PAGE;
+    const currentItems = filtradosListaClase.slice(indexOfFirstItem, indexOfLastItem);
+
+    // Resetear paginación al buscar
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [busqueda]);
+
 
     return (
         <div className="flex h-[calc(100vh-theme(spacing.24))] -m-6 animate-fade-in bg-gray-50 relative">
@@ -222,12 +232,12 @@ const MisCursos = () => {
             <main className="flex-1 flex flex-col bg-white">
                 {materiaSeleccionada ? (
                     <>
-                        <div className="p-8 border-b flex justify-between items-center bg-gray-50/50">
+                        <div className="p-6 border-b flex justify-between items-center bg-gray-50/50 shrink-0">
                             <div>
-                                <h1 className="text-2xl font-bold text-gray-900">{materiaSeleccionada.nombre}</h1>
+                                <h1 className="text-xl font-bold text-gray-900">{materiaSeleccionada.nombre}</h1>
                                 <p className="text-sm text-gray-500">Oficial: {estudiantes.length} alumnos</p>
                             </div>
-                            <div className="flex gap-4">
+                            <div className="flex gap-3">
                                 <button 
                                     onClick={abrirModalAgregar}
                                     className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition shadow-lg shadow-blue-200"
@@ -238,35 +248,41 @@ const MisCursos = () => {
                                     <MagnifyingGlassIcon className="absolute left-3 top-2.5 h-5 w-5 text-gray-400"/>
                                     <input 
                                         type="text" 
-                                        placeholder="Buscar en lista..." 
-                                        className="pl-10 pr-4 py-2 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="Buscar..." 
+                                        className="pl-10 pr-4 py-2 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 w-56"
                                         onChange={e => setBusqueda(e.target.value)}
+                                        value={busqueda}
                                     />
                                 </div>
                             </div>
                         </div>
-                        <div className="p-8 overflow-auto">
+                        
+                        {/* TABLA OPTIMIZADA: Mayor espaciado y fuente más grande */}
+                        <div className="flex-1 p-5"> 
                             <table className="w-full text-left border-collapse">
                                 <thead>
                                     <tr className="text-gray-400 text-xs uppercase tracking-wider border-b">
-                                        <th className="pb-4 font-bold">#</th>
-                                        <th className="pb-4 font-bold">Estudiante</th>
-                                        <th className="pb-4 font-bold">Identificación</th>
-                                        <th className="pb-4 font-bold text-right">Acciones</th>
+                                        <th className="pb-3 font-bold pl-2">#</th>
+                                        <th className="pb-3 font-bold">Estudiante</th>
+                                        <th className="pb-3 font-bold">Identificación</th>
+                                        <th className="pb-3 font-bold text-right pr-2">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y">
                                     {loading ? (
                                         <tr><td colSpan="4" className="py-10 text-center text-gray-400">Cargando lista...</td></tr>
-                                    ) : filtradosListaClase.map((e, i) => (
+                                    ) : currentItems.length === 0 ? (
+                                        <tr><td colSpan="4" className="py-10 text-center text-gray-400">No se encontraron estudiantes.</td></tr>
+                                    ) : currentItems.map((e, i) => (
                                         <tr key={e.id} className="hover:bg-gray-50 group">
-                                            <td className="py-4 text-gray-400 text-sm">{i+1}</td>
-                                            <td className="py-4">
-                                                <div className="font-bold text-gray-800">{e.nombres}</div>
+                                            {/* Padding aumentado a py-3.5 para llenar espacio */}
+                                            <td className="py-3.5 pl-2 text-gray-500 text-sm">{indexOfFirstItem + i + 1}</td>
+                                            <td className="py-3.5">
+                                                <div className="font-bold text-gray-900 text-base">{e.nombres}</div>
                                                 <div className="text-xs text-gray-500">{e.email}</div>
                                             </td>
-                                            <td className="py-4 font-mono text-sm text-gray-600">{e.cedula}</td>
-                                            <td className="py-4 text-right">
+                                            <td className="py-3.5 font-mono text-sm text-gray-600">{e.cedula}</td>
+                                            <td className="py-3.5 text-right pr-2">
                                                 <button 
                                                     onClick={() => handleEliminarEstudiante(e.id)}
                                                     className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition opacity-0 group-hover:opacity-100"
@@ -280,6 +296,35 @@ const MisCursos = () => {
                                 </tbody>
                             </table>
                         </div>
+
+                        {/* --- PAGINACIÓN --- */}
+                        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between shrink-0">
+                            <span className="text-sm text-gray-500">
+                                Mostrando <span className="font-bold text-gray-800">{currentItems.length > 0 ? indexOfFirstItem + 1 : 0}</span> a <span className="font-bold text-gray-800">{Math.min(indexOfLastItem, filtradosListaClase.length)}</span> de <span className="font-bold text-gray-800">{filtradosListaClase.length}</span>
+                            </span>
+                            
+                            <div className="flex items-center gap-2">
+                                <button 
+                                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                    disabled={currentPage === 1}
+                                    className={`p-2 rounded-lg border transition ${currentPage === 1 ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-gray-300 text-gray-600 hover:bg-white hover:shadow-sm'}`}
+                                >
+                                    <ChevronLeftIcon className="h-5 w-5" />
+                                </button>
+                                
+                                <span className="text-sm font-medium text-gray-600 px-3">
+                                    Página {currentPage} de {totalPages || 1}
+                                </span >
+
+                                <button 
+                                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                                    disabled={currentPage === totalPages || totalPages === 0}
+                                    className={`p-2 rounded-lg border transition ${currentPage === totalPages || totalPages === 0 ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-gray-300 text-gray-600 hover:bg-white hover:shadow-sm'}`}
+                                >
+                                    <ChevronRightIcon className="h-5 w-5" />
+                                </button>
+                            </div>
+                        </div>
                     </>
                 ) : (
                     <div className="flex-1 flex flex-col items-center justify-center text-gray-300">
@@ -289,7 +334,7 @@ const MisCursos = () => {
                 )}
             </main>
 
-            {/* --- MODAL PARA AGREGAR ESTUDIANTE --- */}
+            {/* --- MODAL PARA AGREGAR ESTUDIANTE (Mantenido Igual) --- */}
             {showModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col h-[80vh]">

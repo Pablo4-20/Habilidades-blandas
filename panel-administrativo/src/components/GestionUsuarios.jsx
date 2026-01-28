@@ -18,8 +18,8 @@ import {
     ClockIcon,
     ExclamationCircleIcon,
     DocumentTextIcon,
-    ChevronLeftIcon,   // <--- NUEVO
-    ChevronRightIcon   // <--- NUEVO
+    ChevronLeftIcon,
+    ChevronRightIcon
 } from '@heroicons/react/24/outline';
 
 // --- VALIDACIÓN CÉDULA ECUADOR ---
@@ -58,11 +58,11 @@ const GestionUsuarios = () => {
     const [loading, setLoading] = useState(false);
     const [editingId, setEditingId] = useState(null); 
 
-    // Filtros y Paginación
+    // Filtros y Paginación (AJUSTADO A 6)
     const [busqueda, setBusqueda] = useState('');
     const [filtroRol, setFiltroRol] = useState('');
-    const [currentPage, setCurrentPage] = useState(1); // <--- ESTADO PAGINACIÓN
-    const ITEMS_PER_PAGE = 7; // <--- CANTIDAD POR PÁGINA (Ajustable)
+    const [currentPage, setCurrentPage] = useState(1); 
+    const ITEMS_PER_PAGE = 6; 
     
     // Modales y Archivos
     const [showModal, setShowModal] = useState(false);       
