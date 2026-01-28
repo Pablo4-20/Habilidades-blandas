@@ -5,7 +5,7 @@ import CustomSelect from './ui/CustomSelect';
 import { 
     DocumentTextIcon, BookOpenIcon, CalendarDaysIcon,
     ChartBarIcon, ArrowRightIcon, ArrowLeftIcon, ArrowDownTrayIcon, LockClosedIcon,
-    SparklesIcon, CheckCircleIcon
+    SparklesIcon, CheckCircleIcon, ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 
 const ReportesDocente = () => {
@@ -129,6 +129,12 @@ const ReportesDocente = () => {
     const handleAutoSave = async () => {
         if (!itemActual) return;
         
+        // --- VALIDACIÓN EXTRA ---
+        const totalP1 = calcularTotalEvaluados(itemActual.p1?.estadisticas);
+        const totalP2 = calcularTotalEvaluados(itemActual.p2?.estadisticas);
+        if ((totalP1 + totalP2) === 0) return; // No guardar si no hay datos
+        // -----------------------
+
         const planID = itemActual.p2?.planificacion_id || itemActual.p1?.planificacion_id;
         const habID = itemActual.habilidad_id;
         const texto = conclusiones[keyTextAreaActual];
@@ -168,14 +174,18 @@ const ReportesDocente = () => {
 
                 const texto = conclusiones[keyP2] || conclusiones[keyP1];
 
-                if (texto) {
+                // Validación: Solo enviar si hay texto y si realmente hubo evaluaciones para ese grupo
+                const tP1 = calcularTotalEvaluados(grupo.p1?.estadisticas);
+                const tP2 = calcularTotalEvaluados(grupo.p2?.estadisticas);
+                
+                if (texto && (tP1 + tP2 > 0)) {
                     if (planP2) listaParaEnviar.push({ id: planP2, habilidad_id: habId, texto });
                     if (planP1) listaParaEnviar.push({ id: planP1, habilidad_id: habId, texto });
                 }
             });
 
             if (listaParaEnviar.length === 0) {
-                Swal.fire('Info', 'No hay datos para guardar.', 'info');
+                Swal.fire('Info', 'No hay datos válidos para guardar.', 'info');
                 setGuardando(false);
                 return;
             }
@@ -189,10 +199,16 @@ const ReportesDocente = () => {
         }
     };
 
+    // --- HELPER PARA CALCULAR TOTAL ---
+    const calcularTotalEvaluados = (stats) => {
+        if (!stats) return 0;
+        return Object.values(stats).reduce((acc, curr) => acc + Number(curr), 0);
+    };
+
     // --- COMPONENTE GRAFICO ---
     const MiniGrafico = ({ stats, titulo }) => {
         if (!stats) return <div className="h-40 flex items-center justify-center border-2 border-dashed border-gray-200 rounded-xl bg-gray-50 text-gray-400 text-sm">{titulo}: Pendiente</div>;
-        const totalEvaluados = Object.values(stats).reduce((a, b) => a + b, 0);
+        const totalEvaluados = calcularTotalEvaluados(stats);
         const maxVal = Math.max(...Object.values(stats)) || 1; 
 
         return (
@@ -234,8 +250,14 @@ const ReportesDocente = () => {
         return unicas;
     }, [asignacionesRaw, selectedPeriodo]);
 
+    // Variables de renderizado
     const itemActual = reportesAgrupados[pasoActual];
     const keyTextAreaActual = itemActual ? (itemActual.uniqueKeyP2 || itemActual.uniqueKeyP1) : null;
+    
+    // --- LÓGICA DE BLOQUEO ---
+    const totalP1 = itemActual ? calcularTotalEvaluados(itemActual.p1?.estadisticas) : 0;
+    const totalP2 = itemActual ? calcularTotalEvaluados(itemActual.p2?.estadisticas) : 0;
+    const hayCalificaciones = (totalP1 + totalP2) > 0;
 
     return (
         <div className="space-y-6 animate-fade-in pb-12 p-6 bg-gray-50 min-h-screen">
@@ -258,15 +280,13 @@ const ReportesDocente = () => {
             {!loading && itemActual && (
                 <div className="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden flex flex-col transition-all duration-300">
                     
-                    {/* --- HEADER MODIFICADO: AHORA INCLUYE LOS BOTONES --- */}
+                    {/* --- HEADER --- */}
                     <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 flex flex-col gap-4">
-                        {/* Fila 1: Progreso */}
                         <div className="flex justify-between items-center">
                             <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Habilidad {pasoActual + 1} / {reportesAgrupados.length}</span>
                             <div className="flex gap-1.5">{reportesAgrupados.map((_, idx) => (<div key={idx} className={`h-1.5 rounded-full transition-all duration-300 ${idx === pasoActual ? 'w-8 bg-blue-600' : 'w-2 bg-gray-300'}`}></div>))}</div>
                         </div>
 
-                        {/* Fila 2: Controles de Navegación (Movidos Arriba) */}
                         <div className="flex justify-between items-center pt-1">
                             <button 
                                 onClick={handleAnterior} 
@@ -294,7 +314,7 @@ const ReportesDocente = () => {
                             )}
                         </div>
                     </div>
-                    {/* ---------------------------------------------------- */}
+                    {/* ----------------- */}
 
                     <div className="p-6 md:p-8 space-y-8">
                         <div className="flex items-center gap-4">
@@ -307,28 +327,35 @@ const ReportesDocente = () => {
                             <MiniGrafico stats={itemActual.p2?.estadisticas} titulo="Resultados Parcial 2" />
                         </div>
 
-                        <div className="bg-blue-50/50 p-6 rounded-2xl border border-blue-100 relative transition-colors focus-within:bg-blue-50 focus-within:border-blue-300">
+                        <div className={`p-6 rounded-2xl border transition-colors relative ${hayCalificaciones ? 'bg-blue-50/50 border-blue-100 focus-within:bg-blue-50 focus-within:border-blue-300' : 'bg-gray-100 border-gray-200 opacity-80 cursor-not-allowed'}`}>
                             <div className="flex justify-between items-center mb-3">
-                                <label className="block text-sm font-bold text-gray-700 flex items-center gap-2"><ChartBarIcon className="h-5 w-5 text-blue-600"/> Análisis de Evolución y Conclusiones</label>
-                                {autoGuardado && <span className="text-xs text-green-600 font-bold flex items-center gap-1 animate-pulse"><CheckCircleIcon className="h-4 w-4"/> Guardando...</span>}
+                                <label className={`block text-sm font-bold flex items-center gap-2 ${hayCalificaciones ? 'text-gray-700' : 'text-gray-400'}`}>
+                                    <ChartBarIcon className="h-5 w-5"/> Análisis de Evolución y Conclusiones
+                                </label>
+                                
+                                {hayCalificaciones ? (
+                                    autoGuardado && <span className="text-xs text-green-600 font-bold flex items-center gap-1 animate-pulse"><CheckCircleIcon className="h-4 w-4"/> Guardando...</span>
+                                ) : (
+                                    <span className="text-xs text-red-500 font-bold flex items-center gap-1 bg-white px-2 py-1 rounded border border-red-200 shadow-sm"><ExclamationTriangleIcon className="h-4 w-4"/> Se requieren calificaciones</span>
+                                )}
                             </div>
+                            
                             <textarea 
                                 rows="4"
-                                className="w-full px-4 py-3 border border-blue-200 rounded-xl bg-white focus:ring-4 focus:ring-blue-100 focus:border-blue-300 outline-none text-sm resize-none transition-all"
-                                placeholder={`Describa el avance del grupo en la habilidad "${itemActual.habilidad}"...`}
+                                disabled={!hayCalificaciones}
+                                className={`w-full px-4 py-3 border rounded-xl outline-none text-sm resize-none transition-all ${hayCalificaciones ? 'border-blue-200 bg-white focus:ring-4 focus:ring-blue-100 focus:border-blue-300' : 'border-gray-300 bg-gray-200 text-gray-500 cursor-not-allowed'}`}
+                                placeholder={hayCalificaciones ? `Describa el avance del grupo en la habilidad "${itemActual.habilidad}"...` : "Para escribir una conclusión, primero debe calificar a los estudiantes en esta habilidad."}
                                 value={conclusiones[keyTextAreaActual] || ''}
                                 onChange={(e) => {
-                                    if (keyTextAreaActual) {
+                                    if (keyTextAreaActual && hayCalificaciones) {
                                         setConclusiones(prev => ({ ...prev, [keyTextAreaActual]: e.target.value }));
                                     }
                                 }}
                                 onBlur={handleAutoSave}
                             />
-                            <p className="text-xs text-gray-400 mt-2 text-right">Se guarda automáticamente al cambiar de campo.</p>
+                            {hayCalificaciones && <p className="text-xs text-gray-400 mt-2 text-right">Se guarda automáticamente al cambiar de campo.</p>}
                         </div>
                     </div>
-
-                    {/* Footer removido ya que los botones están arriba ahora */}
                 </div>
             )}
             
