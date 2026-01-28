@@ -14,7 +14,8 @@ class DetallePlanificacion extends Model
     protected $fillable = [
         'planificacion_id',
         'habilidad_blanda_id',
-        'actividades'
+        'actividades',
+        'resultado_aprendizaje'
     ];
 
     // --- ESTA ES LA RELACIÓN QUE FALTABA ---

@@ -5,7 +5,8 @@ import CustomSelect from './ui/CustomSelect';
 import { 
     BookOpenIcon, SparklesIcon, 
     CheckBadgeIcon, CalendarDaysIcon, ClockIcon, 
-    CheckCircleIcon, PlusIcon, TrashIcon, ListBulletIcon, LockClosedIcon
+    CheckCircleIcon, PlusIcon, TrashIcon, ListBulletIcon, LockClosedIcon,
+    PencilSquareIcon // Ícono para identificar el campo de resultado
 } from '@heroicons/react/24/outline';
 
 const PlanificacionDocente = () => {
@@ -24,6 +25,11 @@ const PlanificacionDocente = () => {
     // Estado de la planificación actual
     const [habilidadesSeleccionadas, setHabilidadesSeleccionadas] = useState([]); 
     const [actividadesPorHabilidad, setActividadesPorHabilidad] = useState({}); 
+    
+    // NUEVO ESTADO: Almacena el resultado de aprendizaje por ID de habilidad
+    // Se gestiona independientemente por parcial (se limpia al cambiar de parcial).
+    const [resultadosAprendizaje, setResultadosAprendizaje] = useState({}); 
+
     const [esEdicion, setEsEdicion] = useState(false);
 
     // Estado para agregar nueva actividad
@@ -72,7 +78,13 @@ const PlanificacionDocente = () => {
     // --- LÓGICA PRINCIPAL ---
     const cargarPlanificacion = async () => {
         setLoading(true);
+        // Limpiamos los estados para asegurar que no se mezcle info de otros parciales
+        setHabilidadesSeleccionadas([]);
+        setActividadesPorHabilidad({});
+        setResultadosAprendizaje({});
+
         try {
+            // El backend debe devolver la info específica del PARCIAL solicitado (params: parcial)
             const res = await api.get(`/planificaciones/verificar/${form.asignatura_id}`, {
                 params: { parcial: form.parcial, periodo: form.periodo_academico }
             });
@@ -85,11 +97,12 @@ const PlanificacionDocente = () => {
                     
                     let seleccionadas = (res.data.habilidades_seleccionadas || []).map(id => Number(id));
                     
-                    // --- SINCRONIZACIÓN ESTRICTA ---
+                    // Recuperamos los resultados guardados para ESTE parcial
+                    const resultadosGuardados = res.data.resultados_guardados || {}; 
+
+                    // --- SINCRONIZACIÓN ESTRICTA (Para P2) ---
                     if (form.parcial === '2' && res.data.habilidades_p1 && res.data.habilidades_p1.length > 0) {
                         const idsP1 = res.data.habilidades_p1.map(id => Number(id));
-                        
-                        // Forzamos que la selección sea idéntica a la del P1.
                         const nuevaSeleccion = idsP1;
 
                         const huboCambios = seleccionadas.length !== nuevaSeleccion.length || 
@@ -102,42 +115,48 @@ const PlanificacionDocente = () => {
                         
                         seleccionadas = nuevaSeleccion;
 
-                        // Limpieza de actividades de habilidades que ya no existen
+                        // Filtramos actividades y resultados para mantener solo los de las habilidades válidas
                         const actividadesLimpias = {};
+                        const resultadosLimpios = {};
+
                         seleccionadas.forEach(id => {
                             if (res.data.actividades_guardadas && res.data.actividades_guardadas[id]) {
                                 actividadesLimpias[id] = res.data.actividades_guardadas[id];
                             }
+                            if (resultadosGuardados[id]) {
+                                resultadosLimpios[id] = resultadosGuardados[id];
+                            }
                         });
                         
                         setActividadesPorHabilidad(actividadesLimpias);
+                        setResultadosAprendizaje(resultadosLimpios);
                     } else {
+                        // Carga normal (P1 o P2 sin cambios de estructura)
                         setActividadesPorHabilidad(res.data.actividades_guardadas || {});
+                        setResultadosAprendizaje(resultadosGuardados);
                     }
                     // -------------------------------------------------
 
                     setHabilidadesSeleccionadas(seleccionadas);
                     
                 } else if (form.parcial === '2') {
-                    // Carga inicial P2
+                    // --- CARGA INICIAL PARCIAL 2 (NUEVO) ---
+                    // Hereda las habilidades del P1, pero actividades y resultados comienzan VACÍOS
                     const idsDelP1 = (res.data.habilidades_p1 || []).map(id => Number(id));
                     
                     if (idsDelP1.length > 0) {
                         setEsEdicion(false); 
                         setHabilidadesSeleccionadas(idsDelP1);
                         setActividadesPorHabilidad({}); 
+                        setResultadosAprendizaje({}); // IMPORTANTE: Resultados vacíos para definirlos nuevos en P2
                         
                         Swal.mixin({toast: true, position: 'top-end', timer: 3000, showConfirmButton: false})
-                            .fire({icon: 'success', title: 'Habilidades del P1 cargadas. Defina las actividades.'});
+                            .fire({icon: 'success', title: 'Habilidades del P1 cargadas. Defina los Resultados de Aprendizaje del 2do Parcial.'});
                     } else {
                         setEsEdicion(false);
-                        setHabilidadesSeleccionadas([]);
-                        setActividadesPorHabilidad({});
                     }
                 } else {
                     setEsEdicion(false);
-                    setHabilidadesSeleccionadas([]);
-                    setActividadesPorHabilidad({});
                 }
             }
         } catch (error) {
@@ -149,7 +168,7 @@ const PlanificacionDocente = () => {
     };
 
     const toggleHabilidad = (id) => {
-        // --- BLOQUEO: Si es Parcial 2, NO permitir cambios ---
+        // --- BLOQUEO: Si es Parcial 2, NO permitir cambios en la selección ---
         if (form.parcial === '2') return;
         // -----------------------------------------------------
 
@@ -157,14 +176,29 @@ const PlanificacionDocente = () => {
         setHabilidadesSeleccionadas(prev => {
             if (prev.includes(idNum)) {
                 const newState = prev.filter(h => h !== idNum);
+                
+                // Limpieza de datos al deseleccionar
                 const nuevasActividades = { ...actividadesPorHabilidad };
                 delete nuevasActividades[idNum];
                 setActividadesPorHabilidad(nuevasActividades);
+
+                const nuevosResultados = { ...resultadosAprendizaje };
+                delete nuevosResultados[idNum];
+                setResultadosAprendizaje(nuevosResultados);
+
                 return newState;
             } else {
                 return [...prev, idNum];
             }
         });
+    };
+
+    // Handler para escribir el Resultado de Aprendizaje
+    const handleResultadoChange = (habilidadId, texto) => {
+        setResultadosAprendizaje(prev => ({
+            ...prev,
+            [habilidadId]: texto
+        }));
     };
 
     const agregarActividad = (habilidadId) => {
@@ -193,24 +227,36 @@ const PlanificacionDocente = () => {
         e.preventDefault();
         if (habilidadesSeleccionadas.length === 0) return Swal.fire('Error', 'Selecciona al menos una habilidad.', 'warning');
 
+        // VALIDACIONES
         for (let id of habilidadesSeleccionadas) {
+            const nombreHab = catalogoHabilidades.find(h => h.id === id)?.nombre;
+            
+            // 1. Validar Resultado de Aprendizaje
+            if (!resultadosAprendizaje[id] || resultadosAprendizaje[id].trim().length < 5) {
+                return Swal.fire('Información Incompleta', `Debes definir un Resultado de Aprendizaje válido para: ${nombreHab}`, 'warning');
+            }
+
+            // 2. Validar Actividades
             if (!actividadesPorHabilidad[id] || actividadesPorHabilidad[id].length === 0) {
-                const nombreHab = catalogoHabilidades.find(h => h.id === id)?.nombre;
                 return Swal.fire('Faltan actividades', `Selecciona actividades para: ${nombreHab}`, 'warning');
             }
         }
 
         const user = JSON.parse(localStorage.getItem('user'));
+        
+        // Empaquetamos los datos. Al enviar 'form.parcial', el backend guardará estos resultados
+        // específicamente para ese parcial.
         const detalles = habilidadesSeleccionadas.map(id => ({
             habilidad_blanda_id: id,
-            actividades: actividadesPorHabilidad[id] 
+            actividades: actividadesPorHabilidad[id],
+            resultado_aprendizaje: resultadosAprendizaje[id] 
         }));
 
         try {
             await api.post('/planificaciones', {
                 asignatura_id: form.asignatura_id,
                 docente_id: user.id,
-                parcial: form.parcial,
+                parcial: form.parcial, // Define si es P1 o P2
                 periodo_academico: form.periodo_academico,
                 detalles: detalles
             });
@@ -218,7 +264,7 @@ const PlanificacionDocente = () => {
             await Swal.fire({
                 icon: 'success',
                 title: '¡Éxito!',
-                text: 'Planificación guardada correctamente.',
+                text: `Planificación del ${form.parcial === '1' ? 'Primer' : 'Segundo'} Parcial guardada correctamente.`,
                 returnFocus: false 
             });
 
@@ -284,21 +330,17 @@ const PlanificacionDocente = () => {
                             {form.parcial === '2' ? 'Habilidades Continuas (2do Parcial)' : 'Selecciona las Habilidades (1er Parcial)'}
                         </h3>
                         
-                      
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                             {catalogoHabilidades
                                 .filter(hab => {
-                                    if (form.parcial === '1') return true;
-                                    // En P2 solo mostramos las que están seleccionadas (que son las del P1)
-                                    // para no llenar la pantalla de opciones bloqueadas que no pueden usar.
-                                    return habilidadesSeleccionadas.includes(Number(hab.id));
+                                    // En P2 solo mostramos las seleccionadas en P1
+                                    if (form.parcial === '2') return habilidadesSeleccionadas.includes(Number(hab.id));
+                                    return true;
                                 })
                                 .map(hab => {
                                     const seleccionado = habilidadesSeleccionadas.includes(Number(hab.id));
                                     const opcionesActividades = getOpcionesActividades(hab.id);
-                                    
-                                    // Variable de bloqueo
-                                    const bloqueado = form.parcial === '2';
+                                    const bloqueado = form.parcial === '2'; // Bloquea el checkbox, no el contenido
 
                                     return (
                                         <div key={hab.id} className={`border rounded-xl p-4 transition-all flex flex-col ${seleccionado ? (bloqueado ? 'border-gray-300 bg-gray-50' : 'border-purple-500 bg-purple-50/30') : 'border-gray-200'}`}>
@@ -308,10 +350,9 @@ const PlanificacionDocente = () => {
                                                         type="checkbox" 
                                                         checked={seleccionado} 
                                                         onChange={() => toggleHabilidad(hab.id)} 
-                                                        disabled={bloqueado} // Deshabilita el click
+                                                        disabled={bloqueado} 
                                                         className={`w-5 h-5 rounded focus:ring-purple-500 ${bloqueado ? 'text-gray-400 cursor-not-allowed bg-gray-200 border-gray-300' : 'text-purple-600 cursor-pointer'}`}
                                                     />
-                                                    {/* Ícono de candado visual */}
                                                     {bloqueado && seleccionado && <LockClosedIcon className="h-3 w-3 text-gray-500 absolute -top-1 -right-1 bg-white rounded-full ring-1 ring-gray-200 shadow-sm"/>}
                                                 </div>
 
@@ -321,9 +362,26 @@ const PlanificacionDocente = () => {
                                                 </div>
                                             </div>
                                             
-                                            {/* Sección expandible de actividades */}
+                                            {/* SECCIÓN EXPANDIBLE */}
                                             {seleccionado && (
                                                 <div className="mt-auto pt-3 border-t border-purple-200/50">
+                                                    
+                                                    {/* --- CAMPO DE RESULTADO DE APRENDIZAJE --- */}
+                                                    {/* Este campo se llena independientemente para P1 y P2 */}
+                                                    <div className="mb-4 bg-white p-3 rounded-lg border border-purple-100 shadow-sm group-focus-within:ring-2 ring-purple-100 transition-all">
+                                                        <label className="text-[10px] font-bold text-purple-700 uppercase tracking-wide flex items-center gap-1 mb-1">
+                                                            <PencilSquareIcon className="h-3 w-3"/> Resultado de Aprendizaje ({form.parcial === '1' ? '1er P.' : '2do P.'})
+                                                        </label>
+                                                        <textarea 
+                                                            rows="2"
+                                                            className="w-full text-xs p-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-purple-200 focus:border-purple-400 outline-none resize-none bg-gray-50 focus:bg-white transition-all placeholder:text-gray-300"
+                                                            placeholder={`Defina el resultado esperado para el ${form.parcial}º Parcial...`}
+                                                            value={resultadosAprendizaje[hab.id] || ''}
+                                                            onChange={(e) => handleResultadoChange(hab.id, e.target.value)}
+                                                        />
+                                                    </div>
+                                                    {/* --------------------------------------------- */}
+
                                                     <p className="text-[10px] font-bold text-purple-700 mb-2 uppercase tracking-wide">Actividades:</p>
                                                     <ul className="space-y-1.5 mb-3">
                                                         {(actividadesPorHabilidad[hab.id] || []).map((act, idx) => (

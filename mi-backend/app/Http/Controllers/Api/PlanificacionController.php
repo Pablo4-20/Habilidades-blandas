@@ -55,7 +55,7 @@ class PlanificacionController extends Controller
 
             $planDocente = $queryPlan->first();
 
-            // --- NUEVO: SI ES PARCIAL 2, TRAER TAMBIÉN LOS IDS DEL PARCIAL 1 ---
+            // --- SI ES PARCIAL 2, TRAER TAMBIÉN LOS IDS DEL PARCIAL 1 ---
             $idsParcial1 = [];
             if ($parcialSolicitado == '2') {
                 $planP1 = Planificacion::with('detalles')
@@ -69,7 +69,7 @@ class PlanificacionController extends Controller
                     $idsParcial1 = $planP1->detalles->pluck('habilidad_blanda_id')->toArray();
                 }
             }
-            // -------------------------------------------------------------------
+            // -----------------------------------------------------------
 
             // 4. Respuesta Estructurada
             $datosRespuesta = [
@@ -80,7 +80,8 @@ class PlanificacionController extends Controller
                 'parcial_guardado' => null,
                 'habilidades_seleccionadas' => [], 
                 'actividades_guardadas' => [],
-                'habilidades_p1' => $idsParcial1 // Enviamos esto al frontend
+                'resultados_guardados' => [], // <--- NUEVO ARRAY PARA EL FRONTEND
+                'habilidades_p1' => $idsParcial1 
             ];
 
             if ($planDocente) {
@@ -90,6 +91,9 @@ class PlanificacionController extends Controller
                 foreach ($planDocente->detalles as $detalle) {
                     $datosRespuesta['habilidades_seleccionadas'][] = $detalle->habilidad_blanda_id;
                     $datosRespuesta['actividades_guardadas'][$detalle->habilidad_blanda_id] = explode("\n", $detalle->actividades);
+                    
+                    // AGREGAMOS EL RESULTADO DE APRENDIZAJE A LA RESPUESTA
+                    $datosRespuesta['resultados_guardados'][$detalle->habilidad_blanda_id] = $detalle->resultado_aprendizaje;
                 }
             }
 
@@ -123,6 +127,7 @@ class PlanificacionController extends Controller
                 ]
             );
 
+            // Borramos los detalles anteriores para reescribirlos
             $planificacion->detalles()->delete();
 
             foreach ($request->detalles as $detalle) {
@@ -130,9 +135,13 @@ class PlanificacionController extends Controller
 
                 $planificacion->detalles()->create([
                     'habilidad_blanda_id' => $detalle['habilidad_blanda_id'],
+                    // Convertir array de actividades a string
                     'actividades' => is_array($detalle['actividades']) 
                                      ? implode("\n", $detalle['actividades']) 
-                                     : $detalle['actividades']
+                                     : $detalle['actividades'],
+                    
+                    // GUARDAR EL RESULTADO DE APRENDIZAJE
+                    'resultado_aprendizaje' => $detalle['resultado_aprendizaje'] ?? null 
                 ]);
             }
 
