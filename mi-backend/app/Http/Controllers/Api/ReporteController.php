@@ -202,6 +202,17 @@ class ReporteController extends Controller
         
         $planes = $query->get();
 
+        // --- CORRECCIÓN CLAVE: Detección automática de Carrera ---
+        // Si el nombre sigue siendo "General" pero encontramos planes,
+        // tomamos el nombre de la carrera de la primera asignatura encontrada.
+        if ($nombreCarreraReporte === 'General' && $planes->isNotEmpty()) {
+            $primerPlan = $planes->first();
+            if ($primerPlan->asignatura && $primerPlan->asignatura->carrera) {
+                $nombreCarreraReporte = $primerPlan->asignatura->carrera->nombre;
+            }
+        }
+        // ---------------------------------------------------------
+
         $planes = $planes->sort(function($a, $b) {
             $cicloA = $this->_convertirCiclo($a->asignatura->ciclo->nombre ?? '');
             $cicloB = $this->_convertirCiclo($b->asignatura->ciclo->nombre ?? '');
@@ -273,7 +284,7 @@ class ReporteController extends Controller
     }
 
     // ==========================================
-    // 3. GUARDAR OBSERVACIONES (CORREGIDO)
+    // 3. GUARDAR OBSERVACIONES (CORREGIDO PARA DOCENTE)
     // ==========================================
     public function guardarConclusionesMasivas(Request $request)
     {
@@ -292,7 +303,7 @@ class ReporteController extends Controller
                     'habilidad_blanda_id' => $item['habilidad_id']
                 ]);
 
-                // CORRECCIÓN: Guardar en el campo del DOCENTE
+                // CORRECCIÓN: Guardar en el campo del DOCENTE (conclusion_progreso)
                 $reporte->conclusion_progreso = $texto;
 
                 if (!$reporte->fecha_generacion) {

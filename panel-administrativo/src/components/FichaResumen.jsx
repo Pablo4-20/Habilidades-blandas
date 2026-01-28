@@ -64,21 +64,23 @@ const FichaResumen = () => {
             doc.setTextColor(0); doc.setFont("helvetica", "bold");
             doc.text("ANEXO 1: FICHA RESUMEN DE EJECUCIÓN", pageWidth / 2, 32, { align: "center" });
 
-            // Datos Informativos
+            // Datos Informativos (CORREGIDO: info.generado_por)
             autoTable(doc, {
                 startY: 38, theme: 'plain',
-                body: [['Carrera:', info.carrera, 'Periodo Académico:', info.periodo], ['Docente:', info.docente, '', '']],
+                body: [
+                    ['Carrera:', info.carrera, 'Periodo Académico:', info.periodo], 
+                    ['Docente:', info.generado_por, '', ''] // <-- AQUI EL CAMBIO IMPORTANTE
+                ],
                 styles: { fontSize: 10, cellPadding: 1 }, 
                 columnStyles: { 0: { fontStyle: 'bold', cellWidth: 20 }, 2: { fontStyle: 'bold', cellWidth: 35 } }
             });
 
-            // 👇 SOLUCIÓN EXACTA: Mapeo directo de la conclusión del docente
             const cuerpoTabla = filas.map(f => [
                 f.asignatura, 
                 f.ciclo, 
                 f.habilidad,
                 f.n1, f.n2, f.n3, f.n4, f.n5, 
-                f.conclusion || " " // Solo mostramos la conclusión (observación) traída de la BD
+                f.conclusion || " " 
             ]);
 
             autoTable(doc, {
@@ -90,28 +92,31 @@ const FichaResumen = () => {
                 columnStyles: { 
                     0: { halign: 'left', cellWidth: 35 }, 
                     2: { halign: 'left', cellWidth: 35 },
-                    // Ajuste para que la conclusión tenga buen espacio
                     8: { halign: 'left', cellWidth: 'auto' } 
                 }
             });
 
-            // Pie de Página
-            let finalY = doc.lastAutoTable.finalY + 30;
-            if (finalY > pageHeight - 20) {
+            // --- LÓGICA DE PIE DE PÁGINA (AL FINAL DE LA HOJA) ---
+            const footerHeight = 30; // Altura reservada para firmas
+            const footerY = pageHeight - 25; // Posición Y fija al final (ajustar según margen)
+            
+            // Si la tabla termina muy abajo y choca con el footer, agregamos pagina
+            if (doc.lastAutoTable.finalY > (footerY - 20)) {
                 doc.addPage();
-                finalY = 40; 
             }
             
             doc.setDrawColor(0); 
-            doc.line(14, finalY, 80, finalY); 
+            doc.line(14, footerY, 80, footerY); // Línea de firma
+            
             doc.setFont("helvetica", "normal");
             doc.setFontSize(10);
             doc.setTextColor(0);
-            doc.text("Firma del Docente", 14, finalY + 5);
+            doc.text("Firma del Docente", 14, footerY + 5);
 
             doc.setFontSize(8);
             doc.setTextColor(100);
-            doc.text(`Generado el: ${fechaActual}`, pageWidth - 14, finalY + 5, { align: "right" });
+            // Fecha alineada a la derecha en la misma altura del footer
+            doc.text(`Generado el: ${fechaActual}`, pageWidth - 14, footerY + 5, { align: "right" });
 
             doc.save(`Ficha_Resumen_${info.periodo}.pdf`);
         } catch (error) { console.error(error); Swal.fire('Error', 'Error al generar.', 'error'); } 
@@ -215,23 +220,23 @@ const FichaResumen = () => {
                         }
                     });
 
-                    // Pie de Página
-                    let fy = doc.lastAutoTable.finalY + 30; 
-                    if (fy > pageHeight - 20) {
+                    // --- PIE DE PAGINA (Fixed Bottom) ---
+                    const footerY = pageHeight - 25;
+                    
+                    if (doc.lastAutoTable.finalY > (footerY - 20)) {
                         doc.addPage();
-                        fy = 40;
                     }
                     
                     doc.setDrawColor(0); 
-                    doc.line(14, fy, 80, fy); 
+                    doc.line(14, footerY, 80, footerY); 
                     doc.setFont("helvetica", "normal");
                     doc.setFontSize(10);
                     doc.setTextColor(0);
-                    doc.text("Firma del Docente", 14, fy + 5);
+                    doc.text("Firma del Docente", 14, footerY + 5);
 
                     doc.setFontSize(8);
                     doc.setTextColor(100);
-                    doc.text(`Generado el: ${fechaActual}`, pageWidth - 14, fy + 5, { align: "right" });
+                    doc.text(`Generado el: ${fechaActual}`, pageWidth - 14, footerY + 5, { align: "right" });
                 }
             });
 
