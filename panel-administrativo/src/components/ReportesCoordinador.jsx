@@ -89,6 +89,7 @@ const ReportesCoordinador = () => {
     const descargarPDF = () => {
         const doc = new jsPDF('l'); 
         const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight(); // Necesario para calcular el pie de página
         const nombreCarrera = reporteInfo?.carrera || 'Carrera Desconocida';
 
         const gruposPorCiclo = reporteData.reduce((acc, curr) => {
@@ -135,6 +136,7 @@ const ReportesCoordinador = () => {
 
             autoTable(doc, {
                 startY: 48,
+                margin: { bottom: 40 }, // [CAMBIO 1] Margen inferior para no tapar la firma
                 head: [['Asignatura', 'Docente', 'Habilidad', 'Estado', 'Avance']],
                 body: body,
                 theme: 'grid',
@@ -143,6 +145,33 @@ const ReportesCoordinador = () => {
                 columnStyles: { 0: { halign: 'left' }, 1: { halign: 'left' } }
             });
         });
+
+        // [CAMBIO 2] Agregar Pie de Página en TODAS las hojas
+        const totalPagesDoc = doc.internal.getNumberOfPages();
+        const fechaActual = new Date().toLocaleDateString('es-ES', { 
+            year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' 
+        });
+
+        for (let i = 1; i <= totalPagesDoc; i++) {
+            doc.setPage(i);
+            
+            // --- FIRMA COORDINADOR (Izquierda) ---
+            doc.setDrawColor(0); // Color negro
+            doc.setLineWidth(0.5);
+            doc.line(15, pageHeight - 30, 85, pageHeight - 30); // Línea de firma
+            
+            doc.setFontSize(10);
+            doc.setTextColor(0);
+            doc.text("Firma Coordinador(a)", 50, pageHeight - 23, { align: 'center' });
+
+            // --- FECHA DE GENERACIÓN (Derecha) ---
+            doc.setFontSize(9);
+            doc.setTextColor(100); // Gris
+            doc.text(`Generado el: ${fechaActual}`, pageWidth - 15, pageHeight - 23, { align: 'right' });
+            
+            // Opcional: Número de página al centro
+            // doc.text(`Página ${i} de ${totalPagesDoc}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+        }
         
         doc.save(`Reporte_Habilidades_${filtroPeriodo}.pdf`);
     };
