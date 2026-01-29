@@ -16,10 +16,10 @@ class DatabaseSeeder extends Seeder
 
             // 2. Usuarios y Habilidades Globales
             UsuarioSeeder::class,
-            HabilidadBlandaSeeder::class, // Ahora es global y no depende de materias
+            //HabilidadBlandaSeeder::class, // Ahora es global y no depende de materias
 
             // 3. Estudiantes
-            EstudianteSeeder::class,
+           // EstudianteSeeder::class,
 
             // 4. Asignaturas
             // IMPORTANTE: Lo dejamos comentado temporalmente.
