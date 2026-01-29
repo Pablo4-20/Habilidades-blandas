@@ -181,7 +181,7 @@ class ReporteController extends Controller
 
         $query = Planificacion::with(['asignatura.carrera', 'asignatura.ciclo', 'docente', 'detalles.habilidad'])
             ->where('periodo_academico', $request->periodo)
-            ->where('parcial', '2'); 
+            ->where('parcial', '2'); // Asegúrate que este parcial es el correcto
 
         $nombreCarreraReporte = 'General';
 
@@ -202,16 +202,12 @@ class ReporteController extends Controller
         
         $planes = $query->get();
 
-        // --- CORRECCIÓN CLAVE: Detección automática de Carrera ---
-        // Si el nombre sigue siendo "General" pero encontramos planes,
-        // tomamos el nombre de la carrera de la primera asignatura encontrada.
         if ($nombreCarreraReporte === 'General' && $planes->isNotEmpty()) {
             $primerPlan = $planes->first();
             if ($primerPlan->asignatura && $primerPlan->asignatura->carrera) {
                 $nombreCarreraReporte = $primerPlan->asignatura->carrera->nombre;
             }
         }
-        // ---------------------------------------------------------
 
         $planes = $planes->sort(function($a, $b) {
             $cicloA = $this->_convertirCiclo($a->asignatura->ciclo->nombre ?? '');
@@ -223,11 +219,7 @@ class ReporteController extends Controller
         });
 
         $filas = [];
-        $info = [
-            'carrera' => $nombreCarreraReporte,
-            'periodo' => $request->periodo,
-            'generado_por' => $user->nombres . ' ' . $user->apellidos
-        ];
+        $resultadosAprendizaje = []; // Array para recolectar resultados
 
         foreach ($planes as $plan) {
             $estudiantes = $this->_getEstudiantes($plan->asignatura_id, $periodoObj->id);
@@ -235,6 +227,12 @@ class ReporteController extends Controller
             $cicloNumerico = $this->_convertirCiclo($plan->asignatura->ciclo->nombre ?? 'N/A');
 
             foreach ($plan->detalles as $detalle) {
+                
+                // Recolectar resultado de aprendizaje si existe
+                if (!empty($detalle->resultado_aprendizaje)) {
+                    $resultadosAprendizaje[] = $detalle->resultado_aprendizaje;
+                }
+
                 if (!$detalle->habilidad) continue;
 
                 $evaluaciones = Evaluacion::where('planificacion_id', $plan->id)
@@ -257,7 +255,6 @@ class ReporteController extends Controller
                 $promedio = $totalEval > 0 ? round($sumaNotas / $totalEval, 2) : 0;
                 $progreso = ($evaluaciones->count() > 0) ? 100 : 50;
 
-                // BUSCAMOS EL REPORTE DEL DOCENTE
                 $reporteDB = Reporte::where('planificacion_id', $plan->id)
                     ->where('habilidad_blanda_id', $detalle->habilidad_blanda_id)
                     ->first();
@@ -280,11 +277,19 @@ class ReporteController extends Controller
             }
         }
 
+        $info = [
+            'carrera' => $nombreCarreraReporte,
+            'periodo' => $request->periodo,
+            'generado_por' => $user->nombres . ' ' . $user->apellidos,
+            // Concatenamos los resultados encontrados (evitando repetidos)
+            'resultado_aprendizaje' => implode(" | ", array_unique($resultadosAprendizaje)) 
+        ];
+
         return response()->json(['info' => $info, 'filas' => $filas]);
     }
 
     // ==========================================
-    // 3. GUARDAR OBSERVACIONES (CORREGIDO PARA DOCENTE)
+    // 3. GUARDAR OBSERVACIONES
     // ==========================================
     public function guardarConclusionesMasivas(Request $request)
     {
@@ -303,7 +308,6 @@ class ReporteController extends Controller
                     'habilidad_blanda_id' => $item['habilidad_id']
                 ]);
 
-                // CORRECCIÓN: Guardar en el campo del DOCENTE (conclusion_progreso)
                 $reporte->conclusion_progreso = $texto;
 
                 if (!$reporte->fecha_generacion) {

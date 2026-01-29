@@ -32,7 +32,7 @@ const FichaResumen = () => {
     }, []);
 
     // ------------------------------------------------------------------------
-    // OPCIÓN 1: FICHA RESUMEN GENERAL (PDF HORIZONTAL) - CORREGIDO
+    // OPCIÓN 1: FICHA RESUMEN GENERAL (PDF HORIZONTAL) - MODIFICADO
     // ------------------------------------------------------------------------
     const descargarFichaResumen = async () => {
         if (!selectedPeriodo) return;
@@ -64,15 +64,25 @@ const FichaResumen = () => {
             doc.setTextColor(0); doc.setFont("helvetica", "bold");
             doc.text("ANEXO 1: FICHA RESUMEN DE EJECUCIÓN", pageWidth / 2, 32, { align: "center" });
 
-            // Datos Informativos (CORREGIDO: info.generado_por)
+            // -----------------------------------------------------------------
+            // DATOS INFORMATIVOS (Aquí agregamos la fila debajo del Docente)
+            // -----------------------------------------------------------------
             autoTable(doc, {
                 startY: 38, theme: 'plain',
                 body: [
+                    // Fila 1
                     ['Carrera:', info.carrera, 'Periodo Académico:', info.periodo], 
-                    ['Docente:', info.generado_por, '', ''] // <-- AQUI EL CAMBIO IMPORTANTE
+                    // Fila 2
+                    ['Docente:', info.generado_por, '', ''], 
+                    // Fila 3 (NUEVA: Debajo de Docente)
+                    [
+                        { content: 'Resultado de Aprendizaje:', styles: { fontStyle: 'bold' } }, 
+                        // Usamos colSpan 3 para que ocupe todo el ancho restante
+                        { content: info.resultado_aprendizaje || 'No definido', colSpan: 3 }
+                    ]
                 ],
                 styles: { fontSize: 10, cellPadding: 1 }, 
-                columnStyles: { 0: { fontStyle: 'bold', cellWidth: 20 }, 2: { fontStyle: 'bold', cellWidth: 35 } }
+                columnStyles: { 0: { fontStyle: 'bold', cellWidth: 40 }, 2: { fontStyle: 'bold', cellWidth: 35 } }
             });
 
             const cuerpoTabla = filas.map(f => [
@@ -98,7 +108,7 @@ const FichaResumen = () => {
 
             // --- LÓGICA DE PIE DE PÁGINA (AL FINAL DE LA HOJA) ---
             const footerHeight = 30; // Altura reservada para firmas
-            const footerY = pageHeight - 25; // Posición Y fija al final (ajustar según margen)
+            const footerY = pageHeight - 25; // Posición Y fija al final
             
             // Si la tabla termina muy abajo y choca con el footer, agregamos pagina
             if (doc.lastAutoTable.finalY > (footerY - 20)) {

@@ -21,7 +21,7 @@ class UsuarioSeeder extends Seeder
     DB::table('users')->updateOrInsert(
         ['email' => 'admin@ueb.edu.ec'],
         [
-            'cedula' => '2134535673',
+            'cedula' => '0000000001',
             'nombres' => 'Admin', // Separado
             'apellidos' => 'sistema',     // Separado
             'password' => Hash::make('password'),
@@ -36,13 +36,14 @@ class UsuarioSeeder extends Seeder
 
     // 2. COORDINADOR
     DB::table('users')->updateOrInsert(
-        ['email' => 'ggarcia@ueb.edu.ec'],
+        ['email' => 'car.software@ueb.edu.ec'],
         [
-            'cedula' => '0201618253',
-            'nombres' => 'Galuth Irene',
-            'apellidos' => 'García Camacho',
-            'password' => Hash::make('0201618253'),
+            'cedula' => '0000000002',
+            'nombres' => 'Carrera',
+            'apellidos' => 'Sofftware',
+            'password' => Hash::make('0000000002'),
             'rol' => 'coordinador',
+            'carrera_id' => $idSoftware, 
             'email_verified_at' => now(),
             'must_change_password' => false,
             'created_at' => now(), 
@@ -50,14 +51,14 @@ class UsuarioSeeder extends Seeder
         ]
     );
     DB::table('users')->updateOrInsert(
-            ['email' => 'dbarreno@ueb.edu.ec'],
+            ['email' => 'car.tecnologias@ueb.edu.ec'],
             [
-                'cedula' => '0602571572',
-                'nombres' => 'DANILO GEOVANNY',
-                'apellidos' => 'BARRENO NARANJO',
-                'password' => Hash::make('0602571572'),
+                'cedula' => '0000000003',
+                'nombres' => 'Carrera',
+                'apellidos' => 'Tecnologías de la Información',
+                'password' => Hash::make('0000000003'),
                 'rol' => 'coordinador',
-                'carrera_id' => $idTic, // <--- ASIGNADO A TICS
+                'carrera_id' => $idTic, 
                 'email_verified_at' => now(),
                 'must_change_password' => false,
                 'created_at' => now(), 

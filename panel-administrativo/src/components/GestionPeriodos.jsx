@@ -270,7 +270,7 @@ const GestionPeriodos = () => {
                 {/* --- CONTROLES DE PAGINACIÓN --- */}
                 <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
                     <span className="text-sm text-gray-500">
-                        Mostrando <span className="font-bold text-gray-800">{currentItems.length > 0 ? indexOfFirstItem + 1 : 0}</span> a <span className="font-bold text-gray-800">{Math.min(indexOfLastItem, periodos.length)}</span> de <span className="font-bold text-gray-800">{periodos.length}</span> periodos
+                        Mostrando del <span className="font-bold text-gray-800">{currentItems.length > 0 ? indexOfFirstItem + 1 : 0}</span> al <span className="font-bold text-gray-800">{Math.min(indexOfLastItem, periodos.length)}</span> de <span className="font-bold text-gray-800">{periodos.length}</span> periodos
                     </span>
                     
                     <div className="flex items-center gap-2">
