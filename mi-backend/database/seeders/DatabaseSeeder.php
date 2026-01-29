@@ -25,7 +25,7 @@ class DatabaseSeeder extends Seeder
             // IMPORTANTE: Lo dejamos comentado temporalmente.
             // Si lo ejecutas ahora fallará porque tu seeder antiguo intenta guardar
             // texto (ej: "Software") en campos que ahora son IDs numéricos.
-             AsignaturaSeeder::class, 
+             //AsignaturaSeeder::class, 
         ]);
     }
 }
