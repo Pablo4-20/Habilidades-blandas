@@ -102,7 +102,7 @@ const EvaluacionDocente = () => {
                 Swal.fire({
                     icon: 'warning',
                     title: 'Planificación Incompleta',
-                    text: 'No puedes calificar hasta que hayas seleccionado las habilidades y actividades para el Parcial 1 y Parcial 2 en el módulo de Planificación.',
+                    text: 'No puede calificar las habilidades blandas hasta haber asignado las actividades del 1 parcial y 2 parcial en el módulo de planificación.',
                     confirmButtonText: 'Entendido'
                 }).then(() => {
                     // Reseteamos la selección para obligar al usuario a salir o corregir

@@ -6,7 +6,7 @@ import {
     BookOpenIcon, SparklesIcon, 
     CheckBadgeIcon, CalendarDaysIcon, ClockIcon, 
     CheckCircleIcon, PlusIcon, TrashIcon, ListBulletIcon, LockClosedIcon,
-    PencilSquareIcon // Ícono para identificar el campo de resultado
+    PencilSquareIcon, CheckIcon
 } from '@heroicons/react/24/outline';
 
 const PlanificacionDocente = () => {
@@ -394,9 +394,20 @@ const PlanificacionDocente = () => {
                                                     </ul>
                                                     <div className="flex gap-1 items-end">
                                                         <div className="flex-1 min-w-0">
-                                                            <CustomSelect label="" placeholder="Actividad..." options={opcionesActividades} value={habilidadParaActividad === hab.id ? nuevaActividad : ''} onChange={(val) => { setHabilidadParaActividad(hab.id); setNuevaActividad(val); }} icon={ListBulletIcon} />
+                                                            {/* SE AGREGÓ searchable={true} PARA FILTRAR POR NOMBRE */}
+                                                            <CustomSelect 
+                                                                label="" 
+                                                                placeholder="Buscar actividad..." 
+                                                                options={opcionesActividades} 
+                                                                value={habilidadParaActividad === hab.id ? nuevaActividad : ''} 
+                                                                onChange={(val) => { setHabilidadParaActividad(hab.id); setNuevaActividad(val); }} 
+                                                                icon={ListBulletIcon} 
+                                                                searchable={true} 
+                                                            />
                                                         </div>
-                                                        <button onClick={() => agregarActividad(hab.id)} className="bg-purple-600 text-white px-2 py-2.5 rounded-lg hover:bg-purple-700 transition shadow-sm h-[42px]" title="Agregar"><PlusIcon className="h-5 w-5"/></button>
+                                                        <button onClick={() => agregarActividad(hab.id)} className="bg-purple-600 text-white px-2 py-2.5 rounded-lg hover:bg-purple-700 transition shadow-sm h-[42px]" title="Agregar">
+                                                            <CheckIcon className="h-5 w-5"/>
+                                                        </button>
                                                     </div>
                                                 </div>
                                             )}
