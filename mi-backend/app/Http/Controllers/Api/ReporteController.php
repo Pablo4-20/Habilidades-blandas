@@ -150,6 +150,7 @@ class ReporteController extends Controller
                     'planificacion_id' => $plan->id,
                     'habilidad_id' => $detalle->habilidad_blanda_id,
                     'habilidad' => $detalle->habilidad->nombre,
+                    'resultado_aprendizaje' => $detalle->resultado_aprendizaje, // <--- CAMBIO AQUÍ: Se incluye el campo
                     'parcial_asignado' => $plan->parcial,
                     'estadisticas' => $conteos, 
                     'conclusion' => $reporteDB ? $reporteDB->conclusion_progreso : ''
@@ -181,7 +182,7 @@ class ReporteController extends Controller
 
         $query = Planificacion::with(['asignatura.carrera', 'asignatura.ciclo', 'docente', 'detalles.habilidad'])
             ->where('periodo_academico', $request->periodo)
-            ->where('parcial', '2'); // Asegúrate que este parcial es el correcto
+            ->where('parcial', '2'); 
 
         $nombreCarreraReporte = 'General';
 
@@ -219,7 +220,7 @@ class ReporteController extends Controller
         });
 
         $filas = [];
-        $resultadosAprendizaje = []; // Array para recolectar resultados
+        $resultadosAprendizaje = []; 
 
         foreach ($planes as $plan) {
             $estudiantes = $this->_getEstudiantes($plan->asignatura_id, $periodoObj->id);
@@ -281,7 +282,6 @@ class ReporteController extends Controller
             'carrera' => $nombreCarreraReporte,
             'periodo' => $request->periodo,
             'generado_por' => $user->nombres . ' ' . $user->apellidos,
-            // Concatenamos los resultados encontrados (evitando repetidos)
             'resultado_aprendizaje' => implode(" | ", array_unique($resultadosAprendizaje)) 
         ];
 
