@@ -6,7 +6,8 @@ import CustomSelect from './ui/CustomSelect';
 import { 
     UserGroupIcon, 
     ArrowPathIcon, InformationCircleIcon,
-    ClockIcon, ListBulletIcon, StarIcon, CalendarDaysIcon, LockClosedIcon, CheckCircleIcon
+    ClockIcon, ListBulletIcon, StarIcon, CalendarDaysIcon, LockClosedIcon, CheckCircleIcon,
+    ChevronLeftIcon, ChevronRightIcon // <--- Importamos iconos de paginación
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 
@@ -32,6 +33,10 @@ const EvaluacionDocente = () => {
 
     // NUEVO ESTADO: Controla si el docente tiene permiso para calificar (si cumplió requisitos)
     const [permisoCalificar, setPermisoCalificar] = useState(false);
+
+    // --- PAGINACIÓN ---
+    const [currentPage, setCurrentPage] = useState(1);
+    const ITEMS_PER_PAGE = 7; // Cantidad de estudiantes por página
 
     // --- CARGAS INICIALES ---
     useEffect(() => {
@@ -102,7 +107,7 @@ const EvaluacionDocente = () => {
                 Swal.fire({
                     icon: 'warning',
                     title: 'Planificación Incompleta',
-                    text: 'No puede calificar las habilidades blandas hasta haber asignado las actividades del 1 parcial y 2 parcial en el módulo de planificación.',
+                    text: 'No puedes calificar hasta que hayas seleccionado las habilidades y actividades para el Parcial 1 y Parcial 2 en el módulo de Planificación.',
                     confirmButtonText: 'Entendido'
                 }).then(() => {
                     // Reseteamos la selección para obligar al usuario a salir o corregir
@@ -207,6 +212,7 @@ const EvaluacionDocente = () => {
             
             if (res.data && res.data.estudiantes) {
                 setEstudiantes(res.data.estudiantes);
+                setCurrentPage(1); // Reset paginación al cargar nueva lista
                 setMostrarRubrica(true);
             } else {
                 setEstudiantes([]);
@@ -366,6 +372,12 @@ const EvaluacionDocente = () => {
         setSelectedParcial(val);
     };
 
+    // --- LÓGICA DE DATOS PAGINADOS ---
+    const totalPages = Math.ceil(estudiantes.length / ITEMS_PER_PAGE);
+    const indexOfLastItem = currentPage * ITEMS_PER_PAGE;
+    const indexOfFirstItem = indexOfLastItem - ITEMS_PER_PAGE;
+    const currentItems = estudiantes.slice(indexOfFirstItem, indexOfLastItem);
+
     return (
         <div className="space-y-6 animate-fade-in pb-20">
             <div className="flex justify-between items-center">
@@ -475,20 +487,37 @@ const EvaluacionDocente = () => {
                                 )}
                             </div>
 
-                            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-[calc(100vh-350px)] min-h-[400px] animate-fade-in">
+                            {/* TABLA DE ESTUDIANTES (PAGINADA) */}
+                            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col animate-fade-in">
+                                
+                                {/* ENCABEZADO DE TABLA */}
                                 <div className="p-4 bg-gray-50 border-b border-gray-200 grid grid-cols-12 gap-4 text-xs font-bold text-gray-500 uppercase items-center sticky top-0 z-10 shadow-sm">
-                                    <div className="col-span-4 pl-2">Estudiante</div>
-                                    <div className="col-span-8 grid grid-cols-5">{[1, 2, 3, 4, 5].map(n => <div key={n} className="text-center">Nivel {n}</div>)}</div>
+                                    <div className="col-span-1 text-center">#</div> {/* Nueva columna # */}
+                                    <div className="col-span-3 pl-2">Estudiante</div>
+                                    <div className="col-span-8 grid grid-cols-5 text-center">
+                                        {[1, 2, 3, 4, 5].map(n => <div key={n}>Nivel {n}</div>)}
+                                    </div>
                                 </div>
-                                <div className="flex-1 overflow-y-auto bg-white">
+
+                                {/* CUERPO DE TABLA */}
+                                <div className="flex-1 bg-white">
                                     {loading ? <div className="p-12 text-center text-gray-400 flex flex-col items-center"><ArrowPathIcon className="h-8 w-8 animate-spin mb-2"/>Cargando nómina...</div> 
                                     : estudiantes.length === 0 ? <div className="p-12 text-center text-gray-400">No hay estudiantes cargados.</div> 
-                                    : estudiantes.map((est) => (
+                                    : currentItems.map((est, index) => (
                                         <div key={est.estudiante_id} className={`grid grid-cols-12 gap-4 p-3 border-b border-gray-50 items-center transition ${est.nivel ? 'bg-blue-50/10' : 'hover:bg-gray-50'}`}>
-                                            <div className="col-span-4 font-medium text-sm text-gray-800 truncate pl-2 flex flex-col">
-                                                <span>{est.nombres}</span>
+                                            
+                                            {/* Columna Numeración */}
+                                            <div className="col-span-1 text-center font-bold text-gray-400 text-xs">
+                                                {indexOfFirstItem + index + 1}
+                                            </div>
+
+                                            {/* Columna Nombre */}
+                                            <div className="col-span-3 font-medium text-sm text-gray-800 truncate pl-2 flex flex-col">
+                                                <span title={est.nombres}>{est.nombres}</span>
                                                 {est.nivel && <span className="text-[10px] text-green-600 font-bold">Calificado (Nivel {est.nivel})</span>}
                                             </div>
+
+                                            {/* Botones de Nivel */}
                                             <div className="col-span-8 grid grid-cols-5 items-center">
                                                 {[1, 2, 3, 4, 5].map((nivel) => {
                                                     const notaP1 = est.nivel_p1 ? parseInt(est.nivel_p1) : null;
@@ -512,23 +541,36 @@ const EvaluacionDocente = () => {
                                         </div>
                                     ))}
                                 </div>
+
+                                {/* PIE DE TABLA (PAGINACIÓN + GUARDAR) */}
                                 <div className="p-4 bg-gray-50 border-t border-gray-200 flex justify-between items-center sticky bottom-0 z-20">
+                                    
+                                    {/* Controles de Paginación */}
+                                    <div className="flex items-center gap-3 text-sm text-gray-600">
+                                        <button 
+                                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
+                                            disabled={currentPage === 1}
+                                            className="p-1.5 rounded-lg border border-gray-300 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition"
+                                        >
+                                            <ChevronLeftIcon className="h-4 w-4"/>
+                                        </button>
+                                        <span className="font-medium">Página {currentPage} de {totalPages || 1}</span>
+                                        <button 
+                                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
+                                            disabled={currentPage === totalPages || totalPages === 0}
+                                            className="p-1.5 rounded-lg border border-gray-300 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition"
+                                        >
+                                            <ChevronRightIcon className="h-4 w-4"/>
+                                        </button>
+                                    </div>
+
+                                    {/* Estado y Botón Guardar */}
                                     <div className="flex items-center gap-4">
                                         <span className={`text-xs font-bold px-3 py-1 rounded-full ${pendientes > 0 ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>{pendientes > 0 ? `Faltan ${pendientes}` : '¡Todos calificados!'}</span>
-                                        {selectedParcial === '2' && (
-                                            <div className="flex items-center gap-2 text-[10px] text-gray-500">
-                                                <div className="flex gap-1">
-                                                    <span className="w-3 h-3 bg-red-600 rounded-full" title="Nivel 1"></span>
-                                                    <span className="w-3 h-3 bg-orange-500 rounded-full" title="Nivel 2"></span>
-                                                    <span className="w-3 h-3 bg-yellow-500 rounded-full" title="Nivel 3"></span>
-                                                    <span className="w-3 h-3 bg-lime-500 rounded-full" title="Nivel 4"></span>
-                                                    <span className="w-3 h-3 bg-green-700 rounded-full" title="Nivel 5"></span>
-                                                </div>
-                                                <span>Escala</span>
-                                            </div>
-                                        )}
+                                        <button onClick={handleGuardar} className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-6 rounded-xl shadow-lg transition transform hover:scale-105 active:scale-95 text-sm">
+                                            <CheckCircleIcon className="h-5 w-5"/> Guardar Notas
+                                        </button>
                                     </div>
-                                    <button onClick={handleGuardar} className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-8 rounded-xl shadow-lg transition transform hover:scale-105 active:scale-95"><CheckCircleIcon className="h-5 w-5"/> Guardar Notas</button>
                                 </div>
                             </div>
                         </>
