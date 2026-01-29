@@ -106,6 +106,7 @@ const FichaResumenCoordinador = () => {
 
         const doc = new jsPDF('l', 'mm', 'a4');
         const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight(); // Altura para el pie de página
         const nombreCarrera = reporteInfo?.carrera || 'Carrera Desconocida';
 
         const dibujarEncabezado = () => {
@@ -133,10 +134,9 @@ const FichaResumenCoordinador = () => {
             doc.text(`CICLO: ${cicloKey}`, 16, finalY + 5);
             finalY += 7;
 
-            // Mapeamos los datos usando 'conclusion' (Docente) para el PDF
             const bodyTable = filasCiclo.map(r => [
                 r.asignatura, r.habilidad, r.n1, r.n2, r.n3, r.n4, r.n5, 
-                r.conclusion || 'Sin observación', // <--- Dato del docente
+                r.conclusion || 'Sin observación',
                 r.cumplimiento
             ]);
             
@@ -159,6 +159,7 @@ const FichaResumenCoordinador = () => {
             finalY = doc.lastAutoTable.finalY;
         });
 
+        // --- PÁGINA FINAL DE RESUMEN ---
         doc.addPage();
         dibujarEncabezado();
         doc.setFontSize(12); doc.setTextColor(0); doc.setFont("helvetica", "bold");
@@ -174,6 +175,36 @@ const FichaResumenCoordinador = () => {
             columnStyles: { 2: { fontStyle: 'bold', textColor: [30, 58, 138] } },
             margin: { left: 14, right: 14 }
         });
+
+        // ===============================================
+        // SECCIÓN DE FIRMA Y FECHA (SOLO EN LA ÚLTIMA PÁGINA)
+        // ===============================================
+        const fechaActual = new Date().toLocaleDateString('es-ES', { 
+            year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' 
+        });
+        
+        // Posición Y para el pie de página (parte inferior)
+        const yFooter = pageHeight - 30;
+
+        // Validar si la tabla de resumen ocupó mucho espacio (raro, pero preventivo)
+        if (doc.lastAutoTable.finalY > yFooter - 20) {
+            doc.addPage(); // Si no hay espacio, nueva hoja
+            dibujarEncabezado();
+        }
+
+        // 1. FIRMA DEL COORDINADOR (IZQUIERDA)
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.5);
+        doc.line(15, yFooter, 85, yFooter); // Línea
+        doc.setFontSize(10);
+        doc.setTextColor(0);
+        doc.setFont("helvetica", "normal");
+        doc.text("Firma Coordinador(a)", 50, yFooter + 5, { align: 'center' });
+
+        // 2. FECHA DE GENERACIÓN (DERECHA)
+        doc.setFontSize(9);
+        doc.setTextColor(100);
+        doc.text(`Generado el: ${fechaActual}`, pageWidth - 15, yFooter + 5, { align: 'right' });
 
         doc.save(`Resumen_Carrera_${filtroPeriodo}.pdf`);
     };
@@ -192,7 +223,6 @@ const FichaResumenCoordinador = () => {
                     </p>
                 </div>
                 <div className="flex gap-3">
-                    {/* BOTÓN DE GUARDAR ELIMINADO */}
                     <button onClick={generarFichaPDF} disabled={reporteData.length === 0 || loading} className="bg-gray-800 hover:bg-gray-900 text-white px-5 py-2 rounded-lg shadow flex items-center gap-2 text-sm font-semibold transition-all disabled:opacity-50">
                         <PrinterIcon className="h-5 w-5"/> Descargar PDF
                     </button>
@@ -261,7 +291,6 @@ const FichaResumenCoordinador = () => {
                                                 <td className="px-1 text-center">{fila.n4}</td>
                                                 <td className="px-1 text-center">{fila.n5}</td>
                                                 <td className="px-4 py-2">
-                                                    {/* MODO LECTURA: Se muestra el texto directamente */}
                                                     <div className="text-gray-700 italic text-xs whitespace-pre-line min-w-[150px]">
                                                         {fila.conclusion && fila.conclusion !== 'Sin observaciones' 
                                                             ? fila.conclusion 
