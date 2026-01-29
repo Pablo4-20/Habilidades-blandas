@@ -266,7 +266,7 @@ const AsignarMaterias = () => {
                 <BookOpenIcon className="h-7 w-7 text-blue-600"/> Gestión de Carga Académica
             </h2>
 
-            {/* FORMULARIO (Sin cambios estructurales) */}
+            {/* FORMULARIO */}
             <div className={`p-6 rounded-2xl shadow-sm border transition-all duration-300 ${docenteGestionado ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-100' : 'bg-white border-gray-100'}`}>
                 <div className="flex justify-between items-center mb-4 border-b border-blue-100 pb-2">
                     <h3 className={`font-bold flex items-center gap-2 ${docenteGestionado ? 'text-blue-900' : 'text-blue-800'}`}>
@@ -286,7 +286,7 @@ const AsignarMaterias = () => {
                 {docenteGestionado ? (
                     /* MODO GESTIÓN */
                     <div className="space-y-3">
-                        <p className="text-xs text-blue-600 mb-2 italic">Modifique el periodo o paralelo y guarde los cambios en cada fila.</p>
+                        <p className="text-xs text-blue-600 mb-2 italic">Modifique el paralelo si es necesario. El periodo no es editable.</p>
                         <div className="grid grid-cols-1 gap-2">
                             {asignacionesEdicion.length === 0 ? (
                                 <p className="text-center text-sm text-gray-400 py-4">Este docente no tiene materias asignadas.</p>
@@ -300,20 +300,39 @@ const AsignarMaterias = () => {
                                                 {item.asignatura?.nombre}
                                             </div>
                                         </div>
+                                        
+                                        {/* PERIODO BLOQUEADO */}
                                         <div className="w-full md:w-1/3">
                                             <span className="text-xs font-bold text-gray-400 uppercase">Periodo</span>
-                                            <select className="w-full text-sm border-gray-300 rounded-lg focus:ring-blue-500 bg-gray-50 p-2" value={item.periodo} onChange={(e) => handleChangeEdicion(item.id, 'periodo', e.target.value)}>
+                                            <select 
+                                                className="w-full text-sm border-gray-200 rounded-lg bg-gray-100 text-gray-500 p-2 cursor-not-allowed" 
+                                                value={item.periodo} 
+                                                disabled={true}
+                                            >
                                                 {opcionesPeriodosForm.map(op => (<option key={op.value} value={op.value}>{op.label}</option>))}
                                             </select>
                                         </div>
+
                                         <div className="w-full md:w-1/6">
                                             <span className="text-xs font-bold text-gray-400 uppercase">Paralelo</span>
                                             <select className="w-full text-sm border-gray-300 rounded-lg focus:ring-blue-500 bg-gray-50 p-2" value={item.paralelo} onChange={(e) => handleChangeEdicion(item.id, 'paralelo', e.target.value)}>
                                                 <option value="A">A</option><option value="B">B</option>
                                             </select>
                                         </div>
-                                        <div className="w-full md:w-auto flex justify-end mt-4 md:mt-0">
-                                            <button onClick={() => handleUpdateFila(item)} className="bg-red-600 text-white hover:bg-red-700 p-2 rounded-lg transition flex items-center gap-1 text-xs font-bold shadow-md">
+
+                                        {/* BOTONES DE ACCIÓN */}
+                                        <div className="w-full md:w-auto flex justify-end mt-4 md:mt-0 gap-2">
+                                            {/* Botón Eliminar */}
+                                            <button 
+                                                onClick={() => handleEliminar(item.id)} 
+                                                className="bg-white text-gray-600 hover:text-red-600 border border-gray-300 hover:border-red-400 p-2 rounded-lg transition flex items-center justify-center shadow-sm"
+                                                title="Eliminar asignación"
+                                            >
+                                                <TrashIcon className="h-5 w-5"/>
+                                            </button>
+
+                                            {/* Botón Actualizar (Cambiado a Azul para coincidir con tema Edición) */}
+                                            <button onClick={() => handleUpdateFila(item)} className="bg-blue-600 text-white hover:bg-blue-700 p-2 rounded-lg transition flex items-center gap-1 text-xs font-bold shadow-md">
                                                 <CheckIcon className="h-5 w-5"/> Actualizar
                                             </button>
                                         </div>
