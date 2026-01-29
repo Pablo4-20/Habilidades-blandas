@@ -501,9 +501,8 @@ const AsignarMaterias = () => {
                 {/* --- PAGINACIÓN --- */}
                 <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between shrink-0">
                     <span className="text-sm text-gray-500">
-                        Mostrando <span className="font-bold text-gray-800">{currentItems.length > 0 ? indexOfFirstItem + 1 : 0}</span> a <span className="font-bold text-gray-800">{Math.min(indexOfLastItem, processedData.length)}</span> de <span className="font-bold text-gray-800">{processedData.length}</span> docentes
+                        Mostrando <span className="font-bold text-gray-800">{currentItems.length}</span> de <span className="font-bold text-gray-800">{processedData.length}</span> docentes
                     </span>
-                    
                     <div className="flex items-center gap-2">
                         <button 
                             onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
