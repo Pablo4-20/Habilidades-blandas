@@ -7,7 +7,7 @@ import {
     UserGroupIcon, 
     ArrowPathIcon, InformationCircleIcon,
     ClockIcon, ListBulletIcon, StarIcon, CalendarDaysIcon, LockClosedIcon, CheckCircleIcon,
-    ChevronLeftIcon, ChevronRightIcon // <--- Importamos iconos de paginación
+    ChevronLeftIcon, ChevronRightIcon 
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 
@@ -112,8 +112,10 @@ const EvaluacionDocente = () => {
                 }).then(() => {
                     // Reseteamos la selección para obligar al usuario a salir o corregir
                     setSelectedAsignatura('');
+                    // Aseguramos limpieza extra aquí también
                     setHabilidadesPlanificadas([]);
-                    setActividadesContexto({});
+                    setEstudiantes([]);
+                    setHabilidadActiva(null);
                 });
             }
 
@@ -125,10 +127,20 @@ const EvaluacionDocente = () => {
         }
     };
 
-    // --- EFECTO AL SELECCIONAR MATERIA ---
+    // --- EFECTO AL SELECCIONAR MATERIA (MODIFICADO) ---
     useEffect(() => {
+        // 1. LIMPIEZA INMEDIATA AL CAMBIAR MATERIA
+        setEstudiantes([]);
+        setHabilidadesPlanificadas([]);
+        setHabilidadActiva(null);
+        setProgresoHabilidades({});
+        setActividadesContexto({});
+        setPermisoCalificar(false);
+        setP2Habilitado(false);
+
+        // 2. EJECUTAR LÓGICA SI HAY SELECCIÓN
         if(selectedAsignatura && selectedPeriodo) {
-            verificarRequisitosPrevios(); // Ahora llamamos a la validación estricta primero
+            verificarRequisitosPrevios(); 
             setSelectedParcial('1');
         }
     }, [selectedAsignatura, selectedPeriodo]);
@@ -492,7 +504,7 @@ const EvaluacionDocente = () => {
                                 
                                 {/* ENCABEZADO DE TABLA */}
                                 <div className="p-4 bg-gray-50 border-b border-gray-200 grid grid-cols-12 gap-4 text-xs font-bold text-gray-500 uppercase items-center sticky top-0 z-10 shadow-sm">
-                                    <div className="col-span-1 text-center">#</div> {/* Nueva columna # */}
+                                    <div className="col-span-1 text-center">#</div> 
                                     <div className="col-span-3 pl-2">Estudiante</div>
                                     <div className="col-span-8 grid grid-cols-5 text-center">
                                         {[1, 2, 3, 4, 5].map(n => <div key={n}>Nivel {n}</div>)}

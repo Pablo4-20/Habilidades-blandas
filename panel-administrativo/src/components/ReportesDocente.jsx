@@ -132,7 +132,9 @@ const ReportesDocente = () => {
         // --- VALIDACIÓN EXTRA ---
         const totalP1 = calcularTotalEvaluados(itemActual.p1?.estadisticas);
         const totalP2 = calcularTotalEvaluados(itemActual.p2?.estadisticas);
-        if ((totalP1 + totalP2) === 0) return; // No guardar si no hay datos
+        
+        // Solo guardamos si hay datos en alguno de los parciales para evitar llamadas vacías
+        if ((totalP1 + totalP2) === 0) return; 
         // -----------------------
 
         const planID = itemActual.p2?.planificacion_id || itemActual.p1?.planificacion_id;
@@ -228,7 +230,6 @@ const ReportesDocente = () => {
                             <div key={nivel} className="flex flex-col items-center justify-end h-full w-full group relative"> 
                                 <div className={`text-[10px] font-bold mb-0.5 transition-all ${cantidad > 0 ? 'text-gray-600' : 'text-transparent'}`}>{cantidad}</div>
                                 <div className="w-full bg-gray-100 rounded-t-2xl h-full relative overflow-hidden flex items-end">
-                                    {/* CAMBIO: rounded-t-2xl para bordes circulares */}
                                     <div className={`w-full rounded-t-2xl transition-all duration-1000 ease-out ${colorClass} hover:opacity-90`} style={{ height: `${altura}%`, minHeight: cantidad > 0 ? '4px' : '0' }}></div>
                                 </div>
                                 <div className="mt-1 text-[9px] font-bold text-gray-400">N{nivel}</div>
@@ -255,10 +256,12 @@ const ReportesDocente = () => {
     const itemActual = reportesAgrupados[pasoActual];
     const keyTextAreaActual = itemActual ? (itemActual.uniqueKeyP2 || itemActual.uniqueKeyP1) : null;
     
-    // --- LÓGICA DE BLOQUEO ---
+    // --- LÓGICA DE BLOQUEO (MODIFICADA) ---
     const totalP1 = itemActual ? calcularTotalEvaluados(itemActual.p1?.estadisticas) : 0;
     const totalP2 = itemActual ? calcularTotalEvaluados(itemActual.p2?.estadisticas) : 0;
-    const hayCalificaciones = (totalP1 + totalP2) > 0;
+    
+    // Se requiere que AMBOS parciales tengan calificaciones para desbloquear
+    const hayCalificaciones = totalP1 > 0 && totalP2 > 0;
 
     return (
         <div className="space-y-4 animate-fade-in pb-12 p-4 bg-gray-50 min-h-screen">
@@ -313,7 +316,7 @@ const ReportesDocente = () => {
                                 {hayCalificaciones ? (
                                     autoGuardado && <span className="text-[10px] text-green-600 font-bold flex items-center gap-1 animate-pulse"><CheckCircleIcon className="h-3 w-3"/> Guardando...</span>
                                 ) : (
-                                    <span className="text-[10px] text-red-500 font-bold flex items-center gap-1 bg-white px-1.5 py-0.5 rounded border border-red-200 shadow-sm"><ExclamationTriangleIcon className="h-3 w-3"/> Califique primero</span>
+                                    <span className="text-[10px] text-red-500 font-bold flex items-center gap-1 bg-white px-1.5 py-0.5 rounded border border-red-200 shadow-sm"><ExclamationTriangleIcon className="h-3 w-3"/> Complete ambos parciales</span>
                                 )}
                             </div>
                             
@@ -321,7 +324,7 @@ const ReportesDocente = () => {
                                 rows="3"
                                 disabled={!hayCalificaciones}
                                 className={`w-full px-3 py-2 border rounded-lg outline-none text-xs resize-none transition-all ${hayCalificaciones ? 'border-blue-200 bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-300' : 'border-gray-300 bg-gray-200 text-gray-500 cursor-not-allowed'}`}
-                                placeholder={hayCalificaciones ? `Conclusiones sobre "${itemActual.habilidad}"...` : "Debe calificar a los estudiantes primero."}
+                                placeholder={hayCalificaciones ? `Conclusiones sobre "${itemActual.habilidad}"...` : "Debe calificar el 1er y 2do parcial para habilitar el análisis."}
                                 value={conclusiones[keyTextAreaActual] || ''}
                                 onChange={(e) => {
                                     if (keyTextAreaActual && hayCalificaciones) {
