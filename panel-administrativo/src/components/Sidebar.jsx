@@ -66,9 +66,9 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
         docente: [
             { name: 'Inicio', path: '/dashboard', icon: HomeIcon },
             { name: 'Mis Cursos', path: '/dashboard/mis-cursos', icon: BookOpenIcon },
-            { name: 'Mis Habilidades', path: '/dashboard/planificacion', icon: ClipboardDocumentCheckIcon },
+            { name: 'Planificación', path: '/dashboard/planificacion', icon: ClipboardDocumentCheckIcon },
             { name: 'Calificar', path: '/dashboard/evaluacion', icon: UsersIcon },
-            { name: 'Mis Reportes', path: '/dashboard/reportes-docente', icon: DocumentChartBarIcon },
+            { name: 'Mis Observaciones HB', path: '/dashboard/reportes-docente', icon: DocumentChartBarIcon },
             { name: 'Fichas Resumen', path: '/dashboard/fichas-resumen', icon: DocumentCheckIcon },
         ]
     };
