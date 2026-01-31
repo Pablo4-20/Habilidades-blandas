@@ -180,26 +180,35 @@ class ReporteController extends Controller
         $periodoObj = PeriodoAcademico::where('nombre', $request->periodo)->first();
         if (!$periodoObj) return response()->json(['message' => 'Periodo no encontrado'], 404);
 
-        // --- CORRECCIÓN AQUÍ: Se agregó ->where('docente_id', $user->id) ---
+        // --- CORRECCIÓN CLAVE: FILTRAR POR DOCENTE SOLO SI NO ES COORDINADOR ---
         $query = Planificacion::with(['asignatura.carrera', 'asignatura.ciclo', 'docente', 'detalles.habilidad'])
             ->where('periodo_academico', $request->periodo)
-            ->where('parcial', '2')
-            ->where('docente_id', $user->id); // FILTRO CLAVE PARA SOLO MOSTRAR AL DOCENTE
+            ->where('parcial', '2'); 
+
+        // Solo aplicamos el filtro de "mis materias" si NO se envió la bandera de coordinador
+        if (!$request->es_coordinador) {
+            $query->where('docente_id', $user->id);
+        }
 
         $nombreCarreraReporte = 'General';
 
-        // Mantenemos la lógica de carrera por si acaso se desea mostrar el nombre en el reporte
-        // aunque el filtro principal ya es el docente_id.
         if ($user->carrera_id) {
+            $query->whereHas('asignatura.carrera', function($q) use ($user) {
+                $q->where('id', $user->carrera_id);
+            });
             $carreraObj = Carrera::find($user->carrera_id);
             $nombreCarreraReporte = $carreraObj ? $carreraObj->nombre : 'Tu Carrera';
+
         } elseif ($request->has('carrera') && $request->carrera !== 'Todas') {
-            $nombreCarreraReporte = $request->carrera;
+            $nombre = $request->carrera;
+            $query->whereHas('asignatura.carrera', function($q) use ($nombre) {
+                $q->where('nombre', $nombre);
+            });
+            $nombreCarreraReporte = $nombre;
         }
         
         $planes = $query->get();
 
-        // Intento de obtener la carrera de la primera asignatura si no está definida
         if ($nombreCarreraReporte === 'General' && $planes->isNotEmpty()) {
             $primerPlan = $planes->first();
             if ($primerPlan->asignatura && $primerPlan->asignatura->carrera) {

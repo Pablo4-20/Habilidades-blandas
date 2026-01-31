@@ -22,12 +22,17 @@ const FichaResumenCoordinador = () => {
     useEffect(() => {
         const fetchPeriodos = async () => {
             try {
-                const res = await api.get('/periodos');
-                const lista = res.data || [];
+                // CORRECCIÓN: Usar /periodos/activos para detectar el activo automáticamente
+                const res = await api.get('/periodos/activos');
+                const lista = Array.isArray(res.data) ? res.data : [];
                 setPeriodos(lista);
+                
                 const activo = lista.find(p => p.activo);
-                if (activo) setFiltroPeriodo(activo.nombre);
-                else if (lista.length > 0) setFiltroPeriodo(lista[0].nombre);
+                if (activo) {
+                    setFiltroPeriodo(activo.nombre);
+                } else if (lista.length > 0) {
+                    setFiltroPeriodo(lista[0].nombre);
+                }
             } catch (error) { console.error(error); }
         };
         fetchPeriodos();
@@ -40,8 +45,10 @@ const FichaResumenCoordinador = () => {
     const fetchDatos = async () => {
         setLoading(true);
         try {
+            // CORRECCIÓN: Enviamos es_coordinador: true para que el backend no filtre por docente
             const res = await api.post(`/reportes/pdf-data-general`, {
-                periodo: filtroPeriodo
+                periodo: filtroPeriodo,
+                es_coordinador: true 
             });
             setReporteData(res.data.filas || []);
             setReporteInfo(res.data.info || {}); 
@@ -72,11 +79,15 @@ const FichaResumenCoordinador = () => {
         ciclosOrdenados.forEach(c => {
             const filas = porCiclo[c];
             let sumaCumplimiento = 0;
+            let countValidos = 0;
             filas.forEach(r => {
                 const valCump = parseFloat(r.cumplimiento); 
-                sumaCumplimiento += isNaN(valCump) ? 0 : valCump;
+                if (!isNaN(valCump)) {
+                    sumaCumplimiento += valCump;
+                    countValidos++;
+                }
             });
-            const promedioCumplimiento = filas.length > 0 ? (sumaCumplimiento / filas.length).toFixed(2) : "0.00";
+            const promedioCumplimiento = countValidos > 0 ? (sumaCumplimiento / countValidos).toFixed(2) : "0.00";
             totalesPorCiclo[c] = { cumplimiento: promedioCumplimiento + '%' };
         });
 
@@ -85,13 +96,17 @@ const FichaResumenCoordinador = () => {
         const totalAsignaturas = reporteData.length;
         
         let sumaTotalCumplimiento = 0;
+        let countTotalValidos = 0;
         reporteData.forEach(r => {
             const val = parseFloat(r.cumplimiento); 
-            sumaTotalCumplimiento += isNaN(val) ? 0 : val;
+            if (!isNaN(val)) {
+                sumaTotalCumplimiento += val;
+                countTotalValidos++;
+            }
         });
 
-        const promedioGeneral = totalAsignaturas > 0 
-            ? (sumaTotalCumplimiento / totalAsignaturas).toFixed(2) + '%'
+        const promedioGeneral = countTotalValidos > 0 
+            ? (sumaTotalCumplimiento / countTotalValidos).toFixed(2) + '%'
             : "0.00%";
 
         return { porCiclo, ciclosOrdenados, totalesPorCiclo, totalCiclos, totalAsignaturas, promedioGeneral };
@@ -106,7 +121,7 @@ const FichaResumenCoordinador = () => {
 
         const doc = new jsPDF('l', 'mm', 'a4');
         const pageWidth = doc.internal.pageSize.getWidth();
-        const pageHeight = doc.internal.pageSize.getHeight(); // Altura para el pie de página
+        const pageHeight = doc.internal.pageSize.getHeight(); 
         const nombreCarrera = reporteInfo?.carrera || 'Carrera Desconocida';
 
         const dibujarEncabezado = () => {
@@ -177,31 +192,27 @@ const FichaResumenCoordinador = () => {
         });
 
         // ===============================================
-        // SECCIÓN DE FIRMA Y FECHA (SOLO EN LA ÚLTIMA PÁGINA)
+        // SECCIÓN DE FIRMA Y FECHA
         // ===============================================
         const fechaActual = new Date().toLocaleDateString('es-ES', { 
             year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' 
         });
         
-        // Posición Y para el pie de página (parte inferior)
         const yFooter = pageHeight - 30;
 
-        // Validar si la tabla de resumen ocupó mucho espacio (raro, pero preventivo)
         if (doc.lastAutoTable.finalY > yFooter - 20) {
-            doc.addPage(); // Si no hay espacio, nueva hoja
+            doc.addPage();
             dibujarEncabezado();
         }
 
-        // 1. FIRMA DEL COORDINADOR (IZQUIERDA)
         doc.setDrawColor(0);
         doc.setLineWidth(0.5);
-        doc.line(15, yFooter, 85, yFooter); // Línea
+        doc.line(15, yFooter, 85, yFooter); 
         doc.setFontSize(10);
         doc.setTextColor(0);
         doc.setFont("helvetica", "normal");
         doc.text("Firma Coordinador(a)", 50, yFooter + 5, { align: 'center' });
 
-        // 2. FECHA DE GENERACIÓN (DERECHA)
         doc.setFontSize(9);
         doc.setTextColor(100);
         doc.text(`Generado el: ${fechaActual}`, pageWidth - 15, yFooter + 5, { align: 'right' });
