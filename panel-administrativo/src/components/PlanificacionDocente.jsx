@@ -6,8 +6,10 @@ import {
     BookOpenIcon, SparklesIcon, 
     CheckBadgeIcon, CalendarDaysIcon, ClockIcon, 
     CheckCircleIcon, TrashIcon, ListBulletIcon, LockClosedIcon,
-    PencilSquareIcon, CheckIcon,
-    ChevronLeftIcon, ChevronRightIcon // Iconos para la paginación
+    PencilSquareIcon,
+    ChevronLeftIcon, ChevronRightIcon,
+    ChevronUpIcon, ChevronDownIcon, 
+    CheckIcon, ExclamationCircleIcon, ExclamationTriangleIcon 
 } from '@heroicons/react/24/outline';
 
 const PlanificacionDocente = () => {
@@ -26,19 +28,16 @@ const PlanificacionDocente = () => {
     // Estado de la planificación actual
     const [habilidadesSeleccionadas, setHabilidadesSeleccionadas] = useState([]); 
     const [actividadesPorHabilidad, setActividadesPorHabilidad] = useState({}); 
-    
-    // Resultados de aprendizaje
     const [resultadosAprendizaje, setResultadosAprendizaje] = useState({}); 
+
+    // Estado para tarjetas minimizadas
+    const [cardsMinimizadas, setCardsMinimizadas] = useState([]);
 
     const [esEdicion, setEsEdicion] = useState(false);
 
-    // Estado para agregar nueva actividad
-    const [nuevaActividad, setNuevaActividad] = useState(''); 
-    const [habilidadParaActividad, setHabilidadParaActividad] = useState(null);
-
-    // --- NUEVO ESTADO PARA PAGINACIÓN (Actualizado a 6 items) ---
+    // Paginación
     const [paginaActual, setPaginaActual] = useState(1);
-    const ITEMS_POR_PAGINA = 6; // Se muestran 6 tarjetas por página (2 columnas x 3 filas)
+    const ITEMS_POR_PAGINA = 6; 
 
     // 1. CARGA INICIAL
     useEffect(() => {
@@ -67,9 +66,46 @@ const PlanificacionDocente = () => {
     useEffect(() => {
         if (form.asignatura_id && form.parcial && form.periodo_academico) {
             cargarPlanificacion();
-            setPaginaActual(1); // Resetear página al cambiar filtros
+            setPaginaActual(1); 
         }
     }, [form.asignatura_id, form.parcial, form.periodo_academico]);
+
+    // --- GARBAGE COLLECTOR (LIMPIEZA AUTOMÁTICA) ---
+    useEffect(() => {
+        if (loading) return; 
+
+        // 1. Limpiar Resultados
+        setResultadosAprendizaje(prev => {
+            const nuevas = { ...prev };
+            let cambios = false;
+            Object.keys(nuevas).forEach(key => {
+                const idNum = Number(key);
+                if (!habilidadesSeleccionadas.includes(idNum)) {
+                    delete nuevas[key];
+                    cambios = true;
+                }
+            });
+            return cambios ? nuevas : prev;
+        });
+
+        // 2. Limpiar Actividades
+        setActividadesPorHabilidad(prev => {
+            const nuevas = { ...prev };
+            let cambios = false;
+            Object.keys(nuevas).forEach(key => {
+                const idNum = Number(key);
+                if (!habilidadesSeleccionadas.includes(idNum)) {
+                    delete nuevas[key];
+                    cambios = true;
+                }
+            });
+            return cambios ? nuevas : prev;
+        });
+        
+        // 3. Limpiar Minimizados
+        setCardsMinimizadas(prev => prev.filter(id => habilidadesSeleccionadas.includes(id)));
+
+    }, [habilidadesSeleccionadas, loading]); 
 
     // HANDLERS
     const handleCambioMateria = (val) => {
@@ -86,6 +122,7 @@ const PlanificacionDocente = () => {
         setHabilidadesSeleccionadas([]);
         setActividadesPorHabilidad({});
         setResultadosAprendizaje({});
+        setCardsMinimizadas([]); // Reset inicial
 
         try {
             const res = await api.get(`/planificaciones/verificar/${form.asignatura_id}`, {
@@ -102,8 +139,7 @@ const PlanificacionDocente = () => {
 
                     if (form.parcial === '2' && res.data.habilidades_p1 && res.data.habilidades_p1.length > 0) {
                         const idsP1 = res.data.habilidades_p1.map(id => Number(id));
-                        const nuevaSeleccion = idsP1;
-                        seleccionadas = nuevaSeleccion;
+                        seleccionadas = idsP1;
 
                         const actividadesLimpias = {};
                         const resultadosLimpios = {};
@@ -122,7 +158,14 @@ const PlanificacionDocente = () => {
                         setActividadesPorHabilidad(res.data.actividades_guardadas || {});
                         setResultadosAprendizaje(resultadosGuardados);
                     }
+                    
                     setHabilidadesSeleccionadas(seleccionadas);
+                    
+                    // --- AQUÍ ESTÁ EL CAMBIO ---
+                    // Al cargar una edición (o después de guardar), minimizamos todas las tarjetas
+                    // para que la vista aparezca limpia y ordenada.
+                    setCardsMinimizadas(seleccionadas); 
+                    
                 } else if (form.parcial === '2') {
                     const idsDelP1 = (res.data.habilidades_p1 || []).map(id => Number(id));
                     if (idsDelP1.length > 0) {
@@ -130,6 +173,9 @@ const PlanificacionDocente = () => {
                         setHabilidadesSeleccionadas(idsDelP1);
                         setActividadesPorHabilidad({}); 
                         setResultadosAprendizaje({});
+                        // Opcional: También podemos minimizarlas en el inicio del P2 para que vea el resumen de qué le toca
+                        setCardsMinimizadas(idsDelP1); 
+                        
                         Swal.mixin({toast: true, position: 'top-end', timer: 3000, showConfirmButton: false})
                             .fire({icon: 'success', title: 'Habilidades del P1 cargadas. Defina los Resultados de Aprendizaje del 2do Parcial.'});
                     } else {
@@ -148,22 +194,25 @@ const PlanificacionDocente = () => {
     };
 
     const toggleHabilidad = (id) => {
-        if (form.parcial === '2') return;
+        if (form.parcial === '2') return; 
         const idNum = Number(id);
-        setHabilidadesSeleccionadas(prev => {
-            if (prev.includes(idNum)) {
-                const newState = prev.filter(h => h !== idNum);
-                const nuevasActividades = { ...actividadesPorHabilidad };
-                delete nuevasActividades[idNum];
-                setActividadesPorHabilidad(nuevasActividades);
-                const nuevosResultados = { ...resultadosAprendizaje };
-                delete nuevosResultados[idNum];
-                setResultadosAprendizaje(nuevosResultados);
-                return newState;
-            } else {
-                return [...prev, idNum];
-            }
-        });
+        const estaSeleccionado = habilidadesSeleccionadas.includes(idNum);
+
+        if (estaSeleccionado) {
+            setHabilidadesSeleccionadas(prev => prev.filter(h => h !== idNum));
+            // Los useEffect se encargan de limpiar los datos
+            setActividadesPorHabilidad(prev => { const c = {...prev}; delete c[idNum]; return c; });
+            setResultadosAprendizaje(prev => { const c = {...prev}; delete c[idNum]; return c; });
+        } else {
+            setHabilidadesSeleccionadas(prev => [...prev, idNum]);
+            // Al seleccionar una nueva, NO la agregamos a minimizadas para que aparezca ABIERTA y lista para editar
+        }
+    };
+
+    const toggleMinimizar = (id) => {
+        setCardsMinimizadas(prev => 
+            prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
+        );
     };
 
     const handleResultadoChange = (habilidadId, texto) => {
@@ -173,18 +222,22 @@ const PlanificacionDocente = () => {
         }));
     };
 
-    const agregarActividad = (habilidadId) => {
-        if (!nuevaActividad) return;
+    const agregarActividad = (habilidadId, actividad) => {
+        if (!actividad) return;
+        
         const actuales = actividadesPorHabilidad[habilidadId] || [];
-        if(actuales.includes(nuevaActividad)) {
-            return Swal.fire('Atención', 'Esta actividad ya fue agregada.', 'info');
+        if(actuales.includes(actividad)) {
+            return Swal.fire({
+                toast: true, position: 'top-end', icon: 'info',
+                title: 'Esta actividad ya está agregada',
+                showConfirmButton: false, timer: 2000
+            });
         }
+
         setActividadesPorHabilidad(prev => ({
             ...prev,
-            [habilidadId]: [...(prev[habilidadId] || []), nuevaActividad]
+            [habilidadId]: [...(prev[habilidadId] || []), actividad]
         }));
-        setNuevaActividad('');
-        setHabilidadParaActividad(null);
     };
 
     const eliminarActividad = (habilidadId, index) => {
@@ -239,19 +292,16 @@ const PlanificacionDocente = () => {
     };
 
     // --- LÓGICA DE PAGINACIÓN ---
-    // 1. Filtrar habilidades según el parcial
     const habilidadesFiltradas = catalogoHabilidades.filter(hab => {
         if (form.parcial === '2') return habilidadesSeleccionadas.includes(Number(hab.id));
         return true;
     });
 
-    // 2. Calcular índices
     const indiceUltimoItem = paginaActual * ITEMS_POR_PAGINA;
     const indicePrimerItem = indiceUltimoItem - ITEMS_POR_PAGINA;
     const habilidadesPaginadas = habilidadesFiltradas.slice(indicePrimerItem, indiceUltimoItem);
     const totalPaginas = Math.ceil(habilidadesFiltradas.length / ITEMS_POR_PAGINA);
 
-    // 3. Handlers de página
     const siguientePagina = () => setPaginaActual(prev => Math.min(prev + 1, totalPaginas));
     const anteriorPagina = () => setPaginaActual(prev => Math.max(prev - 1, 1));
 
@@ -318,30 +368,81 @@ const PlanificacionDocente = () => {
                                     const seleccionado = habilidadesSeleccionadas.includes(Number(hab.id));
                                     const opcionesActividades = getOpcionesActividades(hab.id);
                                     const bloqueado = form.parcial === '2'; 
+                                    
+                                    // Estado de minimización
+                                    const estaMinimizado = cardsMinimizadas.includes(Number(hab.id));
+                                    
+                                    // Verificación visual de completado
+                                    const tieneResultado = resultadosAprendizaje[hab.id] && resultadosAprendizaje[hab.id].length > 4;
+                                    const tieneActividades = actividadesPorHabilidad[hab.id] && actividadesPorHabilidad[hab.id].length > 0;
+                                    const estaCompleto = tieneResultado && tieneActividades;
 
                                     return (
-                                        <div key={hab.id} className={`border rounded-2xl p-6 transition-all flex flex-col shadow-sm hover:shadow-md ${seleccionado ? (bloqueado ? 'border-gray-300 bg-gray-50' : 'border-purple-500 bg-purple-50/30') : 'border-gray-200 bg-white'}`}>
-                                            <div className="flex items-center gap-4 mb-4">
-                                                <div className="relative flex items-center">
-                                                    <input 
-                                                        type="checkbox" 
-                                                        checked={seleccionado} 
-                                                        onChange={() => toggleHabilidad(hab.id)} 
-                                                        disabled={bloqueado} 
-                                                        className={`w-6 h-6 rounded focus:ring-purple-500 ${bloqueado ? 'text-gray-400 cursor-not-allowed bg-gray-200 border-gray-300' : 'text-purple-600 cursor-pointer'}`}
-                                                    />
-                                                    {bloqueado && seleccionado && <LockClosedIcon className="h-4 w-4 text-gray-500 absolute -top-1.5 -right-1.5 bg-white rounded-full ring-1 ring-gray-200 shadow-sm"/>}
+                                        <div key={hab.id} className={`border rounded-2xl p-6 transition-all flex flex-col shadow-sm ${seleccionado ? (bloqueado ? 'border-gray-300 bg-gray-50' : 'border-purple-500 bg-purple-50/30') : 'border-gray-200 bg-white hover:shadow-md'}`}>
+                                            
+                                            {/* HEADER DE LA TARJETA */}
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div className="flex items-center gap-4 flex-1">
+                                                    <div className="relative flex items-center mt-1">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            checked={seleccionado} 
+                                                            onChange={() => toggleHabilidad(hab.id)} 
+                                                            disabled={bloqueado} 
+                                                            className={`w-6 h-6 rounded focus:ring-purple-500 ${bloqueado ? 'text-gray-400 cursor-not-allowed bg-gray-200 border-gray-300' : 'text-purple-600 cursor-pointer'}`}
+                                                        />
+                                                        {bloqueado && seleccionado && <LockClosedIcon className="h-4 w-4 text-gray-500 absolute -top-1.5 -right-1.5 bg-white rounded-full ring-1 ring-gray-200 shadow-sm"/>}
+                                                    </div>
+
+                                                    <div className={`flex-1 ${bloqueado ? 'opacity-80' : ''}`}>
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <p className="font-bold text-gray-900 text-lg">{hab.nombre}</p>
+                                                            
+                                                            {/* DIAGNÓSTICO DE ESTADO (Visible si está minimizado) */}
+                                                            {estaMinimizado && (
+                                                                estaCompleto ? (
+                                                                    <span className="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full flex items-center gap-1 border border-green-200 animate-fade-in">
+                                                                        <CheckIcon className="h-3 w-3"/> Listo
+                                                                    </span>
+                                                                ) : (
+                                                                    <div className="flex flex-wrap gap-1">
+                                                                        {!tieneResultado && (
+                                                                            <span className="bg-red-50 text-red-600 text-xs px-2 py-0.5 rounded-full border border-red-100 flex items-center gap-1 animate-pulse">
+                                                                                <ExclamationCircleIcon className="h-3 w-3"/> Falta Resultado
+                                                                            </span>
+                                                                        )}
+                                                                        {!tieneActividades && (
+                                                                            <span className="bg-amber-50 text-amber-600 text-xs px-2 py-0.5 rounded-full border border-amber-100 flex items-center gap-1 animate-pulse">
+                                                                                <ExclamationTriangleIcon className="h-3 w-3"/> Falta Actividades
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                )
+                                                            )}
+                                                        </div>
+                                                        <p className="text-sm text-gray-600 line-clamp-2 mt-1">{hab.descripcion}</p>
+                                                    </div>
                                                 </div>
 
-                                                <div className={bloqueado ? 'opacity-80' : ''}>
-                                                    <p className="font-bold text-gray-900 text-lg">{hab.nombre}</p>
-                                                    <p className="text-sm text-gray-600 line-clamp-2 mt-1">{hab.descripcion}</p>
-                                                </div>
+                                                {/* BOTÓN MINIMIZAR (Solo si está seleccionado) */}
+                                                {seleccionado && (
+                                                    <button 
+                                                        onClick={() => toggleMinimizar(hab.id)}
+                                                        className="ml-2 p-1.5 rounded-full hover:bg-white/50 text-purple-600 hover:text-purple-800 transition active:scale-95 border border-transparent hover:border-purple-200"
+                                                        title={estaMinimizado ? "Expandir" : "Minimizar para ahorrar espacio"}
+                                                    >
+                                                        {estaMinimizado ? (
+                                                            <ChevronDownIcon className="h-6 w-6"/>
+                                                        ) : (
+                                                            <ChevronUpIcon className="h-6 w-6"/>
+                                                        )}
+                                                    </button>
+                                                )}
                                             </div>
                                             
-                                            {/* SECCIÓN EXPANDIBLE */}
-                                            {seleccionado && (
-                                                <div className="mt-auto pt-4 border-t border-purple-200/50">
+                                            {/* SECCIÓN EXPANDIBLE (Visible si seleccionado Y NO minimizado) */}
+                                            {seleccionado && !estaMinimizado && (
+                                                <div className="mt-2 pt-4 border-t border-purple-200/50 animate-fade-in-down">
                                                     
                                                     {/* CAMPO DE RESULTADO DE APRENDIZAJE */}
                                                     <div className="mb-5 bg-white p-4 rounded-xl border border-purple-100 shadow-sm group-focus-within:ring-2 ring-purple-100 transition-all">
@@ -367,21 +468,18 @@ const PlanificacionDocente = () => {
                                                         ))}
                                                         {(actividadesPorHabilidad[hab.id] || []).length === 0 && <li className="text-sm text-gray-400 italic">Sin actividades asignadas.</li>}
                                                     </ul>
-                                                    <div className="flex gap-2 items-end">
-                                                        <div className="flex-1 min-w-0">
-                                                            <CustomSelect 
-                                                                label="" 
-                                                                placeholder="Buscar actividad..." 
-                                                                options={opcionesActividades} 
-                                                                value={habilidadParaActividad === hab.id ? nuevaActividad : ''} 
-                                                                onChange={(val) => { setHabilidadParaActividad(hab.id); setNuevaActividad(val); }} 
-                                                                icon={ListBulletIcon} 
-                                                                searchable={true} 
-                                                            />
-                                                        </div>
-                                                        <button onClick={() => agregarActividad(hab.id)} className="bg-purple-600 text-white px-3 py-2.5 rounded-lg hover:bg-purple-700 transition shadow-sm h-[42px]" title="Agregar">
-                                                            <CheckIcon className="h-6 w-6"/>
-                                                        </button>
+                                                    
+                                                    {/* SELECTOR DE ACTIVIDADES - AGREGADO AUTOMÁTICO */}
+                                                    <div className="flex-1 min-w-0">
+                                                        <CustomSelect 
+                                                            label="" 
+                                                            placeholder="Seleccione una actividad para agregar..." 
+                                                            options={opcionesActividades} 
+                                                            value="" 
+                                                            onChange={(val) => agregarActividad(hab.id, val)} 
+                                                            icon={ListBulletIcon} 
+                                                            searchable={true} 
+                                                        />
                                                     </div>
                                                 </div>
                                             )}

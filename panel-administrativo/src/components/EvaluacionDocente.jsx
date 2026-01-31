@@ -82,7 +82,34 @@ const EvaluacionDocente = () => {
         }
     };
 
-    // --- NUEVA FUNCIÓN: Verificar Requisitos de Planificación (P1 y P2) ---
+    // --- FUNCIÓN HELPER: VALIDACIÓN PROFUNDA ---
+    // Esta función revisa si realmente hay datos adentro de la planificación
+    const validarIntegridad = (data) => {
+        // 1. Verificar si existe el registro base
+        if (!data || !data.tiene_asignacion || !data.es_edicion) return false;
+
+        // 2. Verificar si hay habilidades seleccionadas
+        const habilidades = data.habilidades_seleccionadas || [];
+        if (!Array.isArray(habilidades) || habilidades.length === 0) return false;
+
+        // 3. Verificar contenido interno (Actividades y Resultados)
+        const actividades = data.actividades_guardadas || {};
+        const resultados = data.resultados_guardados || {};
+
+        // Recorremos cada habilidad seleccionada para ver si está completa
+        for (let id of habilidades) {
+            // Debe tener Resultado de Aprendizaje
+            if (!resultados[id] || resultados[id].trim().length < 3) return false;
+            
+            // Debe tener al menos una Actividad
+            const acts = actividades[id];
+            if (!acts || !Array.isArray(acts) || acts.length === 0) return false;
+        }
+
+        return true; // Solo si pasa todas las pruebas
+    };
+
+    // --- VALIDACIÓN DE REQUISITOS (El Candado) ---
     const verificarRequisitosPrevios = async () => {
         if (!selectedAsignatura || !selectedPeriodo) return;
         
@@ -92,27 +119,33 @@ const EvaluacionDocente = () => {
         try {
             // Consultamos la planificación de AMBOS parciales
             const [resP1, resP2] = await Promise.all([
-                api.get(`/planificaciones/verificar/${selectedAsignatura}?parcial=1&periodo=${encodeURIComponent(selectedPeriodo)}`),
-                api.get(`/planificaciones/verificar/${selectedAsignatura}?parcial=2&periodo=${encodeURIComponent(selectedPeriodo)}`)
+                api.get(`/planificaciones/verificar/${selectedAsignatura}`, { params: { parcial: '1', periodo: selectedPeriodo } }),
+                api.get(`/planificaciones/verificar/${selectedAsignatura}`, { params: { parcial: '2', periodo: selectedPeriodo } })
             ]);
 
-            // Verificamos que existan y estén guardadas (es_edicion indica que ya se guardó)
-            const p1Completo = resP1.data.tiene_asignacion && resP1.data.es_edicion;
-            const p2Completo = resP2.data.tiene_asignacion && resP2.data.es_edicion;
+            // Usamos la nueva función de validación profunda
+            const p1Valido = validarIntegridad(resP1.data);
+            const p2Valido = validarIntegridad(resP2.data);
 
-            if (p1Completo && p2Completo) {
+            if (p1Valido && p2Valido) {
                 setPermisoCalificar(true);
-                verificarEstadoP1(); // Si cumple, verificamos el progreso del P1 para habilitar pestañas
+                verificarEstadoP1(); 
             } else {
+                let mensaje = 'La planificación está incompleta.';
+                if (!p1Valido && !p2Valido) mensaje = 'No se ha detectado planificación válida (actividades y resultados) en ninguno de los parciales.';
+                else if (!p1Valido) mensaje = 'Faltan datos en la planificación del Primer Parcial (Actividades o Resultados).';
+                else if (!p2Valido) mensaje = 'Faltan datos en la planificación del Segundo Parcial (Actividades o Resultados).';
+
                 Swal.fire({
                     icon: 'warning',
                     title: 'Planificación Incompleta',
-                    text: 'No puedes calificar hasta que hayas seleccionado las habilidades y actividades para el Parcial 1 y Parcial 2 en el módulo de Planificación.',
-                    confirmButtonText: 'Entendido'
+                    text: mensaje,
+                    footer: 'Por favor completa ambos parciales en el módulo de Planificación para poder calificar.',
+                    confirmButtonText: 'Entendido',
+                    allowOutsideClick: false
                 }).then(() => {
-                    // Reseteamos la selección para obligar al usuario a salir o corregir
+                    // Reseteamos la selección para obligar al usuario a salir
                     setSelectedAsignatura('');
-                    // Aseguramos limpieza extra aquí también
                     setHabilidadesPlanificadas([]);
                     setEstudiantes([]);
                     setHabilidadActiva(null);
@@ -127,9 +160,9 @@ const EvaluacionDocente = () => {
         }
     };
 
-    // --- EFECTO AL SELECCIONAR MATERIA (MODIFICADO) ---
+    // --- EFECTO AL SELECCIONAR MATERIA ---
     useEffect(() => {
-        // 1. LIMPIEZA INMEDIATA AL CAMBIAR MATERIA
+        // 1. LIMPIEZA INMEDIATA
         setEstudiantes([]);
         setHabilidadesPlanificadas([]);
         setHabilidadActiva(null);
@@ -162,9 +195,12 @@ const EvaluacionDocente = () => {
     const cargarPlanificacionYProgreso = async (forzarAvance = false, idRecienCompletado = null) => {
         setLoading(true);
         try {
-            const resPlan = await api.get(`/planificaciones/verificar/${selectedAsignatura}?parcial=${selectedParcial}&periodo=${encodeURIComponent(selectedPeriodo)}`);
+            const resPlan = await api.get(`/planificaciones/verificar/${selectedAsignatura}`, {
+                params: { parcial: selectedParcial, periodo: selectedPeriodo }
+            });
             
-            if (resPlan.data.tiene_asignacion && resPlan.data.es_edicion) {
+            // Aquí ya confiamos en que los datos son válidos porque pasaron el filtro inicial
+            if (resPlan.data.tiene_asignacion) {
                 const guardadas = resPlan.data.actividades_guardadas || {};
                 const catalogo = resPlan.data.habilidades || [];
                 
@@ -197,7 +233,7 @@ const EvaluacionDocente = () => {
                     ...mapaProgreso
                 }));
 
-                // Seleccionar automáticamente la primera si no hay activa
+                // Seleccionar automáticamente la primera pendiente
                 if (habilidadesListas.length > 0) {
                     const activaEsValida = habilidadesListas.some(h => Number(h.id) === Number(habilidadActiva));
                     if (!habilidadActiva || !activaEsValida) {
@@ -384,7 +420,6 @@ const EvaluacionDocente = () => {
         setSelectedParcial(val);
     };
 
-    // --- LÓGICA DE DATOS PAGINADOS ---
     const totalPages = Math.ceil(estudiantes.length / ITEMS_PER_PAGE);
     const indexOfLastItem = currentPage * ITEMS_PER_PAGE;
     const indexOfFirstItem = indexOfLastItem - ITEMS_PER_PAGE;
@@ -499,10 +534,7 @@ const EvaluacionDocente = () => {
                                 )}
                             </div>
 
-                            {/* TABLA DE ESTUDIANTES (PAGINADA) */}
                             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col animate-fade-in">
-                                
-                                {/* ENCABEZADO DE TABLA */}
                                 <div className="p-4 bg-gray-50 border-b border-gray-200 grid grid-cols-12 gap-4 text-xs font-bold text-gray-500 uppercase items-center sticky top-0 z-10 shadow-sm">
                                     <div className="col-span-1 text-center">#</div> 
                                     <div className="col-span-3 pl-2">Estudiante</div>
@@ -511,25 +543,18 @@ const EvaluacionDocente = () => {
                                     </div>
                                 </div>
 
-                                {/* CUERPO DE TABLA */}
                                 <div className="flex-1 bg-white">
                                     {loading ? <div className="p-12 text-center text-gray-400 flex flex-col items-center"><ArrowPathIcon className="h-8 w-8 animate-spin mb-2"/>Cargando nómina...</div> 
                                     : estudiantes.length === 0 ? <div className="p-12 text-center text-gray-400">No hay estudiantes cargados.</div> 
                                     : currentItems.map((est, index) => (
                                         <div key={est.estudiante_id} className={`grid grid-cols-12 gap-4 p-3 border-b border-gray-50 items-center transition ${est.nivel ? 'bg-blue-50/10' : 'hover:bg-gray-50'}`}>
-                                            
-                                            {/* Columna Numeración */}
                                             <div className="col-span-1 text-center font-bold text-gray-400 text-xs">
                                                 {indexOfFirstItem + index + 1}
                                             </div>
-
-                                            {/* Columna Nombre */}
                                             <div className="col-span-3 font-medium text-sm text-gray-800 truncate pl-2 flex flex-col">
                                                 <span title={est.nombres}>{est.nombres}</span>
                                                 {est.nivel && <span className="text-[10px] text-green-600 font-bold">Calificado (Nivel {est.nivel})</span>}
                                             </div>
-
-                                            {/* Botones de Nivel */}
                                             <div className="col-span-8 grid grid-cols-5 items-center">
                                                 {[1, 2, 3, 4, 5].map((nivel) => {
                                                     const notaP1 = est.nivel_p1 ? parseInt(est.nivel_p1) : null;
@@ -554,10 +579,7 @@ const EvaluacionDocente = () => {
                                     ))}
                                 </div>
 
-                                {/* PIE DE TABLA (PAGINACIÓN + GUARDAR) */}
                                 <div className="p-4 bg-gray-50 border-t border-gray-200 flex justify-between items-center sticky bottom-0 z-20">
-                                    
-                                    {/* Controles de Paginación */}
                                     <div className="flex items-center gap-3 text-sm text-gray-600">
                                         <button 
                                             onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
@@ -576,7 +598,6 @@ const EvaluacionDocente = () => {
                                         </button>
                                     </div>
 
-                                    {/* Estado y Botón Guardar */}
                                     <div className="flex items-center gap-4">
                                         <span className={`text-xs font-bold px-3 py-1 rounded-full ${pendientes > 0 ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>{pendientes > 0 ? `Faltan ${pendientes}` : '¡Todos calificados!'}</span>
                                         <button onClick={handleGuardar} className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-6 rounded-xl shadow-lg transition transform hover:scale-105 active:scale-95 text-sm">
