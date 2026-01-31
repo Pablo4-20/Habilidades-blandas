@@ -150,7 +150,7 @@ class ReporteController extends Controller
                     'planificacion_id' => $plan->id,
                     'habilidad_id' => $detalle->habilidad_blanda_id,
                     'habilidad' => $detalle->habilidad->nombre,
-                    'resultado_aprendizaje' => $detalle->resultado_aprendizaje, // <--- CAMBIO AQUÍ: Se incluye el campo
+                    'resultado_aprendizaje' => $detalle->resultado_aprendizaje,
                     'parcial_asignado' => $plan->parcial,
                     'estadisticas' => $conteos, 
                     'conclusion' => $reporteDB ? $reporteDB->conclusion_progreso : ''
@@ -180,29 +180,26 @@ class ReporteController extends Controller
         $periodoObj = PeriodoAcademico::where('nombre', $request->periodo)->first();
         if (!$periodoObj) return response()->json(['message' => 'Periodo no encontrado'], 404);
 
+        // --- CORRECCIÓN AQUÍ: Se agregó ->where('docente_id', $user->id) ---
         $query = Planificacion::with(['asignatura.carrera', 'asignatura.ciclo', 'docente', 'detalles.habilidad'])
             ->where('periodo_academico', $request->periodo)
-            ->where('parcial', '2'); 
+            ->where('parcial', '2')
+            ->where('docente_id', $user->id); // FILTRO CLAVE PARA SOLO MOSTRAR AL DOCENTE
 
         $nombreCarreraReporte = 'General';
 
+        // Mantenemos la lógica de carrera por si acaso se desea mostrar el nombre en el reporte
+        // aunque el filtro principal ya es el docente_id.
         if ($user->carrera_id) {
-            $query->whereHas('asignatura.carrera', function($q) use ($user) {
-                $q->where('id', $user->carrera_id);
-            });
             $carreraObj = Carrera::find($user->carrera_id);
             $nombreCarreraReporte = $carreraObj ? $carreraObj->nombre : 'Tu Carrera';
-
         } elseif ($request->has('carrera') && $request->carrera !== 'Todas') {
-            $nombre = $request->carrera;
-            $query->whereHas('asignatura.carrera', function($q) use ($nombre) {
-                $q->where('nombre', $nombre);
-            });
-            $nombreCarreraReporte = $nombre;
+            $nombreCarreraReporte = $request->carrera;
         }
         
         $planes = $query->get();
 
+        // Intento de obtener la carrera de la primera asignatura si no está definida
         if ($nombreCarreraReporte === 'General' && $planes->isNotEmpty()) {
             $primerPlan = $planes->first();
             if ($primerPlan->asignatura && $primerPlan->asignatura->carrera) {
@@ -229,7 +226,6 @@ class ReporteController extends Controller
 
             foreach ($plan->detalles as $detalle) {
                 
-                // Recolectar resultado de aprendizaje si existe
                 if (!empty($detalle->resultado_aprendizaje)) {
                     $resultadosAprendizaje[] = $detalle->resultado_aprendizaje;
                 }

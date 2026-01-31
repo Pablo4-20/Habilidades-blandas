@@ -36,7 +36,7 @@ const FichaResumen = () => {
     }, []);
 
     // ------------------------------------------------------------------------
-    // OPCIÓN 1: FICHA RESUMEN GENERAL (PDF HORIZONTAL) - MODIFICADO
+    // OPCIÓN 1: FICHA RESUMEN GENERAL (PDF HORIZONTAL)
     // ------------------------------------------------------------------------
     const descargarFichaResumen = async () => {
         if (!selectedPeriodo) return;
@@ -59,7 +59,7 @@ const FichaResumen = () => {
                 hour: '2-digit', minute: '2-digit'
             });
 
-            // --- ENCABEZADO CON LOGOS ---
+            // --- ENCABEZADO ---
             const imgW = 20; const imgH = 20; 
             try { doc.addImage(logoIzq, 'PNG', 10, 5, imgW, imgH); } catch (e) {}
             try { doc.addImage(logoDer, 'PNG', pageWidth - 30, 5, imgW, imgH); } catch (e) {}
@@ -73,15 +73,12 @@ const FichaResumen = () => {
             doc.setTextColor(0); doc.setFont("helvetica", "bold");
             doc.text("ANEXO 1: FICHA RESUMEN DE EJECUCIÓN", pageWidth / 2, 28, { align: "center" });
 
-            // -----------------------------------------------------------------
-            // DATOS INFORMATIVOS (SIN RESULTADOS DE APRENDIZAJE)
-            // -----------------------------------------------------------------
+            // --- INFO ---
             autoTable(doc, {
                 startY: 34, theme: 'plain',
                 body: [
                     ['Carrera:', info.carrera, 'Periodo Académico:', info.periodo], 
                     ['Docente:', info.generado_por, '', '']
-                    // Se eliminó la fila de Resultado de Aprendizaje aquí
                 ],
                 styles: { fontSize: 10, cellPadding: 1 }, 
                 columnStyles: { 0: { fontStyle: 'bold', cellWidth: 40 }, 2: { fontStyle: 'bold', cellWidth: 35 } }
@@ -108,7 +105,7 @@ const FichaResumen = () => {
                 }
             });
 
-            // PIE DE PÁGINA
+            // --- PIE DE PÁGINA (GENERAL) ---
             const footerY = pageHeight - 25; 
             if (doc.lastAutoTable.finalY > (footerY - 20)) {
                 doc.addPage();
@@ -120,8 +117,14 @@ const FichaResumen = () => {
             doc.setFont("helvetica", "normal");
             doc.setFontSize(10);
             doc.setTextColor(0);
-            doc.text("Firma del Docente", 14, footerY + 5);
+            
+            doc.text(info.generado_por, 14, footerY + 5); 
+            
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(8);
+            doc.text("DOCENTE", 14, footerY + 9);
 
+            doc.setFont("helvetica", "normal");
             doc.setFontSize(8);
             doc.setTextColor(100);
             doc.text(`Generado el: ${fechaActual}`, pageWidth - 14, footerY + 5, { align: "right" });
@@ -132,7 +135,7 @@ const FichaResumen = () => {
     };
 
     // ------------------------------------------------------------------------
-    // OPCIÓN 2: ACTAS INDIVIDUALES (SE MANTIENE IGUAL CON LOGOS)
+    // OPCIÓN 2: ACTAS INDIVIDUALES (LÓGICA MODIFICADA PARA FIRMA)
     // ------------------------------------------------------------------------
     const descargarActasIndividuales = async () => {
         if (!selectedMateriaId || !selectedPeriodo) return Swal.fire('Error', 'Selecciona una materia.', 'warning');
@@ -153,12 +156,10 @@ const FichaResumen = () => {
             });
 
             const drawHeader = (doc) => {
-                // --- LOGOS EXTREMOS ---
                 const imgW = 20; const imgH = 20; 
                 try { doc.addImage(logoIzq, 'PNG', 10, 8, imgW, imgH); } catch (e) {}
                 try { doc.addImage(logoDer, 'PNG', pageWidth - 30, 8, imgW, imgH); } catch (e) {}
 
-                // --- TEXTO CENTRADO ---
                 doc.setFontSize(13); doc.setTextColor(40, 53, 147); 
                 doc.text("UNIVERSIDAD ESTATAL DE BOLIVAR", pageWidth/2, 15, { align: "center" });
                 
@@ -190,7 +191,6 @@ const FichaResumen = () => {
 
                     doc.setFontSize(10);
                     
-                    // --- DATOS BÁSICOS ---
                     doc.setFont("helvetica", "bold"); doc.text("Carrera:", xLabelL, y);
                     doc.setFont("helvetica", "normal"); doc.text(info.carrera, xValueL, y);
 
@@ -222,7 +222,6 @@ const FichaResumen = () => {
                     const extraHeightHab = (habilidadLines.length - 1) * 5;
                     y += 10 + extraHeightHab; 
 
-                    // --- RESULTADO DE APRENDIZAJE ---
                     doc.setFont("helvetica", "bold"); 
                     doc.text("Resultado de Aprendizaje:", xLabelL, y);
                     
@@ -254,23 +253,42 @@ const FichaResumen = () => {
                         }
                     });
 
-                    // --- PIE DE PAGINA ---
-                    const footerY = pageHeight - 25;
+                    // ===============================================
+                    // LÓGICA DE FIRMA MODIFICADA (DINÁMICA)
+                    // ===============================================
                     
-                    if (doc.lastAutoTable.finalY > (footerY - 20)) {
+                    // 1. Calculamos dónde terminó la tabla y añadimos un margen (ej. 25 unidades)
+                    let yFirma = doc.lastAutoTable.finalY + 25;
+                    const alturaNecesaria = 30; // Espacio aprox para línea, nombre, cargo y fecha
+
+                    // 2. Verificamos si cabe en la página actual
+                    if (yFirma + alturaNecesaria > pageHeight - 10) {
+                        // Si no cabe, nueva página
                         doc.addPage();
+                        drawHeader(doc); // Opcional: poner cabecera en la hoja de solo firmas
+                        yFirma = 40; // Empezamos arriba en la nueva hoja
                     }
                     
+                    // 3. Dibujamos la firma en la posición calculada (sea a continuación o en nueva hoja)
                     doc.setDrawColor(0); 
-                    doc.line(14, footerY, 80, footerY); 
+                    doc.line(14, yFirma, 80, yFirma); // Línea
+                    
                     doc.setFont("helvetica", "normal");
                     doc.setFontSize(10);
                     doc.setTextColor(0);
-                    doc.text("Firma del Docente", 14, footerY + 5);
+                    
+                    // Nombre del docente autenticado
+                    doc.text(info.docente, 14, yFirma + 5);
+                    
+                    doc.setFont("helvetica", "bold");
+                    doc.setFontSize(8);
+                    doc.text("DOCENTE", 14, yFirma + 9);
 
+                    // Fecha a la misma altura o un poco abajo
+                    doc.setFont("helvetica", "normal");
                     doc.setFontSize(8);
                     doc.setTextColor(100);
-                    doc.text(`Generado el: ${fechaActual}`, pageWidth - 14, footerY + 5, { align: "right" });
+                    doc.text(`Generado el: ${fechaActual}`, pageWidth - 14, yFirma + 5, { align: "right" });
                 }
             });
 
