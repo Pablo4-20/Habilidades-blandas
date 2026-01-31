@@ -175,10 +175,13 @@ const AsignarMaterias = () => {
             Toast.fire({ icon: 'success', title: 'Asignado' });
             fetchData();
             
+            // --- MODIFICACIÓN AQUÍ: PRESERVAR DOCENTE ---
             setForm(prev => ({ 
                 ...initialFormState, 
                 periodo_id: periodoActivo.nombre,
-                carrera_id: carreras.length === 1 ? carreras[0].id : ''
+                carrera_id: carreras.length === 1 ? carreras[0].id : '',
+                docente_id: prev.docente_id, // Mantenemos el docente actual
+                paralelo: 'A' // Reiniciamos paralelo a A por comodidad
             }));
 
         } catch (error) {

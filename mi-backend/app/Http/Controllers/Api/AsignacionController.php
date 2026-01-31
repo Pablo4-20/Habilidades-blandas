@@ -77,7 +77,7 @@ class AsignacionController extends Controller
             'docente_id' => 'required|exists:users,id',
             'asignatura_id' => 'required|exists:asignaturas,id',
             'periodo' => 'required|string',
-            // 'paralelo' => 'required|string|max:2' // (Opcional según tu lógica)
+            'paralelo' => 'required|string|max:2' // Validacion activada
         ]);
 
         // [SEGURIDAD] Verificar que la asignatura sea de mi carrera
@@ -88,18 +88,17 @@ class AsignacionController extends Controller
             }
         }
 
-        // Verificar duplicados (Mismo periodo, misma materia)
-        // Nota: Ajusta si permites varios paralelos
+        // Verificar duplicados (Mismo periodo, misma materia Y MISMO PARALELO)
         $asignacionExistente = Asignacion::with('docente')
             ->where('asignatura_id', $request->asignatura_id)
             ->where('periodo', $request->periodo)
-            // ->where('paralelo', $request->paralelo) // Descomenta si usas paralelos
+            ->where('paralelo', $request->paralelo) // Filtro activado
             ->first();
 
         if ($asignacionExistente) {
             $nombreProfe = $asignacionExistente->docente->nombres ?? 'Otro docente'; 
             return response()->json([
-                'message' => "Esta materia ya está asignada al docente: $nombreProfe"
+                'message' => "Esta materia en el paralelo {$request->paralelo} ya está asignada al docente: $nombreProfe"
             ], 422); 
         }
 
@@ -124,18 +123,18 @@ class AsignacionController extends Controller
         $request->validate([
             'docente_id' => 'required', 
             'asignatura_id' => 'required', 
-            // 'paralelo' => 'required', 
+            'paralelo' => 'required', 
             'periodo' => 'required'
         ]);
 
         // Verificar conflicto de horario/duplicado
         $existeDuplicado = Asignacion::where('asignatura_id', $request->asignatura_id)
             ->where('periodo', $request->periodo)
-            // ->where('paralelo', $request->paralelo)
+            ->where('paralelo', $request->paralelo) // Filtro activado
             ->where('id', '!=', $id) 
             ->exists();
 
-        if ($existeDuplicado) return response()->json(['message' => 'Conflicto: Materia ya asignada.'], 422);
+        if ($existeDuplicado) return response()->json(['message' => 'Conflicto: Materia ya asignada en este paralelo.'], 422);
 
         $asignacion->update($request->all());
         return response()->json(['message' => 'Actualizado.', 'data' => $asignacion]);
