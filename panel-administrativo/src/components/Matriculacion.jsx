@@ -14,7 +14,8 @@ import {
     ChevronRightIcon,
     ChevronLeftIcon,
     ComputerDesktopIcon,
-    ExclamationCircleIcon
+    ExclamationCircleIcon,
+    UserGroupIcon
 } from '@heroicons/react/24/outline';
 
 const Matriculacion = () => {
@@ -120,16 +121,23 @@ const Matriculacion = () => {
 
     // --- IMPORTACIÓN ---
     const downloadTemplate = () => {
+        // Plantilla General ahora incluye Paralelo
         const data = [{ 
             Cedula: "1234567890", 
-            Carrera: carreraSeleccionada.nombre, 
-            Ciclo: cicloSeleccionado.nombre 
+            Carrera: carreraSeleccionada ? carreraSeleccionada.nombre : "Software", 
+            Ciclo: "I",
+            Paralelo: "A" 
+        }, {
+            Cedula: "0987654321", 
+            Carrera: carreraSeleccionada ? carreraSeleccionada.nombre : "Software", 
+            Ciclo: "V",
+            Paralelo: "B" 
         }];
         const ws = XLSX.utils.json_to_sheet(data);
-        ws['!cols'] = [{wch: 15}, {wch: 25}, {wch: 10}];
+        ws['!cols'] = [{wch: 15}, {wch: 25}, {wch: 10}, {wch: 10}];
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Plantilla");
-        XLSX.writeFile(wb, `Plantilla_Matricula_${carreraSeleccionada.nombre}_${cicloSeleccionado.nombre}.xlsx`);
+        XLSX.utils.book_append_sheet(wb, ws, "Plantilla_General");
+        XLSX.writeFile(wb, `Plantilla_Matricula_General.xlsx`);
     };
 
     const handleFileSelect = (e) => { const file = e.target.files[0]; if (file) setFileToUpload(file); };
@@ -138,7 +146,7 @@ const Matriculacion = () => {
         if (!fileToUpload) return Swal.fire('Error', 'Selecciona un archivo', 'warning');
         if (!periodoActivo) return Swal.fire('Error', 'No hay periodo activo', 'error'); 
         
-        Swal.fire({ title: 'Procesando...', text: 'Matriculando...', didOpen: () => Swal.showLoading() });
+        Swal.fire({ title: 'Procesando...', text: 'Distribuyendo estudiantes por ciclos...', didOpen: () => Swal.showLoading() });
         
         try {
             let fileToSend = fileToUpload;
@@ -169,7 +177,7 @@ const Matriculacion = () => {
     return (
         <div className="space-y-6 animate-fade-in p-6 bg-gray-50 min-h-screen flex flex-col">
             
-            {/* 1. ENCABEZADO + PERIODO */}
+            {/* 1. ENCABEZADO + PERIODO + BOTÓN CARGA GENERAL */}
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                 <div>
                     <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
@@ -180,19 +188,39 @@ const Matriculacion = () => {
                     </p>
                 </div>
                 
-                <div className={`bg-white border px-5 py-2.5 rounded-xl shadow-sm flex items-center gap-3 transition-colors duration-300
-                    ${periodoActivo ? 'border-blue-100' : 'border-red-200 bg-red-50'}
-                `}>
-                    <div className={`p-2 rounded-lg ${periodoActivo ? 'bg-blue-100 text-blue-600' : 'bg-white text-red-500 shadow-sm'}`}>
-                        {periodoActivo ? <CalendarDaysIcon className="h-5 w-5"/> : <ExclamationCircleIcon className="h-5 w-5"/>}
-                    </div>
-                    <div>
-                        <p className={`text-[10px] uppercase font-bold tracking-wider ${periodoActivo ? 'text-gray-400' : 'text-red-400'}`}>
-                            Periodo Activo
-                        </p>
-                        <p className={`text-sm font-bold leading-none ${periodoActivo ? 'text-gray-800' : 'text-red-700'}`}>
-                            {periodoActivo ? periodoActivo.nombre : 'Sin Asignar'}
-                        </p>
+                <div className="flex gap-3">
+                    {/* Botón de Carga General (Movido Aquí) */}
+                    <button 
+                        onClick={() => { 
+                            if(!periodoActivo) return Swal.fire('Alto', 'No hay periodo activo para cargar datos.', 'error');
+                            setFileToUpload(null); 
+                            setShowModalCarga(true); 
+                        }}
+                        className={`flex items-center gap-2 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg transition text-sm active:scale-95
+                            ${periodoActivo 
+                                ? 'bg-green-600 hover:bg-green-700 shadow-green-100' 
+                                : 'bg-gray-300 cursor-not-allowed shadow-none'
+                            }
+                        `}
+                    >
+                        <CloudArrowUpIcon className="h-5 w-5"/> 
+                        Cargar Nómina General
+                    </button>
+
+                    <div className={`bg-white border px-5 py-2.5 rounded-xl shadow-sm flex items-center gap-3 transition-colors duration-300
+                        ${periodoActivo ? 'border-blue-100' : 'border-red-200 bg-red-50'}
+                    `}>
+                        <div className={`p-2 rounded-lg ${periodoActivo ? 'bg-blue-100 text-blue-600' : 'bg-white text-red-500 shadow-sm'}`}>
+                            {periodoActivo ? <CalendarDaysIcon className="h-5 w-5"/> : <ExclamationCircleIcon className="h-5 w-5"/>}
+                        </div>
+                        <div>
+                            <p className={`text-[10px] uppercase font-bold tracking-wider ${periodoActivo ? 'text-gray-400' : 'text-red-400'}`}>
+                                Periodo Activo
+                            </p>
+                            <p className={`text-sm font-bold leading-none ${periodoActivo ? 'text-gray-800' : 'text-red-700'}`}>
+                                {periodoActivo ? periodoActivo.nombre : 'Sin Asignar'}
+                            </p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -280,23 +308,6 @@ const Matriculacion = () => {
                                             onChange={(e) => setBusqueda(e.target.value)}
                                         />
                                     </div>
-
-                                    <button 
-                                        onClick={() => { 
-                                            if(!periodoActivo) return Swal.fire('Alto', 'No hay periodo activo para cargar datos.', 'error');
-                                            setFileToUpload(null); 
-                                            setShowModalCarga(true); 
-                                        }}
-                                        className={`flex items-center gap-2 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg transition text-sm active:scale-95
-                                            ${periodoActivo 
-                                                ? 'bg-green-600 hover:bg-green-700 shadow-green-100' 
-                                                : 'bg-gray-300 cursor-not-allowed shadow-none'
-                                            }
-                                        `}
-                                    >
-                                        <CloudArrowUpIcon className="h-5 w-5"/> 
-                                        Cargar Nómina
-                                    </button>
                                 </div>
                             </div>
 
@@ -307,12 +318,13 @@ const Matriculacion = () => {
                                         <tr className="border-b border-gray-100 text-xs font-bold text-gray-400 uppercase tracking-wider">
                                             <th className="px-4 py-3 pb-4">Identificación</th>
                                             <th className="px-4 py-3 pb-4">Estudiante / Email</th>
+                                            <th className="px-4 py-3 pb-4 text-center">Paralelo</th>
                                             <th className="px-4 py-3 pb-4 text-center">Estado</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-50">
                                         {currentItems.length === 0 ? (
-                                            <tr><td colSpan="3" className="p-12 text-center text-gray-400">
+                                            <tr><td colSpan="4" className="p-12 text-center text-gray-400">
                                                 <div className="flex flex-col items-center gap-3">
                                                     <DocumentTextIcon className="h-12 w-12 text-gray-200"/>
                                                     <span>No hay resultados.</span>
@@ -327,6 +339,13 @@ const Matriculacion = () => {
                                                     <td className="px-4 py-4">
                                                         <div className="font-bold text-gray-900">{m.nombres}</div>
                                                         <div className="text-xs text-gray-500">{m.email}</div>
+                                                    </td>
+                                                    {/* NUEVA COLUMNA PARALELO */}
+                                                    <td className="px-4 py-4 text-center">
+                                                        <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-lg font-bold text-xs flex items-center justify-center gap-1 w-fit mx-auto">
+                                                            <UserGroupIcon className="h-3 w-3"/>
+                                                            {m.paralelo || 'A'}
+                                                        </span>
                                                     </td>
                                                     <td className="px-4 py-4 text-center">
                                                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${m.estado === 'Activo' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
@@ -380,17 +399,17 @@ const Matriculacion = () => {
             </div>
 
             {/* MODAL CARGA MASIVA */}
-            {showModalCarga && cicloSeleccionado && (
+            {showModalCarga && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
                         <div className="bg-gray-900 px-6 py-5 flex justify-between items-center">
                             <div className="text-white">
                                 <h3 className="text-lg font-bold flex items-center gap-2">
                                     <CloudArrowUpIcon className="h-5 w-5 text-green-400"/> 
-                                    Subir Nómina
+                                    Subir Nómina General
                                 </h3>
                                 <p className="text-xs text-gray-400 mt-0.5">
-                                    {carreraSeleccionada.nombre} • Ciclo {cicloSeleccionado.nombre}
+                                    Incluye a todos los estudiantes de todos los ciclos y paralelos.
                                 </p>
                             </div>
                             <button onClick={() => setShowModalCarga(false)} className="text-white/60 hover:text-white transition rounded-full p-1 hover:bg-white/10">✕</button>
@@ -402,7 +421,7 @@ const Matriculacion = () => {
                                 className="w-full py-3 border border-gray-200 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition"
                             >
                                 <ArrowDownTrayIcon className="h-5 w-5 text-green-600"/>
-                                Descargar Plantilla
+                                Descargar Plantilla General
                             </button>
 
                             <div 
