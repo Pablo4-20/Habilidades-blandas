@@ -15,28 +15,19 @@ const EvaluacionDocente = () => {
     // --- ESTADOS ---
     const [asignaturas, setAsignaturas] = useState([]);
     const [habilidadesPlanificadas, setHabilidadesPlanificadas] = useState([]);
-    
-    // Estado del progreso (IDs completados)
     const [progresoHabilidades, setProgresoHabilidades] = useState({}); 
-    
     const [actividadesContexto, setActividadesContexto] = useState({}); 
     const [estudiantes, setEstudiantes] = useState([]);
     const [loading, setLoading] = useState(false);
     const [mostrarRubrica, setMostrarRubrica] = useState(true); 
-    
     const [selectedPeriodo, setSelectedPeriodo] = useState(''); 
     const [selectedAsignatura, setSelectedAsignatura] = useState('');
     const [selectedParcial, setSelectedParcial] = useState('1');
     const [habilidadActiva, setHabilidadActiva] = useState(null); 
-    
     const [p2Habilitado, setP2Habilitado] = useState(false);
-
-    // NUEVO ESTADO: Controla si el docente tiene permiso para calificar (si cumplió requisitos)
     const [permisoCalificar, setPermisoCalificar] = useState(false);
-
-    // --- PAGINACIÓN ---
     const [currentPage, setCurrentPage] = useState(1);
-    const ITEMS_PER_PAGE = 7; // Cantidad de estudiantes por página
+    const ITEMS_PER_PAGE = 7; 
 
     // --- CARGAS INICIALES ---
     useEffect(() => {
@@ -46,7 +37,6 @@ const EvaluacionDocente = () => {
                     api.get('/docente/asignaturas'),
                     api.get('/periodos/activos')
                 ]);
-                
                 setAsignaturas(Array.isArray(resAsig.data) ? resAsig.data : []);
                 const periodosActivos = Array.isArray(resPer.data) ? resPer.data : [];
                 const activo = periodosActivos.find(p => p.activo === 1 || p.activo === true);
@@ -56,7 +46,7 @@ const EvaluacionDocente = () => {
         fetchInicial();
     }, []);
 
-    // --- VERIFICAR ESTADO DEL PARCIAL 1 (Para desbloquear P2) ---
+    // --- VERIFICAR ESTADO DEL PARCIAL 1 ---
     const verificarEstadoP1 = async () => {
         if (!selectedAsignatura || !selectedPeriodo) return;
         try {
@@ -72,79 +62,54 @@ const EvaluacionDocente = () => {
             const idsPlanificados = (resPlan.data.habilidades_seleccionadas || []).map(id => Number(id));
             const progresoMap = {};
             resProg.data.forEach(p => progresoMap[Number(p.habilidad_id)] = (p.completado === 1 || p.completado === true));
-
             const todoCompleto = idsPlanificados.length > 0 && idsPlanificados.every(id => progresoMap[id] === true);
             setP2Habilitado(todoCompleto);
-
         } catch (e) {
             console.error("Error verificando P1", e);
             setP2Habilitado(false);
         }
     };
 
-    // --- FUNCIÓN HELPER: VALIDACIÓN PROFUNDA ---
-    // Esta función revisa si realmente hay datos adentro de la planificación
-    const validarIntegridad = (data) => {
-        // 1. Verificar si existe el registro base
-        if (!data || !data.tiene_asignacion || !data.es_edicion) return false;
-
-        // 2. Verificar si hay habilidades seleccionadas
-        const habilidades = data.habilidades_seleccionadas || [];
-        if (!Array.isArray(habilidades) || habilidades.length === 0) return false;
-
-        // 3. Verificar contenido interno (Actividades y Resultados)
-        const actividades = data.actividades_guardadas || {};
-        const resultados = data.resultados_guardados || {};
-
-        // Recorremos cada habilidad seleccionada para ver si está completa
-        for (let id of habilidades) {
-            // Debe tener Resultado de Aprendizaje
-            if (!resultados[id] || resultados[id].trim().length < 3) return false;
-            
-            // Debe tener al menos una Actividad
-            const acts = actividades[id];
-            if (!acts || !Array.isArray(acts) || acts.length === 0) return false;
-        }
-
-        return true; // Solo si pasa todas las pruebas
-    };
-
-    // --- VALIDACIÓN DE REQUISITOS (El Candado) ---
+    // --- EL CANDADO INTELIGENTE ---
     const verificarRequisitosPrevios = async () => {
         if (!selectedAsignatura || !selectedPeriodo) return;
         
-        setPermisoCalificar(false); // Bloquear por defecto hasta verificar
+        setPermisoCalificar(false);
         setLoading(true);
 
         try {
-            // Consultamos la planificación de AMBOS parciales
-            const [resP1, resP2] = await Promise.all([
-                api.get(`/planificaciones/verificar/${selectedAsignatura}`, { params: { parcial: '1', periodo: selectedPeriodo } }),
-                api.get(`/planificaciones/verificar/${selectedAsignatura}`, { params: { parcial: '2', periodo: selectedPeriodo } })
-            ]);
+            const res = await api.get(`/planificaciones/verificar/${selectedAsignatura}`, {
+                params: { periodo: selectedPeriodo } 
+            });
 
-            // Usamos la nueva función de validación profunda
-            const p1Valido = validarIntegridad(resP1.data);
-            const p2Valido = validarIntegridad(resP2.data);
-
-            if (p1Valido && p2Valido) {
+            const data = res.data;
+            
+            // Si el servidor dice que TODO está bien
+            if (data.planificacion_completa === true) {
                 setPermisoCalificar(true);
-                verificarEstadoP1(); 
+                verificarEstadoP1();
             } else {
+                // Diagnóstico preciso del problema
+                let titulo = 'Acceso Denegado';
                 let mensaje = 'La planificación está incompleta.';
-                if (!p1Valido && !p2Valido) mensaje = 'No se ha detectado planificación válida (actividades y resultados) en ninguno de los parciales.';
-                else if (!p1Valido) mensaje = 'Faltan datos en la planificación del Primer Parcial (Actividades o Resultados).';
-                else if (!p2Valido) mensaje = 'Faltan datos en la planificación del Segundo Parcial (Actividades o Resultados).';
+
+                if (data.debug_sincronizados === false) {
+                    titulo = 'Planificación Desactualizada';
+                    mensaje = 'Has modificado las habilidades en un parcial pero no en el otro. El 1er y 2do Parcial deben tener EXACTAMENTE las mismas habilidades seleccionadas.';
+                } else if (!data.debug_p1_completo) {
+                    mensaje = 'La planificación del Primer Parcial tiene habilidades sin actividades o resultados de aprendizaje.';
+                } else if (!data.debug_p2_completo) {
+                    mensaje = 'La planificación del Segundo Parcial tiene habilidades sin actividades o resultados de aprendizaje.';
+                }
 
                 Swal.fire({
                     icon: 'warning',
-                    title: 'Planificación Incompleta',
+                    title: titulo,
                     text: mensaje,
-                    footer: 'Por favor completa ambos parciales en el módulo de Planificación para poder calificar.',
+                    footer: 'Por favor ve al módulo de Planificación y corrige las inconsistencias.',
                     confirmButtonText: 'Entendido',
                     allowOutsideClick: false
                 }).then(() => {
-                    // Reseteamos la selección para obligar al usuario a salir
                     setSelectedAsignatura('');
                     setHabilidadesPlanificadas([]);
                     setEstudiantes([]);
@@ -154,7 +119,7 @@ const EvaluacionDocente = () => {
 
         } catch (error) {
             console.error("Error verificando requisitos", error);
-            Swal.fire('Error', 'No se pudo verificar la planificación del docente.', 'error');
+            Swal.fire('Error', 'No se pudo conectar con el servidor.', 'error');
         } finally {
             setLoading(false);
         }
@@ -162,7 +127,6 @@ const EvaluacionDocente = () => {
 
     // --- EFECTO AL SELECCIONAR MATERIA ---
     useEffect(() => {
-        // 1. LIMPIEZA INMEDIATA
         setEstudiantes([]);
         setHabilidadesPlanificadas([]);
         setHabilidadActiva(null);
@@ -171,7 +135,6 @@ const EvaluacionDocente = () => {
         setPermisoCalificar(false);
         setP2Habilitado(false);
 
-        // 2. EJECUTAR LÓGICA SI HAY SELECCIÓN
         if(selectedAsignatura && selectedPeriodo) {
             verificarRequisitosPrevios(); 
             setSelectedParcial('1');
@@ -180,7 +143,6 @@ const EvaluacionDocente = () => {
 
     // --- CARGAR DATOS DE LA VISTA ---
     useEffect(() => {
-        // Solo cargamos si hay permiso para calificar
         if (selectedAsignatura && selectedParcial && selectedPeriodo && permisoCalificar) {
             cargarPlanificacionYProgreso(false);
         }
@@ -195,12 +157,9 @@ const EvaluacionDocente = () => {
     const cargarPlanificacionYProgreso = async (forzarAvance = false, idRecienCompletado = null) => {
         setLoading(true);
         try {
-            const resPlan = await api.get(`/planificaciones/verificar/${selectedAsignatura}`, {
-                params: { parcial: selectedParcial, periodo: selectedPeriodo }
-            });
+            const resPlan = await api.get(`/planificaciones/verificar/${selectedAsignatura}?parcial=${selectedParcial}&periodo=${encodeURIComponent(selectedPeriodo)}`);
             
-            // Aquí ya confiamos en que los datos son válidos porque pasaron el filtro inicial
-            if (resPlan.data.tiene_asignacion) {
+            if (resPlan.data.tiene_asignacion && resPlan.data.es_edicion) {
                 const guardadas = resPlan.data.actividades_guardadas || {};
                 const catalogo = resPlan.data.habilidades || [];
                 
@@ -214,7 +173,6 @@ const EvaluacionDocente = () => {
                 setHabilidadesPlanificadas(habilidadesListas);
                 setActividadesContexto(guardadas);
 
-                // --- CARGA DE PROGRESO ---
                 const resProgreso = await api.get('/docente/progreso', {
                     params: { asignatura_id: selectedAsignatura, periodo: selectedPeriodo, parcial: selectedParcial }
                 });
@@ -233,7 +191,6 @@ const EvaluacionDocente = () => {
                     ...mapaProgreso
                 }));
 
-                // Seleccionar automáticamente la primera pendiente
                 if (habilidadesListas.length > 0) {
                     const activaEsValida = habilidadesListas.some(h => Number(h.id) === Number(habilidadActiva));
                     if (!habilidadActiva || !activaEsValida) {
@@ -260,7 +217,7 @@ const EvaluacionDocente = () => {
             
             if (res.data && res.data.estudiantes) {
                 setEstudiantes(res.data.estudiantes);
-                setCurrentPage(1); // Reset paginación al cargar nueva lista
+                setCurrentPage(1); 
                 setMostrarRubrica(true);
             } else {
                 setEstudiantes([]);
@@ -297,10 +254,7 @@ const EvaluacionDocente = () => {
             });
 
             if (habilidadCompletada) {
-                setProgresoHabilidades(prev => ({
-                    ...prev,
-                    [Number(habilidadActiva)]: true
-                }));
+                setProgresoHabilidades(prev => ({ ...prev, [Number(habilidadActiva)]: true }));
 
                 if (todasCompletadas) {
                     if (selectedParcial === '1') {
@@ -329,24 +283,10 @@ const EvaluacionDocente = () => {
                         });
                     }
                 } else {
-                    Swal.fire({
-                        toast: true,
-                        position: 'top-end',
-                        icon: 'success',
-                        title: 'Habilidad completada ⭐',
-                        showConfirmButton: false,
-                        timer: 2000
-                    });
+                    Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Habilidad completada ⭐', showConfirmButton: false, timer: 2000 });
                 }
             } else {
-                Swal.fire({
-                    toast: true,
-                    position: 'top-end',
-                    icon: 'success',
-                    title: 'Progreso guardado',
-                    showConfirmButton: false,
-                    timer: 1500
-                });
+                Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Progreso guardado', showConfirmButton: false, timer: 1500 });
             }
 
             await cargarPlanificacionYProgreso(true, habilidadCompletada ? habilidadActiva : null); 
@@ -363,11 +303,7 @@ const EvaluacionDocente = () => {
     
     const opcionesParciales = [
         { value: '1', label: 'Primer Parcial' }, 
-        { 
-            value: '2', 
-            label: p2Habilitado ? 'Segundo Parcial' : '🔒 2do Parcial (Bloqueado)', 
-            disabled: !p2Habilitado 
-        }
+        { value: '2', label: p2Habilitado ? 'Segundo Parcial' : '🔒 2do Parcial (Bloqueado)', disabled: !p2Habilitado }
     ];
 
     const opcionesAsignaturas = asignaturasFiltradas.map(a => ({ value: a.id, label: a.nombre, subtext: `${a.carrera} (${a.paralelo})`, periodo: a.periodo }));
@@ -404,8 +340,13 @@ const EvaluacionDocente = () => {
         return hab ? hab.nombre : '';
     };
     
-    const nombreNormalizado = getNombreHabilidadActiva().trim();
-    const keyRubrica = Object.keys(RUBRICAS).find(k => k.toLowerCase() === nombreNormalizado.toLowerCase()) || nombreNormalizado;
+    // Función para ignorar tildes y mayúsculas
+    const normalizeText = (text) => {
+        return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    };
+
+    const nombreHabilidad = getNombreHabilidadActiva();
+    const keyRubrica = Object.keys(RUBRICAS).find(k => normalizeText(k) === normalizeText(nombreHabilidad)) || nombreHabilidad;
     const rubricaActual = RUBRICAS[keyRubrica] || {};
 
     const handleCambioParcial = (val) => {
@@ -450,13 +391,7 @@ const EvaluacionDocente = () => {
                             <CustomSelect label="Materia" options={opcionesAsignaturas} value={selectedAsignatura} onChange={setSelectedAsignatura} placeholder={asignaturasFiltradas.length > 0 ? "-- Seleccionar Materia --" : "Sin materias en este periodo"} />
                         </div>
                         <div className={!selectedAsignatura ? 'opacity-50 pointer-events-none' : ''}>
-                            <CustomSelect 
-                                label="Parcial" 
-                                icon={ClockIcon} 
-                                options={opcionesParciales} 
-                                value={selectedParcial} 
-                                onChange={handleCambioParcial} 
-                            />
+                            <CustomSelect label="Parcial" icon={ClockIcon} options={opcionesParciales} value={selectedParcial} onChange={handleCambioParcial} />
                         </div>
                     </div>
 
@@ -473,20 +408,11 @@ const EvaluacionDocente = () => {
                                         key={hab.id}
                                         onClick={() => setHabilidadActiva(idHab)}
                                         className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-between group 
-                                            ${activo 
-                                                ? 'bg-blue-600 text-white shadow-md shadow-blue-200 ring-2 ring-white ring-offset-2 ring-offset-blue-100' 
-                                                : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200 hover:border-blue-300' 
-                                            }`}
+                                            ${activo ? 'bg-blue-600 text-white shadow-md shadow-blue-200 ring-2 ring-white ring-offset-2 ring-offset-blue-100' : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200 hover:border-blue-300' }`}
                                     >
-                                        <div className="flex items-center gap-2">
-                                            {hab.nombre}
-                                        </div>
-                                        
+                                        <div className="flex items-center gap-2">{hab.nombre}</div>
                                         {completado ? (
-                                            <StarIconSolid 
-                                                className={`h-5 w-5 drop-shadow-sm transition-colors duration-300 ${activo ? 'text-yellow-300' : 'text-yellow-500'}`} 
-                                                title="¡Completado!"
-                                            />
+                                            <StarIconSolid className={`h-5 w-5 drop-shadow-sm transition-colors duration-300 ${activo ? 'text-yellow-300' : 'text-yellow-500'}`} title="¡Completado!" />
                                         ) : (
                                             activo ? <StarIcon className="h-4 w-4 text-white"/> : <StarIcon className="h-4 w-4 text-gray-300"/>
                                         )}
@@ -548,9 +474,7 @@ const EvaluacionDocente = () => {
                                     : estudiantes.length === 0 ? <div className="p-12 text-center text-gray-400">No hay estudiantes cargados.</div> 
                                     : currentItems.map((est, index) => (
                                         <div key={est.estudiante_id} className={`grid grid-cols-12 gap-4 p-3 border-b border-gray-50 items-center transition ${est.nivel ? 'bg-blue-50/10' : 'hover:bg-gray-50'}`}>
-                                            <div className="col-span-1 text-center font-bold text-gray-400 text-xs">
-                                                {indexOfFirstItem + index + 1}
-                                            </div>
+                                            <div className="col-span-1 text-center font-bold text-gray-400 text-xs">{indexOfFirstItem + index + 1}</div>
                                             <div className="col-span-3 font-medium text-sm text-gray-800 truncate pl-2 flex flex-col">
                                                 <span title={est.nombres}>{est.nombres}</span>
                                                 {est.nivel && <span className="text-[10px] text-green-600 font-bold">Calificado (Nivel {est.nivel})</span>}
@@ -560,17 +484,10 @@ const EvaluacionDocente = () => {
                                                     const notaP1 = est.nivel_p1 ? parseInt(est.nivel_p1) : null;
                                                     const notaActual = est.nivel ? parseInt(est.nivel) : null;
                                                     const esRefP1 = selectedParcial === '2' && notaP1 === nivel && notaActual !== nivel;
-
                                                     return (
                                                         <div key={nivel} className="flex justify-center relative">
-                                                            <button onClick={() => handleNotaChange(est.estudiante_id, nivel)} className={getButtonClass(est, nivel)} title={esRefP1 ? "Nota del Parcial 1" : `Asignar Nivel ${nivel}`}>
-                                                                {nivel}
-                                                            </button>
-                                                            {esRefP1 && (
-                                                                <span className="absolute -top-3 left-1/2 transform -translate-x-1/2 text-[9px] bg-gray-500 text-white px-1.5 py-0.5 rounded-full shadow-sm opacity-90 font-bold z-20 pointer-events-none">
-                                                                    P1
-                                                                </span>
-                                                            )}
+                                                            <button onClick={() => handleNotaChange(est.estudiante_id, nivel)} className={getButtonClass(est, nivel)} title={esRefP1 ? "Nota del Parcial 1" : `Asignar Nivel ${nivel}`}>{nivel}</button>
+                                                            {esRefP1 && <span className="absolute -top-3 left-1/2 transform -translate-x-1/2 text-[9px] bg-gray-500 text-white px-1.5 py-0.5 rounded-full shadow-sm opacity-90 font-bold z-20 pointer-events-none">P1</span>}
                                                         </div>
                                                     );
                                                 })}
@@ -581,28 +498,13 @@ const EvaluacionDocente = () => {
 
                                 <div className="p-4 bg-gray-50 border-t border-gray-200 flex justify-between items-center sticky bottom-0 z-20">
                                     <div className="flex items-center gap-3 text-sm text-gray-600">
-                                        <button 
-                                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
-                                            disabled={currentPage === 1}
-                                            className="p-1.5 rounded-lg border border-gray-300 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition"
-                                        >
-                                            <ChevronLeftIcon className="h-4 w-4"/>
-                                        </button>
+                                        <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-1.5 rounded-lg border border-gray-300 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition"><ChevronLeftIcon className="h-4 w-4"/></button>
                                         <span className="font-medium">Página {currentPage} de {totalPages || 1}</span>
-                                        <button 
-                                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
-                                            disabled={currentPage === totalPages || totalPages === 0}
-                                            className="p-1.5 rounded-lg border border-gray-300 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition"
-                                        >
-                                            <ChevronRightIcon className="h-4 w-4"/>
-                                        </button>
+                                        <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || totalPages === 0} className="p-1.5 rounded-lg border border-gray-300 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition"><ChevronRightIcon className="h-4 w-4"/></button>
                                     </div>
-
                                     <div className="flex items-center gap-4">
                                         <span className={`text-xs font-bold px-3 py-1 rounded-full ${pendientes > 0 ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>{pendientes > 0 ? `Faltan ${pendientes}` : '¡Todos calificados!'}</span>
-                                        <button onClick={handleGuardar} className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-6 rounded-xl shadow-lg transition transform hover:scale-105 active:scale-95 text-sm">
-                                            <CheckCircleIcon className="h-5 w-5"/> Guardar Notas
-                                        </button>
+                                        <button onClick={handleGuardar} className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-6 rounded-xl shadow-lg transition transform hover:scale-105 active:scale-95 text-sm"><CheckCircleIcon className="h-5 w-5"/> Guardar Notas</button>
                                     </div>
                                 </div>
                             </div>

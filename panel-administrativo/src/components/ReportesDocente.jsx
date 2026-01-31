@@ -115,7 +115,6 @@ const ReportesDocente = () => {
 
     // 5. NAVEGACIÓN
     const handleSiguiente = () => {
-        // Forzamos guardado antes de cambiar
         handleAutoSave(); 
         if (pasoActual < reportesAgrupados.length - 1) setPasoActual(prev => prev + 1);
     };
@@ -129,13 +128,10 @@ const ReportesDocente = () => {
     const handleAutoSave = async () => {
         if (!itemActual) return;
         
-        // --- VALIDACIÓN EXTRA ---
         const totalP1 = calcularTotalEvaluados(itemActual.p1?.estadisticas);
         const totalP2 = calcularTotalEvaluados(itemActual.p2?.estadisticas);
         
-        // Solo guardamos si hay datos en alguno de los parciales para evitar llamadas vacías
         if ((totalP1 + totalP2) === 0) return; 
-        // -----------------------
 
         const planID = itemActual.p2?.planificacion_id || itemActual.p1?.planificacion_id;
         const habID = itemActual.habilidad_id;
@@ -176,7 +172,6 @@ const ReportesDocente = () => {
 
                 const texto = conclusiones[keyP2] || conclusiones[keyP1];
 
-                // Validación: Solo enviar si hay texto y si realmente hubo evaluaciones para ese grupo
                 const tP1 = calcularTotalEvaluados(grupo.p1?.estadisticas);
                 const tP2 = calcularTotalEvaluados(grupo.p2?.estadisticas);
                 
@@ -201,13 +196,11 @@ const ReportesDocente = () => {
         }
     };
 
-    // --- HELPER PARA CALCULAR TOTAL ---
     const calcularTotalEvaluados = (stats) => {
         if (!stats) return 0;
         return Object.values(stats).reduce((acc, curr) => acc + Number(curr), 0);
     };
 
-    // --- COMPONENTE GRAFICO CON BORDES CIRCULARES ---
     const MiniGrafico = ({ stats, titulo }) => {
         if (!stats) return <div className="h-32 flex items-center justify-center border-2 border-dashed border-gray-200 rounded-xl bg-gray-50 text-gray-400 text-xs">{titulo}: Pendiente</div>;
         const totalEvaluados = calcularTotalEvaluados(stats);
@@ -256,15 +249,14 @@ const ReportesDocente = () => {
     const itemActual = reportesAgrupados[pasoActual];
     const keyTextAreaActual = itemActual ? (itemActual.uniqueKeyP2 || itemActual.uniqueKeyP1) : null;
     
-    // --- LÓGICA DE BLOQUEO (MODIFICADA) ---
+    // --- LÓGICA DE BLOQUEO ---
     const totalP1 = itemActual ? calcularTotalEvaluados(itemActual.p1?.estadisticas) : 0;
     const totalP2 = itemActual ? calcularTotalEvaluados(itemActual.p2?.estadisticas) : 0;
     
-    // Se requiere que AMBOS parciales tengan calificaciones para desbloquear
     const hayCalificaciones = totalP1 > 0 && totalP2 > 0;
 
     return (
-        <div className="space-y-4 animate-fade-in pb-12 p-4 bg-gray-50 min-h-screen">
+        <div className="space-y-4 animate-fade-in pb-20 p-4 bg-gray-50 min-h-screen">
             <div className="flex justify-between items-center">
                 <div>
                     <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2"><DocumentTextIcon className="h-6 w-6 text-blue-600"/> Reportes de Evolución</h2>
@@ -281,9 +273,10 @@ const ReportesDocente = () => {
             </div>
 
             {!loading && itemActual && (
-                <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden flex flex-col transition-all duration-300 h-[calc(100vh-200px)]">
+                // CAMBIO AQUÍ: Eliminamos 'h-[calc(100vh-200px)]' y lo dejamos automático con 'min-h-[500px]' si deseas una altura mínima
+                <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden flex flex-col transition-all duration-300">
                     
-                    {/* --- HEADER COMPACTO --- */}
+                    {/* HEADER COMPACTO */}
                     <div className="bg-gray-50 px-5 py-3 border-b border-gray-100 flex flex-col gap-2">
                         <div className="flex justify-between items-center">
                             <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Habilidad {pasoActual + 1} / {reportesAgrupados.length}</span>
@@ -291,24 +284,26 @@ const ReportesDocente = () => {
                         </div>
                     </div>
 
-                    {/* --- CONTENIDO CON SCROLL SI ES NECESARIO --- */}
-                    <div className="p-5 space-y-4 flex-1 overflow-y-auto">
+                    {/* CONTENIDO (SIN SCROLL FORZADO, DEJAMOS QUE CREZCA) */}
+                    <div className="p-5 space-y-6">
                         
-                        {/* Título más pequeño y compacto */}
+                        {/* Título */}
                         <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-blue-200 shadow-md text-white">
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-blue-200 shadow-md text-white shrink-0">
                                 <SparklesIcon className="h-5 w-5"/>
                             </div>
                             <h3 className="text-lg font-bold text-gray-800 leading-tight">{itemActual.habilidad}</h3>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Gráficos */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <MiniGrafico stats={itemActual.p1?.estadisticas} titulo="Resultados P1" />
                             <MiniGrafico stats={itemActual.p2?.estadisticas} titulo="Resultados P2" />
                         </div>
 
-                        <div className={`p-4 rounded-xl border transition-colors relative ${hayCalificaciones ? 'bg-blue-50/50 border-blue-100 focus-within:bg-blue-50 focus-within:border-blue-300' : 'bg-gray-100 border-gray-200 opacity-80 cursor-not-allowed'}`}>
-                            <div className="flex justify-between items-center mb-2">
+                        {/* Área de Texto */}
+                        <div className={`p-5 rounded-xl border transition-colors relative ${hayCalificaciones ? 'bg-blue-50/50 border-blue-100 focus-within:bg-blue-50 focus-within:border-blue-300' : 'bg-gray-100 border-gray-200 opacity-80 cursor-not-allowed'}`}>
+                            <div className="flex justify-between items-center mb-3">
                                 <label className={`block text-xs font-bold flex items-center gap-2 ${hayCalificaciones ? 'text-gray-700' : 'text-gray-400'}`}>
                                     <ChartBarIcon className="h-4 w-4"/> Análisis y Conclusiones
                                 </label>
@@ -316,15 +311,15 @@ const ReportesDocente = () => {
                                 {hayCalificaciones ? (
                                     autoGuardado && <span className="text-[10px] text-green-600 font-bold flex items-center gap-1 animate-pulse"><CheckCircleIcon className="h-3 w-3"/> Guardando...</span>
                                 ) : (
-                                    <span className="text-[10px] text-red-500 font-bold flex items-center gap-1 bg-white px-1.5 py-0.5 rounded border border-red-200 shadow-sm"><ExclamationTriangleIcon className="h-3 w-3"/> Complete ambos parciales</span>
+                                    <span className="text-[10px] text-red-500 font-bold flex items-center gap-1 bg-white px-2 py-1 rounded border border-red-200 shadow-sm"><ExclamationTriangleIcon className="h-3 w-3"/> Complete ambos parciales</span>
                                 )}
                             </div>
                             
                             <textarea 
-                                rows="3"
+                                rows="4" // Aumenté un poco las filas por defecto
                                 disabled={!hayCalificaciones}
-                                className={`w-full px-3 py-2 border rounded-lg outline-none text-xs resize-none transition-all ${hayCalificaciones ? 'border-blue-200 bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-300' : 'border-gray-300 bg-gray-200 text-gray-500 cursor-not-allowed'}`}
-                                placeholder={hayCalificaciones ? `Conclusiones sobre "${itemActual.habilidad}"...` : "Debe calificar el 1er y 2do parcial para habilitar el análisis."}
+                                className={`w-full px-4 py-3 border rounded-lg outline-none text-sm resize-none transition-all ${hayCalificaciones ? 'border-blue-200 bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-300' : 'border-gray-300 bg-gray-200 text-gray-500 cursor-not-allowed'}`}
+                                placeholder={hayCalificaciones ? `Escriba aquí sus conclusiones sobre el desarrollo de la habilidad "${itemActual.habilidad}" en el curso...` : "Debe calificar el 1er y 2do parcial para habilitar el análisis."}
                                 value={conclusiones[keyTextAreaActual] || ''}
                                 onChange={(e) => {
                                     if (keyTextAreaActual && hayCalificaciones) {
@@ -336,30 +331,30 @@ const ReportesDocente = () => {
                         </div>
                     </div>
 
-                    {/* --- FOOTER DE NAVEGACIÓN --- */}
-                    <div className="bg-white px-5 py-3 border-t border-gray-100 flex justify-between items-center z-10">
+                    {/* FOOTER */}
+                    <div className="bg-white px-5 py-4 border-t border-gray-100 flex justify-between items-center mt-auto">
                         <button 
                             onClick={handleAnterior} 
                             disabled={pasoActual === 0} 
-                            className={`flex items-center gap-2 px-3 py-2 rounded-lg font-bold text-xs transition ${pasoActual === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 border border-transparent hover:border-gray-200'}`}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs transition ${pasoActual === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 border border-transparent hover:border-gray-200'}`}
                         >
-                            <ArrowLeftIcon className="h-3 w-3"/> Anterior
+                            <ArrowLeftIcon className="h-4 w-4"/> Anterior
                         </button>
 
                         {pasoActual < reportesAgrupados.length - 1 ? (
                             <button 
                                 onClick={handleSiguiente} 
-                                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-bold text-xs shadow-md shadow-blue-200/50 flex items-center gap-2 transform active:scale-95 transition"
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-bold text-xs shadow-md shadow-blue-200/50 flex items-center gap-2 transform active:scale-95 transition"
                             >
-                                Siguiente <ArrowRightIcon className="h-3 w-3"/>
+                                Siguiente <ArrowRightIcon className="h-4 w-4"/>
                             </button>
                         ) : (
                             <button 
                                 onClick={guardarTodo} 
                                 disabled={guardando} 
-                                className="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-lg font-bold text-xs shadow-md shadow-green-200/50 flex items-center gap-2 transform active:scale-95 transition"
+                                className="bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-lg font-bold text-xs shadow-md shadow-green-200/50 flex items-center gap-2 transform active:scale-95 transition"
                             >
-                                {guardando ? 'Guardando...' : <><ArrowDownTrayIcon className="h-3 w-3"/> Finalizar</>}
+                                {guardando ? 'Guardando...' : <><ArrowDownTrayIcon className="h-4 w-4"/> Finalizar</>}
                             </button>
                         )}
                     </div>
