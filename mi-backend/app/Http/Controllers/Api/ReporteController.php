@@ -190,6 +190,16 @@ class ReporteController extends Controller
             $query->where('docente_id', $user->id);
         }
 
+        // --- SOLUCIÓN: Validar que la asignación administrativa siga existiendo ---
+        // Si borraste la asignación, esto ocultará la planificación del reporte.
+        $query->whereExists(function ($subq) {
+            $subq->select(DB::raw(1))
+                 ->from('asignaciones')
+                 ->whereColumn('asignaciones.docente_id', 'planificaciones.docente_id')
+                 ->whereColumn('asignaciones.asignatura_id', 'planificaciones.asignatura_id')
+                 ->whereColumn('asignaciones.periodo', 'planificaciones.periodo_academico');
+        });
+
         $nombreCarreraReporte = 'General';
 
         if ($user->carrera_id) {
