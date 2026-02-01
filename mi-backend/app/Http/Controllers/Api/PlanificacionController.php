@@ -18,21 +18,24 @@ class PlanificacionController extends Controller
             $user = $request->user();
             $periodo = $request->query('periodo'); 
             $parcialSolicitado = $request->query('parcial'); 
+            // [NUEVO] Recibimos el paralelo
+            $paralelo = $request->query('paralelo'); 
 
-            // 1. Validar asignación
-            $queryAsignacion = Asignacion::where('asignatura_id', $asignatura_id)
-                ->where('docente_id', $user->id);
-
-            if ($periodo) {
-                $queryAsignacion->where('periodo', $periodo);
+            if (!$paralelo) {
+                return response()->json(['message' => 'Falta especificar el paralelo.'], 400);
             }
 
-            $asignacion = $queryAsignacion->first();
+            // 1. Validar asignación con paralelo
+            $asignacion = Asignacion::where('asignatura_id', $asignatura_id)
+                ->where('docente_id', $user->id)
+                ->where('periodo', $periodo)
+                ->where('paralelo', $paralelo) // Filtro clave
+                ->first();
 
             if (!$asignacion) {
                 return response()->json([
                     'tiene_asignacion' => false, 
-                    'message' => 'No tienes asignada esta materia en el periodo seleccionado.'
+                    'message' => "No tienes asignada esta materia en el paralelo $paralelo."
                 ]);
             }
 
@@ -42,11 +45,12 @@ class PlanificacionController extends Controller
                 ->orderBy('nombre', 'asc')
                 ->get();
 
-            // 3. RECUPERAR AMBOS PARCIALES
+            // 3. RECUPERAR AMBOS PARCIALES (Filtrando por paralelo)
             $planP1 = Planificacion::with('detalles')
                 ->where('asignatura_id', $asignatura_id)
                 ->where('docente_id', $user->id)
                 ->where('periodo_academico', $asignacion->periodo)
+                ->where('paralelo', $paralelo) // <--- Filtro
                 ->where('parcial', '1')
                 ->first();
 
@@ -54,19 +58,16 @@ class PlanificacionController extends Controller
                 ->where('asignatura_id', $asignatura_id)
                 ->where('docente_id', $user->id)
                 ->where('periodo_academico', $asignacion->periodo)
+                ->where('paralelo', $paralelo) // <--- Filtro
                 ->where('parcial', '2')
                 ->first();
 
-            // CONVERTIR A ENTEROS PARA COMPARACIÓN EXACTA
             $idsP1 = $planP1 ? $planP1->detalles->pluck('habilidad_blanda_id')->map(fn($id) => (int)$id)->sort()->values()->toArray() : [];
             $idsP2 = $planP2 ? $planP2->detalles->pluck('habilidad_blanda_id')->map(fn($id) => (int)$id)->sort()->values()->toArray() : [];
 
             // 4. VALIDACIONES DE INTEGRIDAD
-            
-            // A. Sincronización: Deben ser idénticos
             $sincronizados = ($idsP1 === $idsP2);
 
-            // B. Contenido Completo (Texto real en actividades)
             $validarTexto = function($plan) {
                 if (!$plan) return false;
                 return $plan->detalles->every(function ($d) {
@@ -78,8 +79,6 @@ class PlanificacionController extends Controller
 
             $p1Completo = $validarTexto($planP1);
             $p2Completo = $validarTexto($planP2);
-
-            // CONDICIÓN MAESTRA PARA PERMITIR CALIFICAR
             $planificacionCompleta = !empty($idsP1) && $sincronizados && $p1Completo && $p2Completo;
 
             // 5. Preparar respuesta
@@ -96,8 +95,6 @@ class PlanificacionController extends Controller
                 'actividades_guardadas' => [],
                 'resultados_guardados' => [], 
                 'habilidades_p1' => $idsP1, 
-                
-                // BANDERAS PARA EL FRONTEND
                 'debug_sincronizados' => $sincronizados,
                 'debug_p1_completo' => $p1Completo,
                 'debug_p2_completo' => $p2Completo,
@@ -107,7 +104,6 @@ class PlanificacionController extends Controller
             if ($planDocente) {
                 $datosRespuesta['es_edicion'] = true;
                 $datosRespuesta['parcial_guardado'] = $planDocente->parcial;
-                
                 foreach ($planDocente->detalles as $detalle) {
                     $datosRespuesta['habilidades_seleccionadas'][] = $detalle->habilidad_blanda_id;
                     $actividadesRaw = explode("\n", $detalle->actividades);
@@ -130,22 +126,23 @@ class PlanificacionController extends Controller
             'docente_id' => 'required',
             'parcial' => 'required',
             'periodo_academico' => 'required',
+            'paralelo' => 'required', // <--- Requerido
             'detalles' => 'required|array', 
         ]);
 
         return DB::transaction(function () use ($request) {
-            // 1. Obtener los IDs de las habilidades que ESTÁN quedando
             $nuevosIdsHabilidades = collect($request->detalles)
                                     ->pluck('habilidad_blanda_id')
                                     ->filter()
                                     ->toArray();
 
-            // 2. Guardar o Actualizar el Plan del Parcial ACTUAL
+            // 2. Guardar o Actualizar (incluyendo paralelo)
             $planificacion = Planificacion::updateOrCreate(
                 [
                     'asignatura_id' => $request->asignatura_id,
                     'parcial' => $request->parcial,
-                    'periodo_academico' => $request->periodo_academico
+                    'periodo_academico' => $request->periodo_academico,
+                    'paralelo' => $request->paralelo // <--- Clave única compuesta
                 ],
                 [
                     'docente_id' => $request->docente_id,
@@ -153,12 +150,11 @@ class PlanificacionController extends Controller
                 ]
             );
 
-            // Borrar evaluaciones de habilidades que ya no existen en este parcial
+            // Limpieza y reescritura de detalles
             Evaluacion::where('planificacion_id', $planificacion->id)
                 ->whereNotIn('habilidad_blanda_id', $nuevosIdsHabilidades)
                 ->delete();
 
-            // Reescribir los detalles del plan actual
             $planificacion->detalles()->delete();
 
             foreach ($request->detalles as $detalle) {
@@ -170,32 +166,26 @@ class PlanificacionController extends Controller
                 ]);
             }
 
-            // ---------------------------------------------------------
-            // 3. SINCRONIZACIÓN AUTOMÁTICA CON EL OTRO PARCIAL
-            // ---------------------------------------------------------
-            // Aquí está la magia: Si modificas P1, limpiamos P2 (y viceversa)
-            
+            // 3. SINCRONIZACIÓN AUTOMÁTICA (CON PARALELO)
             $otroParcial = ($request->parcial == '1') ? '2' : '1';
             
             $planOtro = Planificacion::where('asignatura_id', $request->asignatura_id)
                 ->where('periodo_academico', $request->periodo_academico)
                 ->where('parcial', $otroParcial)
+                ->where('paralelo', $request->paralelo) // <--- Solo sincroniza con SU paralelo
                 ->first();
 
             if ($planOtro) {
-                // Borrar del OTRO parcial las habilidades que NO están en la nueva lista
                 $planOtro->detalles()
                     ->whereNotIn('habilidad_blanda_id', $nuevosIdsHabilidades)
                     ->delete();
                 
-                // Borrar evaluaciones del OTRO parcial para esas habilidades eliminadas
                 Evaluacion::where('planificacion_id', $planOtro->id)
                     ->whereNotIn('habilidad_blanda_id', $nuevosIdsHabilidades)
                     ->delete();
             }
-            // ---------------------------------------------------------
 
-            return response()->json(['message' => 'Planificación actualizada y sincronizada correctamente.'], 200);
+            return response()->json(['message' => 'Planificación guardada y sincronizada (Paralelo ' . $request->paralelo . ').'], 200);
         });
     }
 }

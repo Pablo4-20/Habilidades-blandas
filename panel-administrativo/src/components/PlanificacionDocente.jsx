@@ -18,11 +18,12 @@ const PlanificacionDocente = () => {
     const [catalogoHabilidades, setCatalogoHabilidades] = useState([]);
     const [loading, setLoading] = useState(false);
 
-    // Formulario
+    // Formulario (Agregamos paralelo)
     const [form, setForm] = useState({
         asignatura_id: '',
         parcial: '1',
         periodo_academico: '', 
+        paralelo: '' // Nuevo estado
     });
 
     // Estado de la planificación actual
@@ -62,19 +63,18 @@ const PlanificacionDocente = () => {
         cargarDatos();
     }, []);
 
-    // 2. RECARGA AL CAMBIAR FILTROS
+    // 2. RECARGA AL CAMBIAR FILTROS (Incluyendo Paralelo)
     useEffect(() => {
-        if (form.asignatura_id && form.parcial && form.periodo_academico) {
+        if (form.asignatura_id && form.parcial && form.periodo_academico && form.paralelo) {
             cargarPlanificacion();
             setPaginaActual(1); 
         }
-    }, [form.asignatura_id, form.parcial, form.periodo_academico]);
+    }, [form.asignatura_id, form.parcial, form.periodo_academico, form.paralelo]);
 
     // --- GARBAGE COLLECTOR (LIMPIEZA AUTOMÁTICA) ---
     useEffect(() => {
         if (loading) return; 
 
-        // 1. Limpiar Resultados
         setResultadosAprendizaje(prev => {
             const nuevas = { ...prev };
             let cambios = false;
@@ -88,7 +88,6 @@ const PlanificacionDocente = () => {
             return cambios ? nuevas : prev;
         });
 
-        // 2. Limpiar Actividades
         setActividadesPorHabilidad(prev => {
             const nuevas = { ...prev };
             let cambios = false;
@@ -102,18 +101,27 @@ const PlanificacionDocente = () => {
             return cambios ? nuevas : prev;
         });
         
-        // 3. Limpiar Minimizados
         setCardsMinimizadas(prev => prev.filter(id => habilidadesSeleccionadas.includes(id)));
 
     }, [habilidadesSeleccionadas, loading]); 
 
     // HANDLERS
     const handleCambioMateria = (val) => {
-        const materia = misAsignaturas.find(m => String(m.id) === String(val) && m.periodo === form.periodo_academico);
+        // Val viene en formato "ID-PARALELO" (ej: "15-A")
+        const [id, paralelo] = val.split('-');
+        
+        const materia = misAsignaturas.find(m => String(m.id) === String(id) && m.paralelo === paralelo && m.periodo === form.periodo_academico);
         let nuevoParcial = '1';
-        if (materia && materia.planificacion_p1 && !materia.planificacion_p2) nuevoParcial = '2';
-
-        setForm(prev => ({ ...prev, asignatura_id: val, parcial: nuevoParcial }));
+        
+        // Verificación básica de si ya tiene planes (aunque esto depende de la lógica del backend, aquí es visual)
+        // Nota: misAsignaturas trae info general, no detallada de P1/P2 por paralelo, así que mejor dejar en 1 por defecto.
+        
+        setForm(prev => ({ 
+            ...prev, 
+            asignatura_id: id, 
+            paralelo: paralelo,
+            parcial: nuevoParcial 
+        }));
     };
 
     // --- LÓGICA PRINCIPAL ---
@@ -122,11 +130,16 @@ const PlanificacionDocente = () => {
         setHabilidadesSeleccionadas([]);
         setActividadesPorHabilidad({});
         setResultadosAprendizaje({});
-        setCardsMinimizadas([]); // Reset inicial
+        setCardsMinimizadas([]); 
 
         try {
+            // Enviamos el paralelo también
             const res = await api.get(`/planificaciones/verificar/${form.asignatura_id}`, {
-                params: { parcial: form.parcial, periodo: form.periodo_academico }
+                params: { 
+                    parcial: form.parcial, 
+                    periodo: form.periodo_academico,
+                    paralelo: form.paralelo 
+                }
             });
 
             if (res.data.tiene_asignacion) {
@@ -160,10 +173,6 @@ const PlanificacionDocente = () => {
                     }
                     
                     setHabilidadesSeleccionadas(seleccionadas);
-                    
-                    // --- AQUÍ ESTÁ EL CAMBIO ---
-                    // Al cargar una edición (o después de guardar), minimizamos todas las tarjetas
-                    // para que la vista aparezca limpia y ordenada.
                     setCardsMinimizadas(seleccionadas); 
                     
                 } else if (form.parcial === '2') {
@@ -173,7 +182,6 @@ const PlanificacionDocente = () => {
                         setHabilidadesSeleccionadas(idsDelP1);
                         setActividadesPorHabilidad({}); 
                         setResultadosAprendizaje({});
-                        // Opcional: También podemos minimizarlas en el inicio del P2 para que vea el resumen de qué le toca
                         setCardsMinimizadas(idsDelP1); 
                         
                         Swal.mixin({toast: true, position: 'top-end', timer: 3000, showConfirmButton: false})
@@ -200,12 +208,10 @@ const PlanificacionDocente = () => {
 
         if (estaSeleccionado) {
             setHabilidadesSeleccionadas(prev => prev.filter(h => h !== idNum));
-            // Los useEffect se encargan de limpiar los datos
             setActividadesPorHabilidad(prev => { const c = {...prev}; delete c[idNum]; return c; });
             setResultadosAprendizaje(prev => { const c = {...prev}; delete c[idNum]; return c; });
         } else {
             setHabilidadesSeleccionadas(prev => [...prev, idNum]);
-            // Al seleccionar una nueva, NO la agregamos a minimizadas para que aparezca ABIERTA y lista para editar
         }
     };
 
@@ -216,10 +222,7 @@ const PlanificacionDocente = () => {
     };
 
     const handleResultadoChange = (habilidadId, texto) => {
-        setResultadosAprendizaje(prev => ({
-            ...prev,
-            [habilidadId]: texto
-        }));
+        setResultadosAprendizaje(prev => ({ ...prev, [habilidadId]: texto }));
     };
 
     const agregarActividad = (habilidadId, actividad) => {
@@ -227,11 +230,7 @@ const PlanificacionDocente = () => {
         
         const actuales = actividadesPorHabilidad[habilidadId] || [];
         if(actuales.includes(actividad)) {
-            return Swal.fire({
-                toast: true, position: 'top-end', icon: 'info',
-                title: 'Esta actividad ya está agregada',
-                showConfirmButton: false, timer: 2000
-            });
+            return Swal.fire({ toast: true, position: 'top-end', icon: 'info', title: 'Esta actividad ya está agregada', showConfirmButton: false, timer: 2000 });
         }
 
         setActividadesPorHabilidad(prev => ({
@@ -275,6 +274,7 @@ const PlanificacionDocente = () => {
                 docente_id: user.id,
                 parcial: form.parcial, 
                 periodo_academico: form.periodo_academico,
+                paralelo: form.paralelo, // Enviamos el paralelo
                 detalles: detalles
             });
             await Swal.fire({
@@ -285,7 +285,6 @@ const PlanificacionDocente = () => {
             });
             window.scrollTo({ top: 0, behavior: 'smooth' });
             cargarPlanificacion();
-            api.get('/docente/asignaturas').then(res => setMisAsignaturas(res.data));
         } catch (error) {
             Swal.fire('Error', 'No se pudo guardar la planificación.', 'error');
         }
@@ -305,13 +304,22 @@ const PlanificacionDocente = () => {
     const siguientePagina = () => setPaginaActual(prev => Math.min(prev + 1, totalPaginas));
     const anteriorPagina = () => setPaginaActual(prev => Math.max(prev - 1, 1));
 
+    // Filtrar asignaturas del periodo
     const asignaturasDelPeriodo = misAsignaturas.filter(a => a.periodo === form.periodo_academico);
+    
+    // CREAR OPCIONES ÚNICAS COMBINANDO ID Y PARALELO
     const opcionesAsignaturas = asignaturasDelPeriodo.map(a => ({
-        value: a.id,
-        label: a.nombre,
-        subtext: `${a.carrera} (${a.paralelo})`,
+        value: `${a.id}-${a.paralelo}`, // CLAVE ÚNICA COMPUESTA
+        label: `${a.nombre} - Paralelo ${a.paralelo}`, // ETIQUETA CLARA
+        subtext: a.carrera,
         icon: (a.planificacion_p1 && a.planificacion_p2) ? CheckCircleIcon : null
     }));
+    
+    // Valor compuesto para el select
+    const valorSelectMateria = (form.asignatura_id && form.paralelo) 
+        ? `${form.asignatura_id}-${form.paralelo}` 
+        : '';
+
     const opcionesParciales = [{ value: '1', label: '1er Parcial' }, { value: '2', label: '2do Parcial' }];
 
     const getOpcionesActividades = (habilidadId) => {
@@ -346,7 +354,15 @@ const PlanificacionDocente = () => {
                             <LockClosedIcon className="h-4 w-4 ml-auto text-blue-400"/>
                         </div>
                     </div>
-                    <CustomSelect label="Asignatura" icon={BookOpenIcon} options={opcionesAsignaturas} value={form.asignatura_id} onChange={handleCambioMateria} disabled={!form.periodo_academico} />
+                    {/* Selector actualizado con valor compuesto */}
+                    <CustomSelect 
+                        label="Asignatura y Paralelo" 
+                        icon={BookOpenIcon} 
+                        options={opcionesAsignaturas} 
+                        value={valorSelectMateria} 
+                        onChange={handleCambioMateria} 
+                        disabled={!form.periodo_academico} 
+                    />
                     <CustomSelect label="Parcial" icon={ClockIcon} options={opcionesParciales} value={form.parcial} onChange={v => setForm({...form, parcial: v})} disabled={!form.asignatura_id} />
                 </div>
 
@@ -368,11 +384,7 @@ const PlanificacionDocente = () => {
                                     const seleccionado = habilidadesSeleccionadas.includes(Number(hab.id));
                                     const opcionesActividades = getOpcionesActividades(hab.id);
                                     const bloqueado = form.parcial === '2'; 
-                                    
-                                    // Estado de minimización
                                     const estaMinimizado = cardsMinimizadas.includes(Number(hab.id));
-                                    
-                                    // Verificación visual de completado
                                     const tieneResultado = resultadosAprendizaje[hab.id] && resultadosAprendizaje[hab.id].length > 4;
                                     const tieneActividades = actividadesPorHabilidad[hab.id] && actividadesPorHabilidad[hab.id].length > 0;
                                     const estaCompleto = tieneResultado && tieneActividades;
@@ -380,7 +392,6 @@ const PlanificacionDocente = () => {
                                     return (
                                         <div key={hab.id} className={`border rounded-2xl p-6 transition-all flex flex-col shadow-sm ${seleccionado ? (bloqueado ? 'border-gray-300 bg-gray-50' : 'border-purple-500 bg-purple-50/30') : 'border-gray-200 bg-white hover:shadow-md'}`}>
                                             
-                                            {/* HEADER DE LA TARJETA */}
                                             <div className="flex justify-between items-start mb-2">
                                                 <div className="flex items-center gap-4 flex-1">
                                                     <div className="relative flex items-center mt-1">
@@ -398,7 +409,6 @@ const PlanificacionDocente = () => {
                                                         <div className="flex flex-wrap items-center gap-2">
                                                             <p className="font-bold text-gray-900 text-lg">{hab.nombre}</p>
                                                             
-                                                            {/* DIAGNÓSTICO DE ESTADO (Visible si está minimizado) */}
                                                             {estaMinimizado && (
                                                                 estaCompleto ? (
                                                                     <span className="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full flex items-center gap-1 border border-green-200 animate-fade-in">
@@ -424,27 +434,19 @@ const PlanificacionDocente = () => {
                                                     </div>
                                                 </div>
 
-                                                {/* BOTÓN MINIMIZAR (Solo si está seleccionado) */}
                                                 {seleccionado && (
                                                     <button 
                                                         onClick={() => toggleMinimizar(hab.id)}
                                                         className="ml-2 p-1.5 rounded-full hover:bg-white/50 text-purple-600 hover:text-purple-800 transition active:scale-95 border border-transparent hover:border-purple-200"
                                                         title={estaMinimizado ? "Expandir" : "Minimizar para ahorrar espacio"}
                                                     >
-                                                        {estaMinimizado ? (
-                                                            <ChevronDownIcon className="h-6 w-6"/>
-                                                        ) : (
-                                                            <ChevronUpIcon className="h-6 w-6"/>
-                                                        )}
+                                                        {estaMinimizado ? <ChevronDownIcon className="h-6 w-6"/> : <ChevronUpIcon className="h-6 w-6"/>}
                                                     </button>
                                                 )}
                                             </div>
                                             
-                                            {/* SECCIÓN EXPANDIBLE (Visible si seleccionado Y NO minimizado) */}
                                             {seleccionado && !estaMinimizado && (
                                                 <div className="mt-2 pt-4 border-t border-purple-200/50 animate-fade-in-down">
-                                                    
-                                                    {/* CAMPO DE RESULTADO DE APRENDIZAJE */}
                                                     <div className="mb-5 bg-white p-4 rounded-xl border border-purple-100 shadow-sm group-focus-within:ring-2 ring-purple-100 transition-all">
                                                         <label className="text-xs font-bold text-purple-700 uppercase tracking-wide flex items-center gap-1 mb-2">
                                                             <PencilSquareIcon className="h-4 w-4"/> Resultado de Aprendizaje ({form.parcial === '1' ? '1er P.' : '2do P.'})
@@ -469,7 +471,6 @@ const PlanificacionDocente = () => {
                                                         {(actividadesPorHabilidad[hab.id] || []).length === 0 && <li className="text-sm text-gray-400 italic">Sin actividades asignadas.</li>}
                                                     </ul>
                                                     
-                                                    {/* SELECTOR DE ACTIVIDADES - AGREGADO AUTOMÁTICO */}
                                                     <div className="flex-1 min-w-0">
                                                         <CustomSelect 
                                                             label="" 
@@ -487,7 +488,6 @@ const PlanificacionDocente = () => {
                                     );
                                 })}
                             
-                            {/* Mensaje vacío */}
                             {habilidadesFiltradas.length === 0 && (
                                 <div className="col-span-1 md:col-span-2 p-10 text-center border-2 border-dashed border-gray-200 rounded-xl">
                                     <p className="text-gray-500 text-base">
@@ -502,21 +502,13 @@ const PlanificacionDocente = () => {
                         {/* CONTROLES DE PAGINACIÓN */}
                         {habilidadesFiltradas.length > ITEMS_POR_PAGINA && (
                             <div className="mt-8 flex justify-center items-center gap-4">
-                                <button 
-                                    onClick={anteriorPagina} 
-                                    disabled={paginaActual === 1}
-                                    className={`flex items-center gap-1 px-4 py-2 rounded-lg font-medium transition ${paginaActual === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 shadow-sm'}`}
-                                >
+                                <button onClick={anteriorPagina} disabled={paginaActual === 1} className={`flex items-center gap-1 px-4 py-2 rounded-lg font-medium transition ${paginaActual === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 shadow-sm'}`}>
                                     <ChevronLeftIcon className="h-4 w-4"/> Anterior
                                 </button>
                                 <span className="text-gray-600 font-medium">
                                     Página {paginaActual} de {totalPaginas}
                                 </span>
-                                <button 
-                                    onClick={siguientePagina} 
-                                    disabled={paginaActual === totalPaginas}
-                                    className={`flex items-center gap-1 px-4 py-2 rounded-lg font-medium transition ${paginaActual === totalPaginas ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 shadow-sm'}`}
-                                >
+                                <button onClick={siguientePagina} disabled={paginaActual === totalPaginas} className={`flex items-center gap-1 px-4 py-2 rounded-lg font-medium transition ${paginaActual === totalPaginas ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 shadow-sm'}`}>
                                     Siguiente <ChevronRightIcon className="h-4 w-4"/>
                                 </button>
                             </div>

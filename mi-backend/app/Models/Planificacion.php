@@ -14,40 +14,15 @@ class Planificacion extends Model
     protected $fillable = [
         'asignatura_id',
         'docente_id',
+        'paralelo', 
         'parcial',
         'periodo_academico',
-       
+        'observaciones'
     ];
 
-    //  RELACIÓN CON ASIGNATURA
-    public function asignatura()
-    {
-        return $this->belongsTo(Asignatura::class, 'asignatura_id');
-    }
-
-    //  RELACIÓN CON DOCENTE (Usuario)
-    public function docente()
-    {
-        return $this->belongsTo(User::class, 'docente_id');
-    }
-
-    
-
-    //  RELACIÓN CON DETALLES (Aquí están las habilidades y actividades)
-    public function detalles()
-    {
-        return $this->hasMany(DetallePlanificacion::class, 'planificacion_id');
-    }
-
-    //  RELACIÓN CON EVALUACIONES
-    public function evaluaciones()
-    {
-        return $this->hasMany(Evaluacion::class, 'planificacion_id');
-    }
-
-    //  RELACIÓN CON REPORTE
-    public function reporte()
-    {
-        return $this->hasOne(Reporte::class, 'planificacion_id');
-    }
+    public function asignatura() { return $this->belongsTo(Asignatura::class, 'asignatura_id'); }
+    public function docente() { return $this->belongsTo(User::class, 'docente_id'); }
+    public function detalles() { return $this->hasMany(DetallePlanificacion::class, 'planificacion_id'); }
+    public function evaluaciones() { return $this->hasMany(Evaluacion::class, 'planificacion_id'); }
+    public function reporte() { return $this->hasOne(Reporte::class, 'planificacion_id'); }
 }
