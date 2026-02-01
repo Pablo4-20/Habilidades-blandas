@@ -86,9 +86,12 @@ Route::middleware('auth:sanctum')->group(function () {
     // --- DOCENTE ---
     // Cursos y Listados
     Route::get('/docente/mis-cursos', [DocenteController::class, 'misCursos']);
-    Route::get('/docente/curso/{asignaturaId}/estudiantes', [DocenteController::class, 'misEstudiantes']);
-    Route::get('/docente/asignaturas', [DocenteController::class, 'misAsignaturas']); // Para combos
-    Route::get('/docente/estudiantes/{asignatura}', [DocenteController::class, 'verEstudiantes']);
+    
+    // [MODIFICADO] Ahora acepta el paralelo en la URL
+    Route::get('/docente/curso/{asignaturaId}/{paralelo}/estudiantes', [DocenteController::class, 'misEstudiantes']);
+    
+    Route::get('/docente/asignaturas', [DocenteController::class, 'misAsignaturas']); 
+    Route::get('/docente/estudiantes/{asignatura}', [DocenteController::class, 'verEstudiantes']); 
     Route::get('/docente/habilidades/{asignatura}', [DocenteController::class, 'misHabilidades']);
     
     // Gestión Manual de Estudiantes (Arrastres y Bajas)
@@ -102,21 +105,14 @@ Route::middleware('auth:sanctum')->group(function () {
     // Evaluación y Calificación
     Route::post('/docente/rubrica', [DocenteController::class, 'rubrica']);
     Route::post('/docente/guardar-notas', [DocenteController::class, 'guardarNotas']);
-    Route::get('/docente/progreso', [DocenteController::class, 'verificarProgreso']); // NUEVA RUTA DE PROGRESO
+    Route::get('/docente/progreso', [DocenteController::class, 'verificarProgreso']); 
 
-    // Reportes Docente (CORREGIDOS A ReporteController)
+    // Reportes Docente
     Route::post('/reportes/generar', [ReporteController::class, 'generar']);
     
     Route::get('/reportes/general-coordinador', [ReporteGeneralController::class, 'index']);
-    // 1. Ruta para Actas Individuales
     Route::post('/reportes/pdf-data', [ReporteController::class, 'datosParaPdf']); 
-    
-    // 2. Ruta para Ficha Resumen General (AGREGADA)
     Route::post('/reportes/pdf-data-general', [ReporteController::class, 'pdfDataGeneral']);
-
-    // Guardado de observaciones
     Route::post('/reportes/guardar-todo', [ReporteController::class, 'guardarConclusionesMasivas']);
-    
-    // Ruta opcional para datos en JSON (si se usa en el futuro)
     Route::post('/fichas/datos', [ReporteController::class, 'obtenerFichaResumen']);
 });

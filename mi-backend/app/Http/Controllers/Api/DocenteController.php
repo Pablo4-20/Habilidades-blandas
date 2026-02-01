@@ -19,7 +19,8 @@ class DocenteController extends Controller
     // ==========================================
     // HELPER PRIVADO: Obtener Estudiantes
     // ==========================================
-    private function _getEstudiantes($asignaturaId, $periodoId)
+    // [MODIFICADO] Recibe $paralelo opcional
+    private function _getEstudiantes($asignaturaId, $periodoId, $paralelo = null)
     {
         $asignatura = Asignatura::with(['carrera', 'ciclo'])->find($asignaturaId);
         if (!$asignatura) return collect();
@@ -27,8 +28,14 @@ class DocenteController extends Controller
         // 1. Estudiantes Manuales (Excluyendo 'Baja')
         $estudiantesDirectos = DetalleMatricula::where('asignatura_id', $asignaturaId)
             ->where('estado_materia', '!=', 'Baja')
-            ->whereHas('matricula', function($q) use ($periodoId) {
-                $q->where('periodo_id', $periodoId)->where('estado', 'Activo');
+            ->whereHas('matricula', function($q) use ($periodoId, $paralelo) {
+                $q->where('periodo_id', $periodoId)
+                  ->where('estado', 'Activo');
+                
+                // [NUEVO] Filtro paralelo
+                if ($paralelo) {
+                    $q->where('paralelo', $paralelo);
+                }
             })
             ->with(['matricula.estudiante'])
             ->get()
@@ -42,11 +49,17 @@ class DocenteController extends Controller
 
         $estudiantesCiclo = collect();
         if ($asignatura->ciclo_id) {
-            $estudiantesCiclo = Matricula::where('periodo_id', $periodoId)
+            $queryAutomaticos = Matricula::where('periodo_id', $periodoId)
                 ->where('ciclo_id', $asignatura->ciclo_id)
                 ->where('estado', 'Activo')
-                ->whereNotIn('id', $idsConRegistro)
-                ->whereHas('estudiante', function($q) use ($asignatura) {
+                ->whereNotIn('id', $idsConRegistro);
+
+            // [NUEVO] Filtro paralelo
+            if ($paralelo) {
+                $queryAutomaticos->where('paralelo', $paralelo);
+            }
+
+            $estudiantesCiclo = $queryAutomaticos->whereHas('estudiante', function($q) use ($asignatura) {
                     if ($asignatura->carrera) {
                         $q->where('carrera', $asignatura->carrera->nombre); 
                     }
@@ -61,23 +74,20 @@ class DocenteController extends Controller
     }
 
     // ==========================================
-    // 1. MIS CURSOS (CORREGIDO PARA EL FRONTEND)
+    // 1. MIS CURSOS
     // ==========================================
     public function misCursos(Request $request)
     {
         $user = $request->user();
         
-        // 1. Identificar Periodo Activo
         $periodo = PeriodoAcademico::where('activo', true)->first();
         $nombrePeriodo = $periodo ? $periodo->nombre : 'Sin Periodo Activo';
 
-        // 2. Buscar Asignaciones del Docente en ese Periodo
         $asignaciones = Asignacion::with(['asignatura.carrera', 'asignatura.ciclo'])
             ->where('docente_id', $user->id)
             ->where('periodo', $nombrePeriodo)
             ->get();
 
-        // 3. Agrupar por Ciclo (Estructura requerida por MisCursos.jsx)
         $grupos = $asignaciones->groupBy(function($item) {
             return $item->asignatura->ciclo->nombre ?? 'Varios';
         });
@@ -99,7 +109,6 @@ class DocenteController extends Controller
             ];
         }
 
-        // 4. Retornar JSON con la estructura { periodo: "...", cursos: [...] }
         return response()->json([
             'periodo' => $nombrePeriodo,
             'cursos' => $resultadoCursos
@@ -107,7 +116,7 @@ class DocenteController extends Controller
     }
 
     // ==========================================
-    // 2. LISTADO PARA COMBOS (Estructura plana)
+    // 2. LISTADO PARA COMBOS
     // ==========================================
     public function misAsignaturas(Request $request)
     {
@@ -130,15 +139,16 @@ class DocenteController extends Controller
     }
 
     // ==========================================
-    // 3. MIS ESTUDIANTES (LISTADO GENERAL)
+    // 3. MIS ESTUDIANTES (MODIFICADO)
     // ==========================================
-    public function misEstudiantes(Request $request, $asignaturaId)
+    public function misEstudiantes(Request $request, $asignaturaId, $paralelo = null)
     {
         try {
             $periodo = PeriodoAcademico::where('activo', true)->first();
             if (!$periodo) return response()->json([]);
 
-            $estudiantes = $this->_getEstudiantes($asignaturaId, $periodo->id);
+            // [CLAVE] Pasamos el paralelo al helper
+            $estudiantes = $this->_getEstudiantes($asignaturaId, $periodo->id, $paralelo);
 
             return $estudiantes->map(function($est) {
                 return [
@@ -209,7 +219,10 @@ class DocenteController extends Controller
         $periodo = PeriodoAcademico::where('nombre', $request->periodo)->first();
         if (!$periodo) return response()->json(['message' => 'Periodo no encontrado'], 404);
 
-        $todosLosEstudiantes = $this->_getEstudiantes($request->asignatura_id, $periodo->id)
+        // Si el frontend envía paralelo, filtrar por él también en la rúbrica
+        $paralelo = $request->input('paralelo', null);
+
+        $todosLosEstudiantes = $this->_getEstudiantes($request->asignatura_id, $periodo->id, $paralelo)
             ->sortBy(fn($e) => $e->apellidos . ' ' . $e->nombres);
         
         $planificacion = Planificacion::where('asignatura_id', $request->asignatura_id)
@@ -225,7 +238,7 @@ class DocenteController extends Controller
                 ->get();
         }
 
-        // Notas Parcial 1 (Referencia)
+        // Notas Parcial 1
         $evaluacionesP1 = collect();
         if ($request->parcial == '2') {
              $planP1 = Planificacion::where('asignatura_id', $request->asignatura_id)
@@ -303,7 +316,7 @@ class DocenteController extends Controller
     }
 
     // ==========================================
-    // 8. VERIFICAR PROGRESO (Estrellas)
+    // 8. VERIFICAR PROGRESO
     // ==========================================
     public function verificarProgreso(Request $request)
     {
@@ -316,11 +329,10 @@ class DocenteController extends Controller
         if (!$periodo) return response()->json([]);
 
         $user = $request->user();
-        
-        // CORRECCIÓN 1: Capturamos qué parcial está consultando el frontend
         $parcialConsultado = $request->input('parcial', '1'); 
-        
-        $estudiantes = $this->_getEstudiantes($request->asignatura_id, $periodo->id);
+        $paralelo = $request->input('paralelo', null);
+
+        $estudiantes = $this->_getEstudiantes($request->asignatura_id, $periodo->id, $paralelo);
         $totalEstudiantes = $estudiantes->count();
 
         if ($totalEstudiantes === 0) return response()->json([]);
@@ -343,14 +355,14 @@ class DocenteController extends Controller
         $habilidadesIds = $planP1->detalles()->pluck('habilidad_blanda_id');
 
         foreach ($habilidadesIds as $habilidadId) {
-            // Verificar Parcial 1
+            // Parcial 1
             $conteoP1 = Evaluacion::where('planificacion_id', $planP1->id)
                 ->where('habilidad_blanda_id', $habilidadId)
                 ->whereIn('estudiante_id', $estudiantes->pluck('id'))
                 ->count();
             $completoP1 = $totalEstudiantes > 0 && $conteoP1 >= $totalEstudiantes;
 
-            // Verificar Parcial 2
+            // Parcial 2
             $completoP2 = false;
             if ($planP2) {
                 $conteoP2 = Evaluacion::where('planificacion_id', $planP2->id)
@@ -360,12 +372,11 @@ class DocenteController extends Controller
                 $completoP2 = $totalEstudiantes > 0 && $conteoP2 >= $totalEstudiantes;
             }
 
-            // CORRECCIÓN 2: El estado 'completado' depende del parcial actual
             $estadoFinal = ($parcialConsultado == '2') ? $completoP2 : $completoP1;
 
             $progreso[] = [
                 'habilidad_id' => $habilidadId,
-                'completado' => $estadoFinal, // <--- Aquí estaba el error antes
+                'completado' => $estadoFinal, 
                 'p1_ok' => $completoP1,
                 'p2_ok' => $completoP2
             ];
@@ -389,9 +400,17 @@ class DocenteController extends Controller
             
             $asignatura = Asignatura::find($request->asignatura_id);
             
+            // Al ser manual, si no tenemos paralelo, asignamos 'A' o podrías pedirlo en el request
+            $paralelo = $request->input('paralelo', 'A');
+
             $matricula = Matricula::firstOrCreate(
                 ['estudiante_id' => $estudiante->id, 'periodo_id' => $periodo->id], 
-                ['ciclo_id' => $asignatura->ciclo_id ?? 1, 'fecha_matricula' => now(), 'estado' => 'Activo']
+                [
+                    'ciclo_id' => $asignatura->ciclo_id ?? 1, 
+                    'fecha_matricula' => now(), 
+                    'estado' => 'Activo',
+                    'paralelo' => $paralelo 
+                ]
             );
             
             DetalleMatricula::updateOrCreate(

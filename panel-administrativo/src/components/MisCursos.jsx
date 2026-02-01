@@ -57,7 +57,9 @@ const MisCursos = () => {
         setCurrentPage(1); // Reset paginación
         setBusqueda('');   // Reset búsqueda
         try {
-            const res = await api.get(`/docente/curso/${materia.asignatura_id}/estudiantes`);
+            // [CAMBIO CLAVE] Enviamos el paralelo en la URL para que el backend filtre
+            const paralelo = materia.paralelo || 'A';
+            const res = await api.get(`/docente/curso/${materia.asignatura_id}/${paralelo}/estudiantes`);
             setEstudiantes(res.data);
         } catch (e) {
             console.error(e);
@@ -126,7 +128,8 @@ const MisCursos = () => {
             try {
                 await api.post('/docente/agregar-estudiante', {
                     cedula: cedula,
-                    asignatura_id: materiaSeleccionada.asignatura_id
+                    asignatura_id: materiaSeleccionada.asignatura_id,
+                    paralelo: materiaSeleccionada.paralelo // [OPCIONAL] Si quisieras enviar paralelo también
                 });
                 exitos++;
             } catch (e) { errores++; }
@@ -213,12 +216,21 @@ const MisCursos = () => {
                                 <div className="bg-white p-2 space-y-1">
                                     {grupo.materias.map(m => (
                                         <button 
-                                            key={m.asignatura_id} 
+                                            // [CAMBIO CLAVE] Key única combinando ID y Paralelo
+                                            key={`${m.asignatura_id}-${m.paralelo}`} 
                                             onClick={() => handleSeleccionarMateria(m)}
-                                            className={`w-full text-left p-2 rounded-lg transition ${materiaSeleccionada?.asignatura_id === m.asignatura_id ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-gray-50 text-gray-600'}`}
+                                            className={`w-full text-left p-2 rounded-lg transition ${
+                                                // Comparar tanto asignatura como paralelo para marcar activo
+                                                (materiaSeleccionada?.asignatura_id === m.asignatura_id && materiaSeleccionada?.paralelo === m.paralelo)
+                                                ? 'bg-blue-600 text-white shadow-md' 
+                                                : 'hover:bg-gray-50 text-gray-600'
+                                            }`}
                                         >
                                             <div className="text-xs font-bold truncate">{m.nombre}</div>
-                                            <div className={`text-[10px] ${materiaSeleccionada?.asignatura_id === m.asignatura_id ? 'text-blue-100' : 'text-gray-400'}`}>Paralelo {m.paralelo}</div>
+                                            <div className={`text-[10px] ${
+                                                 (materiaSeleccionada?.asignatura_id === m.asignatura_id && materiaSeleccionada?.paralelo === m.paralelo)
+                                                 ? 'text-blue-100' : 'text-gray-400'
+                                            }`}>Paralelo {m.paralelo}</div>
                                         </button>
                                     ))}
                                 </div>
@@ -234,7 +246,10 @@ const MisCursos = () => {
                     <>
                         <div className="p-6 border-b flex justify-between items-center bg-gray-50/50 shrink-0">
                             <div>
-                                <h1 className="text-xl font-bold text-gray-900">{materiaSeleccionada.nombre}</h1>
+                                <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                                    {materiaSeleccionada.nombre}
+                                    <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-md">Paralelo {materiaSeleccionada.paralelo}</span>
+                                </h1>
                                 <p className="text-sm text-gray-500">Oficial: {estudiantes.length} alumnos</p>
                             </div>
                             <div className="flex gap-3">
@@ -257,7 +272,7 @@ const MisCursos = () => {
                             </div>
                         </div>
                         
-                        {/* TABLA OPTIMIZADA: Mayor espaciado y fuente más grande */}
+                        {/* TABLA DE ALUMNOS */}
                         <div className="flex-1 p-5"> 
                             <table className="w-full text-left border-collapse">
                                 <thead>
@@ -275,7 +290,6 @@ const MisCursos = () => {
                                         <tr><td colSpan="4" className="py-10 text-center text-gray-400">No se encontraron estudiantes.</td></tr>
                                     ) : currentItems.map((e, i) => (
                                         <tr key={e.id} className="hover:bg-gray-50 group">
-                                            {/* Padding aumentado a py-3.5 para llenar espacio */}
                                             <td className="py-3.5 pl-2 text-gray-500 text-sm">{indexOfFirstItem + i + 1}</td>
                                             <td className="py-3.5">
                                                 <div className="font-bold text-gray-900 text-base">{e.nombres}</div>
@@ -297,10 +311,10 @@ const MisCursos = () => {
                             </table>
                         </div>
 
-                        {/* --- PAGINACIÓN --- */}
+                        {/* PAGINACIÓN */}
                         <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between shrink-0">
                             <span className="text-sm text-gray-500">
-                                Mostrando <span className="font-bold text-gray-800">{currentItems.length > 0 ? indexOfFirstItem + 1 : 0}</span> a <span className="font-bold text-gray-800">{Math.min(indexOfLastItem, filtradosListaClase.length)}</span> de <span className="font-bold text-gray-800">{filtradosListaClase.length}</span>
+                                Mostrando del <span className="font-bold text-gray-800">{currentItems.length > 0 ? indexOfFirstItem + 1 : 0}</span> al <span className="font-bold text-gray-800">{Math.min(indexOfLastItem, filtradosListaClase.length)}</span> de <span className="font-bold text-gray-800">{filtradosListaClase.length}</span> estudiantes
                             </span>
                             
                             <div className="flex items-center gap-2">
@@ -334,11 +348,10 @@ const MisCursos = () => {
                 )}
             </main>
 
-            {/* --- MODAL PARA AGREGAR ESTUDIANTE (Mantenido Igual) --- */}
+            {/* MODAL (Sin cambios funcionales, solo se incluye para que el archivo esté completo) */}
             {showModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col h-[80vh]">
-                        {/* Header */}
                         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0">
                             <div>
                                 <h3 className="text-lg font-bold text-gray-900">Inscribir Estudiantes</h3>
@@ -348,8 +361,6 @@ const MisCursos = () => {
                                 <XMarkIcon className="h-6 w-6"/>
                             </button>
                         </div>
-
-                        {/* Buscador */}
                         <div className="p-6 border-b border-gray-100 shrink-0">
                             <div className="relative">
                                 <MagnifyingGlassIcon className="absolute left-4 top-3.5 h-5 w-5 text-gray-400"/>
@@ -362,25 +373,18 @@ const MisCursos = () => {
                                     onChange={e => setBusquedaModal(e.target.value)}
                                 />
                                 {busquedaModal && (
-                                    <button 
-                                        onClick={() => setBusquedaModal('')}
-                                        className="absolute right-3 top-3 p-1 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100"
-                                    >
+                                    <button onClick={() => setBusquedaModal('')} className="absolute right-3 top-3 p-1 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100">
                                         <XMarkIcon className="h-4 w-4"/>
                                     </button>
                                 )}
                             </div>
                         </div>
-
-                        {/* Lista de Resultados */}
                         <div className="flex-1 overflow-y-auto p-4 bg-gray-50/30">
                             {loadingModal ? (
                                 <div className="py-10 text-center text-gray-400">Cargando catálogo...</div>
                             ) : estudiantesFiltradosModal.length === 0 ? (
                                 <div className="py-10 text-center text-gray-400 flex flex-col items-center">
-                                    <div className="bg-gray-100 p-4 rounded-full mb-3">
-                                        <UserPlusIcon className="h-8 w-8 text-gray-300"/>
-                                    </div>
+                                    <div className="bg-gray-100 p-4 rounded-full mb-3"><UserPlusIcon className="h-8 w-8 text-gray-300"/></div>
                                     <p>No se encontraron resultados disponibles.</p>
                                     <p className="text-xs mt-1">Verifique que no estén ya inscritos.</p>
                                 </div>
@@ -392,25 +396,19 @@ const MisCursos = () => {
                                             <div 
                                                 key={est.id} 
                                                 onClick={() => toggleSeleccion(est.cedula)}
-                                                className={`flex items-center justify-between p-3 rounded-xl border transition cursor-pointer select-none
-                                                    ${isSelected ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-white border-transparent hover:bg-white hover:shadow-md'}
-                                                `}
+                                                className={`flex items-center justify-between p-3 rounded-xl border transition cursor-pointer select-none ${isSelected ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-white border-transparent hover:bg-white hover:shadow-md'}`}
                                             >
                                                 <div className="flex items-center gap-4">
                                                     <div className={`shrink-0 transition-colors ${isSelected ? 'text-blue-600' : 'text-gray-300'}`}>
                                                         {isSelected ? <CheckCircleSolid className="h-6 w-6"/> : <CheckCircleIcon className="h-6 w-6"/>}
                                                     </div>
-
                                                     <div className="h-10 w-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm shrink-0">
                                                         {est.nombres.charAt(0)}
                                                     </div>
                                                     <div>
-                                                        <p className={`font-bold text-sm ${isSelected ? 'text-blue-800' : 'text-gray-800'}`}>
-                                                            {est.nombres} {est.apellidos}
-                                                        </p>
+                                                        <p className={`font-bold text-sm ${isSelected ? 'text-blue-800' : 'text-gray-800'}`}>{est.nombres} {est.apellidos}</p>
                                                         <div className="flex items-center gap-2 text-xs text-gray-500">
-                                                            <IdentificationIcon className="h-3 w-3"/> 
-                                                            <span className="font-mono">{est.cedula}</span>
+                                                            <IdentificationIcon className="h-3 w-3"/> <span className="font-mono">{est.cedula}</span>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -420,22 +418,14 @@ const MisCursos = () => {
                                 </div>
                             )}
                         </div>
-                        
-                        {/* Footer (Botón de Acción) */}
                         <div className="p-4 bg-white border-t border-gray-100 shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
                             <button 
                                 onClick={inscribirMasivo}
                                 disabled={selectedCedulas.length === 0}
-                                className={`w-full py-3.5 rounded-xl font-bold text-white transition flex justify-center items-center gap-2
-                                    ${selectedCedulas.length > 0 
-                                        ? 'bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 transform active:scale-[0.98]' 
-                                        : 'bg-gray-300 cursor-not-allowed'}
-                                `}
+                                className={`w-full py-3.5 rounded-xl font-bold text-white transition flex justify-center items-center gap-2 ${selectedCedulas.length > 0 ? 'bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 transform active:scale-[0.98]' : 'bg-gray-300 cursor-not-allowed'}`}
                             >
                                 <UserPlusIcon className="h-5 w-5"/>
-                                {selectedCedulas.length > 0 
-                                    ? `Inscribir (${selectedCedulas.length}) Alumnos` 
-                                    : 'Seleccione estudiantes para inscribir'}
+                                {selectedCedulas.length > 0 ? `Inscribir (${selectedCedulas.length}) Alumnos` : 'Seleccione estudiantes para inscribir'}
                             </button>
                         </div>
                     </div>
