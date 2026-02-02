@@ -93,7 +93,7 @@ class AsignaturaController extends Controller
         return response()->json($asignatura);
     }
 
-    public function destroy(Request $request, $id) { // Inyectamos Request para verificar usuario
+    public function destroy(Request $request, $id) { 
         $user = $request->user();
         $asignatura = Asignatura::findOrFail($id);
 
@@ -146,10 +146,10 @@ class AsignaturaController extends Controller
             $row = str_getcsv($linea, $separador);
             
             if (!isset($row[0]) || trim($row[0]) === '') continue;
-            if (strtolower(trim($row[0])) === 'nombre') continue;
+            if (strtolower(trim($row[0])) === 'nombre') continue; // Saltar cabecera
 
             if (count($row) < 4) {
-                $errores[] = "Fila " . ($index + 1) . ": Formato incompleto.";
+                $errores[] = "Fila " . ($index + 1) . ": Formato incompleto (requiere 4 columnas).";
                 continue;
             }
 
@@ -158,13 +158,15 @@ class AsignaturaController extends Controller
             $carreraNombre = $this->formatearTexto($row[1]); 
             $cicloRaw = trim($row[2]);
             $cicloNombre = $this->convertirCicloARomano($cicloRaw); 
-            $unidadNombre = $this->formatearTexto($row[3]); 
+            
+            // [CORRECCIÓN AQUI] Leemos el valor crudo sin forzar Mayúsculas/Minúsculas todavía
+            $unidadRaw = trim($row[3]); 
 
             // 2. OBTENER ID CARRERA (SEGURIDAD)
             $carreraIdFinal = null;
 
             if ($forcedCarreraId) {
-                // Si es coordinador, USAMOS SU ID (Ignoramos el nombre del Excel si difiere)
+                // Si es coordinador, USAMOS SU ID
                 $carreraIdFinal = $forcedCarreraId;
             } else {
                 // Si es Admin, buscamos por nombre
@@ -177,22 +179,24 @@ class AsignaturaController extends Controller
             }
 
             $ciclo = Ciclo::where('nombre', $cicloNombre)->first();
-            $unidad = UnidadCurricular::where('nombre', 'LIKE', "%$unidadNombre%")->first();
+            
+            // [CORRECCIÓN AQUI] Búsqueda insensible a mayúsculas para evitar error "de" vs "De"
+            $unidad = UnidadCurricular::whereRaw('LOWER(nombre) LIKE ?', ['%' . strtolower($unidadRaw) . '%'])->first();
 
             if (!$ciclo) {
                 $errores[] = "Fila " . ($index + 1) . ": Ciclo '$cicloNombre' inválido.";
                 continue;
             }
             if (!$unidad) {
-                $errores[] = "Fila " . ($index + 1) . ": Unidad '$unidadNombre' no encontrada.";
+                $errores[] = "Fila " . ($index + 1) . ": Unidad '$unidadRaw' no encontrada.";
                 continue;
             }
 
-            // 3. GUARDAR (FORZANDO LA CARRERA SI APLICA)
+            // 3. GUARDAR
             $asignatura = Asignatura::updateOrCreate(
                 [
                     'nombre' => $nombre, 
-                    'carrera_id' => $carreraIdFinal // <-- Aquí está la clave
+                    'carrera_id' => $carreraIdFinal
                 ], 
                 [
                     'ciclo_id' => $ciclo->id,
