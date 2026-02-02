@@ -186,7 +186,6 @@ const FichaResumen = () => {
         
         setLoadingIndividual(true);
         try {
-            // [MODIFICADO] Enviamos el paralelo al backend
             const res = await api.post('/reportes/pdf-data', { 
                 asignatura_id: selectedMateriaId, 
                 periodo: selectedPeriodo,
@@ -197,8 +196,8 @@ const FichaResumen = () => {
 
             const doc = new jsPDF(); 
             const info = data.info;
-            const pageWidth = doc.internal.pageSize.getWidth();
-            const pageHeight = doc.internal.pageSize.getHeight();
+            const pageWidth = doc.internal.pageSize.getWidth(); // ~210mm
+            const pageHeight = doc.internal.pageSize.getHeight(); // ~297mm
 
             const fechaActual = new Date().toLocaleString('es-ES', {
                 year: 'numeric', month: 'long', day: 'numeric',
@@ -241,6 +240,7 @@ const FichaResumen = () => {
 
                     doc.setFontSize(10);
                     
+                    // --- BLOQUE DE INFORMACIÓN ---
                     doc.setFont("helvetica", "bold"); doc.text("Carrera:", xLabelL, y);
                     doc.setFont("helvetica", "normal"); doc.text(info.carrera, xValueL, y);
 
@@ -249,7 +249,6 @@ const FichaResumen = () => {
 
                     y += 8;
                     doc.setFont("helvetica", "bold"); doc.text("Ciclo:", xLabelL, y);
-                    // Mostramos Ciclo y Paralelo
                     doc.setFont("helvetica", "normal"); doc.text(`${info.ciclo} "${info.paralelo || selectedParalelo}"`, xValueL, y); 
 
                     doc.setFont("helvetica", "bold"); doc.text("Asignatura:", xLabelR, y);
@@ -275,14 +274,12 @@ const FichaResumen = () => {
 
                     doc.setFont("helvetica", "bold"); 
                     doc.text("Resultado de Aprendizaje:", xLabelL, y);
-                    
                     y += 5; 
 
                     doc.setFont("helvetica", "normal");
                     const maxW_Resultado = 180; 
                     const resultadoTexto = rep.resultado_aprendizaje || 'No definido';
                     const resultadoLines = doc.splitTextToSize(resultadoTexto, maxW_Resultado);
-                    
                     doc.text(resultadoLines, xLabelL, y);
 
                     const alturaResultado = resultadoLines.length * 5; 
@@ -290,11 +287,13 @@ const FichaResumen = () => {
 
                     const body = ests.map((e) => [e.nombre, e.n1, e.n2, e.n3, e.n4, e.n5]);
 
-                    autoTable(doc, {
+                   autoTable(doc, {
                         startY: y,
                         head: [['Estudiante', 'Nivel 1', 'Nivel 2', 'Nivel 3', 'Nivel 4', 'Nivel 5']],
                         body: body,
                         theme: 'grid', 
+                        // Mantenemos el estilo compacto que te gustó
+                        styles: { cellPadding: 1, fontSize: 9 },
                         headStyles: { fillColor: [255, 255, 255], textColor: 0, fontStyle: 'bold', lineWidth: 0.1, lineColor: 0 },
                         bodyStyles: { textColor: 0, lineColor: 0, lineWidth: 0.1 },
                         columnStyles: { 
@@ -304,18 +303,25 @@ const FichaResumen = () => {
                         }
                     });
 
-                    // --- PIE DE FIRMA ---
-                    let yFirma = doc.lastAutoTable.finalY + 25;
-                    const alturaNecesaria = 30;
+                    // --- CÁLCULO DE POSICIÓN DE FIRMA (AJUSTADO A 20) ---
+                    const finalY = doc.lastAutoTable.finalY; 
+                    
+                    const espacioAntesFirma = 20;    // <--- AQUI LO TIENES EN 20
+                    const alturaBloqueFirma = 25;    
+                    const margenInferiorPagina = 10; 
+                    
+                    let yFirma = finalY + espacioAntesFirma;
 
-                    if (yFirma + alturaNecesaria > pageHeight - 10) {
+                    // Verificamos si entra en la hoja
+                    if (yFirma + alturaBloqueFirma > pageHeight - margenInferiorPagina) {
                         doc.addPage();
                         drawHeader(doc);
-                        yFirma = 40;
+                        yFirma = 45; // Posición limpia si salta a nueva página
                     }
                     
+                    // DIBUJAR FIRMA
                     doc.setDrawColor(0); 
-                    doc.line(14, yFirma, 80, yFirma);
+                    doc.line(14, yFirma, 80, yFirma); 
                     
                     doc.setFont("helvetica", "normal");
                     doc.setFontSize(10);
@@ -339,13 +345,12 @@ const FichaResumen = () => {
 
         } catch (error) { 
             console.error(error); 
-            // --- MANEJO ESPECÍFICO DE ERROR 404 (DATOS NO ENCONTRADOS) ---
             if (error.response && error.response.status === 404) {
                 Swal.fire({
                     icon: 'warning',
                     title: 'Atención',
                     text: 'No se ha realizado la planificación ni evaluación para este paralelo.',
-                    confirmButtonColor: '#F59E0B' // Color ámbar/amarillo
+                    confirmButtonColor: '#F59E0B'
                 });
             } else {
                 Swal.fire('Error', 'Error al generar.', 'error'); 
