@@ -11,7 +11,10 @@ import {
 const ReportesDocente = () => {
     // --- ESTADOS ---
     const [asignacionesRaw, setAsignacionesRaw] = useState([]);
+    
+    // Filtros
     const [selectedMateriaId, setSelectedMateriaId] = useState('');
+    const [selectedParalelo, setSelectedParalelo] = useState(''); // [NUEVO]
     const [selectedPeriodo, setSelectedPeriodo] = useState('');
     
     const [dataCompleta, setDataCompleta] = useState(null); 
@@ -19,7 +22,7 @@ const ReportesDocente = () => {
     
     const [loading, setLoading] = useState(false);
     const [guardando, setGuardando] = useState(false);
-    const [autoGuardado, setAutoGuardado] = useState(false); // Indicador visual
+    const [autoGuardado, setAutoGuardado] = useState(false);
     
     // Paginación
     const [pasoActual, setPasoActual] = useState(0);
@@ -43,14 +46,14 @@ const ReportesDocente = () => {
 
     // 2. CARGAR REPORTE
     useEffect(() => {
-        if (selectedMateriaId && selectedPeriodo) {
+        if (selectedMateriaId && selectedPeriodo && selectedParalelo) {
             cargarDatosReporte();
             setPasoActual(0);
         } else {
             setDataCompleta(null);
             setConclusiones({});
         }
-    }, [selectedMateriaId, selectedPeriodo]);
+    }, [selectedMateriaId, selectedPeriodo, selectedParalelo]);
 
     // 3. AGRUPAR POR HABILIDAD
     const reportesAgrupados = useMemo(() => {
@@ -92,11 +95,11 @@ const ReportesDocente = () => {
         try {
             const res = await api.post('/reportes/pdf-data', { 
                 asignatura_id: selectedMateriaId, 
-                periodo: selectedPeriodo   
+                periodo: selectedPeriodo,
+                paralelo: selectedParalelo // [NUEVO]
             });
             setDataCompleta(res.data);
             
-            // Cargar conclusiones existentes en el estado
             const initialConclusiones = {};
             const rawReportes = res.data.reportes || [];
             rawReportes.forEach(r => {
@@ -124,7 +127,7 @@ const ReportesDocente = () => {
         if (pasoActual > 0) setPasoActual(prev => prev - 1);
     };
 
-    // 6. AUTO GUARDADO INDIVIDUAL
+    // 6. AUTO GUARDADO
     const handleAutoSave = async () => {
         if (!itemActual) return;
         
@@ -234,25 +237,41 @@ const ReportesDocente = () => {
         );
     };
 
+    // --- MANEJO DE SELECTOR COMPUESTO ---
+    const handleCambioMateria = (val) => {
+        if(!val) {
+            setSelectedMateriaId('');
+            setSelectedParalelo('');
+            return;
+        }
+        const [id, par] = val.split('-');
+        setSelectedMateriaId(id);
+        setSelectedParalelo(par);
+    };
+
     const opcionesMaterias = useMemo(() => {
         if (!selectedPeriodo) return [];
         const delPeriodo = asignacionesRaw.filter(a => a.periodo === selectedPeriodo);
-        const unicas = [];
-        const map = new Map();
-        for (const item of delPeriodo) {
-            if(!map.has(item.id)) { map.set(item.id, true); unicas.push({ value: item.id, label: item.nombre, subtext: `${item.carrera} (${item.paralelo})` }); }
-        }
-        return unicas;
+        
+        return delPeriodo.map(item => ({
+            value: `${item.id}-${item.paralelo}`, // ID Compuesto
+            label: `${item.nombre} - Paralelo ${item.paralelo}`, 
+            subtext: item.carrera 
+        }));
     }, [asignacionesRaw, selectedPeriodo]);
+
+    // Valor del selector
+    const valorSelectMateria = (selectedMateriaId && selectedParalelo) 
+        ? `${selectedMateriaId}-${selectedParalelo}` 
+        : '';
 
     // Variables de renderizado
     const itemActual = reportesAgrupados[pasoActual];
     const keyTextAreaActual = itemActual ? (itemActual.uniqueKeyP2 || itemActual.uniqueKeyP1) : null;
     
-    // --- LÓGICA DE BLOQUEO ---
+    // Lógica de bloqueo
     const totalP1 = itemActual ? calcularTotalEvaluados(itemActual.p1?.estadisticas) : 0;
     const totalP2 = itemActual ? calcularTotalEvaluados(itemActual.p2?.estadisticas) : 0;
-    
     const hayCalificaciones = totalP1 > 0 && totalP2 > 0;
 
     return (
@@ -268,15 +287,21 @@ const ReportesDocente = () => {
                     <CalendarDaysIcon className="h-5 w-5"/><span>{selectedPeriodo || 'Cargando...'}</span><LockClosedIcon className="h-4 w-4 ml-auto text-blue-400 opacity-50"/>
                 </div>
                 <div className={!selectedPeriodo ? 'opacity-50' : ''}>
-                    <CustomSelect label="" placeholder={opcionesMaterias.length > 0 ? "Seleccionar Asignatura..." : "Sin materias"} options={opcionesMaterias} value={selectedMateriaId} onChange={setSelectedMateriaId} icon={BookOpenIcon} />
+                    {/* Selector actualizado con manejo de paralelo */}
+                    <CustomSelect 
+                        label="" 
+                        placeholder={opcionesMaterias.length > 0 ? "Seleccionar Asignatura..." : "Sin materias"} 
+                        options={opcionesMaterias} 
+                        value={valorSelectMateria} 
+                        onChange={handleCambioMateria} 
+                        icon={BookOpenIcon} 
+                    />
                 </div>
             </div>
 
             {!loading && itemActual && (
-                // CAMBIO AQUÍ: Eliminamos 'h-[calc(100vh-200px)]' y lo dejamos automático con 'min-h-[500px]' si deseas una altura mínima
                 <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden flex flex-col transition-all duration-300">
                     
-                    {/* HEADER COMPACTO */}
                     <div className="bg-gray-50 px-5 py-3 border-b border-gray-100 flex flex-col gap-2">
                         <div className="flex justify-between items-center">
                             <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Habilidad {pasoActual + 1} / {reportesAgrupados.length}</span>
@@ -284,10 +309,7 @@ const ReportesDocente = () => {
                         </div>
                     </div>
 
-                    {/* CONTENIDO (SIN SCROLL FORZADO, DEJAMOS QUE CREZCA) */}
                     <div className="p-5 space-y-6">
-                        
-                        {/* Título */}
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-blue-200 shadow-md text-white shrink-0">
                                 <SparklesIcon className="h-5 w-5"/>
@@ -295,13 +317,11 @@ const ReportesDocente = () => {
                             <h3 className="text-lg font-bold text-gray-800 leading-tight">{itemActual.habilidad}</h3>
                         </div>
 
-                        {/* Gráficos */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <MiniGrafico stats={itemActual.p1?.estadisticas} titulo="Resultados P1" />
                             <MiniGrafico stats={itemActual.p2?.estadisticas} titulo="Resultados P2" />
                         </div>
 
-                        {/* Área de Texto */}
                         <div className={`p-5 rounded-xl border transition-colors relative ${hayCalificaciones ? 'bg-blue-50/50 border-blue-100 focus-within:bg-blue-50 focus-within:border-blue-300' : 'bg-gray-100 border-gray-200 opacity-80 cursor-not-allowed'}`}>
                             <div className="flex justify-between items-center mb-3">
                                 <label className={`block text-xs font-bold flex items-center gap-2 ${hayCalificaciones ? 'text-gray-700' : 'text-gray-400'}`}>
@@ -316,7 +336,7 @@ const ReportesDocente = () => {
                             </div>
                             
                             <textarea 
-                                rows="4" // Aumenté un poco las filas por defecto
+                                rows="4"
                                 disabled={!hayCalificaciones}
                                 className={`w-full px-4 py-3 border rounded-lg outline-none text-sm resize-none transition-all ${hayCalificaciones ? 'border-blue-200 bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-300' : 'border-gray-300 bg-gray-200 text-gray-500 cursor-not-allowed'}`}
                                 placeholder={hayCalificaciones ? `Escriba aquí sus conclusiones sobre el desarrollo de la habilidad "${itemActual.habilidad}" en el curso...` : "Debe calificar el 1er y 2do parcial para habilitar el análisis."}
@@ -331,7 +351,6 @@ const ReportesDocente = () => {
                         </div>
                     </div>
 
-                    {/* FOOTER */}
                     <div className="bg-white px-5 py-4 border-t border-gray-100 flex justify-between items-center mt-auto">
                         <button 
                             onClick={handleAnterior} 
