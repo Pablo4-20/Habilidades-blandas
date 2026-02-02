@@ -7,7 +7,7 @@ import {
     UserGroupIcon, 
     ArrowPathIcon, InformationCircleIcon,
     ClockIcon, ListBulletIcon, StarIcon, CalendarDaysIcon, LockClosedIcon, CheckCircleIcon,
-    ChevronLeftIcon, ChevronRightIcon 
+    ChevronLeftIcon, ChevronRightIcon, BookOpenIcon 
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 
@@ -20,12 +20,17 @@ const EvaluacionDocente = () => {
     const [estudiantes, setEstudiantes] = useState([]);
     const [loading, setLoading] = useState(false);
     const [mostrarRubrica, setMostrarRubrica] = useState(true); 
+    
+    // Filtros seleccionados
     const [selectedPeriodo, setSelectedPeriodo] = useState(''); 
     const [selectedAsignatura, setSelectedAsignatura] = useState('');
+    const [selectedParalelo, setSelectedParalelo] = useState(''); // [NUEVO] Estado para el paralelo
     const [selectedParcial, setSelectedParcial] = useState('1');
+    
     const [habilidadActiva, setHabilidadActiva] = useState(null); 
     const [p2Habilitado, setP2Habilitado] = useState(false);
     const [permisoCalificar, setPermisoCalificar] = useState(false);
+    
     const [currentPage, setCurrentPage] = useState(1);
     const ITEMS_PER_PAGE = 7; 
 
@@ -38,6 +43,7 @@ const EvaluacionDocente = () => {
                     api.get('/periodos/activos')
                 ]);
                 setAsignaturas(Array.isArray(resAsig.data) ? resAsig.data : []);
+                
                 const periodosActivos = Array.isArray(resPer.data) ? resPer.data : [];
                 const activo = periodosActivos.find(p => p.activo === 1 || p.activo === true);
                 if (activo) setSelectedPeriodo(activo.nombre);
@@ -48,14 +54,14 @@ const EvaluacionDocente = () => {
 
     // --- VERIFICAR ESTADO DEL PARCIAL 1 ---
     const verificarEstadoP1 = async () => {
-        if (!selectedAsignatura || !selectedPeriodo) return;
+        if (!selectedAsignatura || !selectedPeriodo || !selectedParalelo) return;
         try {
             const [resPlan, resProg] = await Promise.all([
                 api.get(`/planificaciones/verificar/${selectedAsignatura}`, { 
-                    params: { parcial: '1', periodo: selectedPeriodo } 
+                    params: { parcial: '1', periodo: selectedPeriodo, paralelo: selectedParalelo } 
                 }),
                 api.get('/docente/progreso', {
-                    params: { asignatura_id: selectedAsignatura, periodo: selectedPeriodo, parcial: '1' }
+                    params: { asignatura_id: selectedAsignatura, periodo: selectedPeriodo, parcial: '1', paralelo: selectedParalelo }
                 })
             ]);
 
@@ -72,14 +78,14 @@ const EvaluacionDocente = () => {
 
     // --- EL CANDADO INTELIGENTE ---
     const verificarRequisitosPrevios = async () => {
-        if (!selectedAsignatura || !selectedPeriodo) return;
+        if (!selectedAsignatura || !selectedPeriodo || !selectedParalelo) return;
         
         setPermisoCalificar(false);
         setLoading(true);
 
         try {
             const res = await api.get(`/planificaciones/verificar/${selectedAsignatura}`, {
-                params: { periodo: selectedPeriodo } 
+                params: { periodo: selectedPeriodo, paralelo: selectedParalelo } 
             });
 
             const data = res.data;
@@ -110,7 +116,9 @@ const EvaluacionDocente = () => {
                     confirmButtonText: 'Entendido',
                     allowOutsideClick: false
                 }).then(() => {
+                    // Resetear selección
                     setSelectedAsignatura('');
+                    setSelectedParalelo('');
                     setHabilidadesPlanificadas([]);
                     setEstudiantes([]);
                     setHabilidadActiva(null);
@@ -135,21 +143,21 @@ const EvaluacionDocente = () => {
         setPermisoCalificar(false);
         setP2Habilitado(false);
 
-        if(selectedAsignatura && selectedPeriodo) {
+        if(selectedAsignatura && selectedPeriodo && selectedParalelo) {
             verificarRequisitosPrevios(); 
             setSelectedParcial('1');
         }
-    }, [selectedAsignatura, selectedPeriodo]);
+    }, [selectedAsignatura, selectedPeriodo, selectedParalelo]);
 
     // --- CARGAR DATOS DE LA VISTA ---
     useEffect(() => {
-        if (selectedAsignatura && selectedParcial && selectedPeriodo && permisoCalificar) {
+        if (selectedAsignatura && selectedParalelo && selectedParcial && selectedPeriodo && permisoCalificar) {
             cargarPlanificacionYProgreso(false);
         }
-    }, [selectedAsignatura, selectedParcial, selectedPeriodo, permisoCalificar]);
+    }, [selectedAsignatura, selectedParalelo, selectedParcial, selectedPeriodo, permisoCalificar]);
 
     useEffect(() => {
-        if (selectedAsignatura && habilidadActiva && selectedParcial && permisoCalificar) {
+        if (selectedAsignatura && selectedParalelo && habilidadActiva && selectedParcial && permisoCalificar) {
             cargarEstudiantesYNotas();
         }
     }, [habilidadActiva, selectedParcial]);
@@ -157,7 +165,13 @@ const EvaluacionDocente = () => {
     const cargarPlanificacionYProgreso = async (forzarAvance = false, idRecienCompletado = null) => {
         setLoading(true);
         try {
-            const resPlan = await api.get(`/planificaciones/verificar/${selectedAsignatura}?parcial=${selectedParcial}&periodo=${encodeURIComponent(selectedPeriodo)}`);
+            const resPlan = await api.get(`/planificaciones/verificar/${selectedAsignatura}`, {
+                params: { 
+                    parcial: selectedParcial, 
+                    periodo: selectedPeriodo, 
+                    paralelo: selectedParalelo 
+                }
+            });
             
             if (resPlan.data.tiene_asignacion && resPlan.data.es_edicion) {
                 const guardadas = resPlan.data.actividades_guardadas || {};
@@ -174,7 +188,12 @@ const EvaluacionDocente = () => {
                 setActividadesContexto(guardadas);
 
                 const resProgreso = await api.get('/docente/progreso', {
-                    params: { asignatura_id: selectedAsignatura, periodo: selectedPeriodo, parcial: selectedParcial }
+                    params: { 
+                        asignatura_id: selectedAsignatura, 
+                        periodo: selectedPeriodo, 
+                        parcial: selectedParcial,
+                        paralelo: selectedParalelo
+                    }
                 });
                 
                 const mapaProgreso = {};
@@ -212,7 +231,8 @@ const EvaluacionDocente = () => {
                 asignatura_id: selectedAsignatura,
                 habilidad_blanda_id: habilidadActiva,
                 parcial: selectedParcial,
-                periodo: selectedPeriodo
+                periodo: selectedPeriodo,
+                paralelo: selectedParalelo // Enviar paralelo
             });
             
             if (res.data && res.data.estudiantes) {
@@ -241,6 +261,7 @@ const EvaluacionDocente = () => {
                 habilidad_blanda_id: habilidadActiva,
                 parcial: selectedParcial,
                 periodo: selectedPeriodo,
+                paralelo: selectedParalelo, // Guardar con paralelo
                 notas
             });
 
@@ -298,15 +319,40 @@ const EvaluacionDocente = () => {
         } catch (error) { Swal.fire('Error', 'No se pudo guardar.', 'error'); }
     };
 
+    // --- MANEJO DE SELECTOR COMPUESTO (Materia + Paralelo) ---
+    const handleCambioMateria = (val) => {
+        if (!val) {
+            setSelectedAsignatura('');
+            setSelectedParalelo('');
+            return;
+        }
+        // Separamos el valor compuesto "ID-PARALELO"
+        const [id, par] = val.split('-');
+        setSelectedAsignatura(id);
+        setSelectedParalelo(par);
+    };
+
     const pendientes = estudiantes.filter(e => !e.nivel).length;
     const asignaturasFiltradas = asignaturas.filter(a => a.periodo === selectedPeriodo);
     
+    // Crear opciones con clave compuesta para el select
+    const opcionesAsignaturas = asignaturasFiltradas.map(a => ({ 
+        value: `${a.id}-${a.paralelo}`, // CLAVE ÚNICA COMPUESTA
+        label: `${a.nombre} - Paralelo ${a.paralelo}`, 
+        subtext: a.carrera, 
+        periodo: a.periodo,
+        icon: BookOpenIcon
+    }));
+
+    // Valor actual del selector
+    const valorSelectMateria = (selectedAsignatura && selectedParalelo) 
+        ? `${selectedAsignatura}-${selectedParalelo}` 
+        : '';
+
     const opcionesParciales = [
         { value: '1', label: 'Primer Parcial' }, 
         { value: '2', label: p2Habilitado ? 'Segundo Parcial' : '🔒 2do Parcial (Bloqueado)', disabled: !p2Habilitado }
     ];
-
-    const opcionesAsignaturas = asignaturasFiltradas.map(a => ({ value: a.id, label: a.nombre, subtext: `${a.carrera} (${a.paralelo})`, periodo: a.periodo }));
 
     const getButtonClass = (est, nivelBoton) => {
         const notaActual = est.nivel ? parseInt(est.nivel) : null;
@@ -388,7 +434,14 @@ const EvaluacionDocente = () => {
                             </div>
                         </div>
                         <div className={!selectedPeriodo ? 'opacity-50 pointer-events-none' : ''}>
-                            <CustomSelect label="Materia" options={opcionesAsignaturas} value={selectedAsignatura} onChange={setSelectedAsignatura} placeholder={asignaturasFiltradas.length > 0 ? "-- Seleccionar Materia --" : "Sin materias en este periodo"} />
+                            {/* SELECTOR ACTUALIZADO QUE MANEJA PARALELO */}
+                            <CustomSelect 
+                                label="Materia y Paralelo" 
+                                options={opcionesAsignaturas} 
+                                value={valorSelectMateria} 
+                                onChange={handleCambioMateria} 
+                                placeholder={asignaturasFiltradas.length > 0 ? "-- Seleccionar Materia --" : "Sin materias en este periodo"} 
+                            />
                         </div>
                         <div className={!selectedAsignatura ? 'opacity-50 pointer-events-none' : ''}>
                             <CustomSelect label="Parcial" icon={ClockIcon} options={opcionesParciales} value={selectedParcial} onChange={handleCambioParcial} />
@@ -447,15 +500,15 @@ const EvaluacionDocente = () => {
                                 </div>
                                 {mostrarRubrica && (
                                     <div className="mt-3 grid grid-cols-1 md:grid-cols-5 gap-2 text-[11px] text-blue-900">
-                                        {[1, 2, 3, 4, 5].map(nivel => (
-                                            <div key={nivel} className="flex flex-col gap-1 p-2 bg-white rounded-lg border border-blue-100 shadow-sm hover:shadow-md transition">
-                                                <div className="flex items-center gap-1.5 border-b border-blue-50 pb-1 mb-1">
-                                                    <span className={`font-bold w-5 h-5 flex items-center justify-center rounded-full text-white text-xs ${nivel === 1 ? 'bg-red-600' : nivel === 2 ? 'bg-orange-500' : nivel === 3 ? 'bg-yellow-500' : nivel === 4 ? 'bg-lime-500' : 'bg-green-700'}`}>{nivel}</span>
-                                                    <span className="font-bold text-blue-700">Nivel {nivel}</span>
+                                            {[1, 2, 3, 4, 5].map(nivel => (
+                                                <div key={nivel} className="flex flex-col gap-1 p-2 bg-white rounded-lg border border-blue-100 shadow-sm hover:shadow-md transition">
+                                                    <div className="flex items-center gap-1.5 border-b border-blue-50 pb-1 mb-1">
+                                                        <span className={`font-bold w-5 h-5 flex items-center justify-center rounded-full text-white text-xs ${nivel === 1 ? 'bg-red-600' : nivel === 2 ? 'bg-orange-500' : nivel === 3 ? 'bg-yellow-500' : nivel === 4 ? 'bg-lime-500' : 'bg-green-700'}`}>{nivel}</span>
+                                                        <span className="font-bold text-blue-700">Nivel {nivel}</span>
+                                                    </div>
+                                                    <p className="leading-tight opacity-90 text-gray-600">{rubricaActual[nivel] || "Criterio estándar."}</p>
                                                 </div>
-                                                <p className="leading-tight opacity-90 text-gray-600">{rubricaActual[nivel] || "Criterio estándar."}</p>
-                                            </div>
-                                        ))}
+                                            ))}
                                     </div>
                                 )}
                             </div>

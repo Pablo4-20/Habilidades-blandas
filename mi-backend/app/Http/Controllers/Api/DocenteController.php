@@ -19,7 +19,6 @@ class DocenteController extends Controller
     // ==========================================
     // HELPER PRIVADO: Obtener Estudiantes
     // ==========================================
-    // [MODIFICADO] Recibe $paralelo opcional
     private function _getEstudiantes($asignaturaId, $periodoId, $paralelo = null)
     {
         $asignatura = Asignatura::with(['carrera', 'ciclo'])->find($asignaturaId);
@@ -29,13 +28,8 @@ class DocenteController extends Controller
         $estudiantesDirectos = DetalleMatricula::where('asignatura_id', $asignaturaId)
             ->where('estado_materia', '!=', 'Baja')
             ->whereHas('matricula', function($q) use ($periodoId, $paralelo) {
-                $q->where('periodo_id', $periodoId)
-                  ->where('estado', 'Activo');
-                
-                // [NUEVO] Filtro paralelo
-                if ($paralelo) {
-                    $q->where('paralelo', $paralelo);
-                }
+                $q->where('periodo_id', $periodoId)->where('estado', 'Activo');
+                if ($paralelo) $q->where('paralelo', $paralelo);
             })
             ->with(['matricula.estudiante'])
             ->get()
@@ -54,10 +48,7 @@ class DocenteController extends Controller
                 ->where('estado', 'Activo')
                 ->whereNotIn('id', $idsConRegistro);
 
-            // [NUEVO] Filtro paralelo
-            if ($paralelo) {
-                $queryAutomaticos->where('paralelo', $paralelo);
-            }
+            if ($paralelo) $queryAutomaticos->where('paralelo', $paralelo);
 
             $estudiantesCiclo = $queryAutomaticos->whereHas('estudiante', function($q) use ($asignatura) {
                     if ($asignatura->carrera) {
@@ -79,7 +70,6 @@ class DocenteController extends Controller
     public function misCursos(Request $request)
     {
         $user = $request->user();
-        
         $periodo = PeriodoAcademico::where('activo', true)->first();
         $nombrePeriodo = $periodo ? $periodo->nombre : 'Sin Periodo Activo';
 
@@ -88,31 +78,21 @@ class DocenteController extends Controller
             ->where('periodo', $nombrePeriodo)
             ->get();
 
-        $grupos = $asignaciones->groupBy(function($item) {
-            return $item->asignatura->ciclo->nombre ?? 'Varios';
-        });
+        $grupos = $asignaciones->groupBy(fn($item) => $item->asignatura->ciclo->nombre ?? 'Varios');
 
         $resultadoCursos = [];
         foreach ($grupos as $ciclo => $items) {
-            $materias = $items->map(function($item) {
-                return [
-                    'asignatura_id' => $item->asignatura->id,
-                    'nombre' => $item->asignatura->nombre,
-                    'paralelo' => $item->paralelo,
-                    'carrera' => $item->asignatura->carrera->nombre ?? 'N/A'
-                ];
-            })->values();
+            $materias = $items->map(fn($item) => [
+                'asignatura_id' => $item->asignatura->id,
+                'nombre' => $item->asignatura->nombre,
+                'paralelo' => $item->paralelo,
+                'carrera' => $item->asignatura->carrera->nombre ?? 'N/A'
+            ])->values();
 
-            $resultadoCursos[] = [
-                'ciclo' => $ciclo,
-                'materias' => $materias
-            ];
+            $resultadoCursos[] = ['ciclo' => $ciclo, 'materias' => $materias];
         }
 
-        return response()->json([
-            'periodo' => $nombrePeriodo,
-            'cursos' => $resultadoCursos
-        ]);
+        return response()->json(['periodo' => $nombrePeriodo, 'cursos' => $resultadoCursos]);
     }
 
     // ==========================================
@@ -139,7 +119,7 @@ class DocenteController extends Controller
     }
 
     // ==========================================
-    // 3. MIS ESTUDIANTES (MODIFICADO)
+    // 3. MIS ESTUDIANTES
     // ==========================================
     public function misEstudiantes(Request $request, $asignaturaId, $paralelo = null)
     {
@@ -147,46 +127,42 @@ class DocenteController extends Controller
             $periodo = PeriodoAcademico::where('activo', true)->first();
             if (!$periodo) return response()->json([]);
 
-            // [CLAVE] Pasamos el paralelo al helper
             $estudiantes = $this->_getEstudiantes($asignaturaId, $periodo->id, $paralelo);
 
-            return $estudiantes->map(function($est) {
-                return [
-                    'id' => $est->id,
-                    'cedula' => $est->cedula,
-                    'nombres' => ($est->apellidos ?? '') . ' ' . ($est->nombres ?? ''),
-                    'email' => $est->email,
-                    'carrera' => $est->carrera ?? 'N/A'
-                ];
-            })->sortBy('nombres')->values();
+            return $estudiantes->map(fn($est) => [
+                'id' => $est->id,
+                'cedula' => $est->cedula,
+                'nombres' => ($est->apellidos ?? '') . ' ' . ($est->nombres ?? ''),
+                'email' => $est->email,
+                'carrera' => $est->carrera ?? 'N/A'
+            ])->sortBy('nombres')->values();
 
-        } catch (\Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 500);
-        }
+        } catch (\Exception $e) { return response()->json(['message' => $e->getMessage()], 500); }
     }
 
-    // ==========================================
-    // 4. VER ESTUDIANTES (Alias)
-    // ==========================================
-    public function verEstudiantes(Request $request, $asignaturaId)
-    {
-        return $this->misEstudiantes($request, $asignaturaId);
-    }
+    public function verEstudiantes(Request $request, $asignaturaId) { return $this->misEstudiantes($request, $asignaturaId); }
 
     // ==========================================
-    // 5. OBTENER HABILIDADES PLANIFICADAS
+    // 5. OBTENER HABILIDADES PLANIFICADAS (CON PARALELO)
     // ==========================================
     public function misHabilidades(Request $request, $asignaturaId)
     {
         $user = $request->user();
+        $paralelo = $request->query('paralelo'); // Recibimos paralelo
+        
         $periodo = PeriodoAcademico::where('activo', true)->first();
         if (!$periodo) return response()->json([]);
 
-        $planificaciones = Planificacion::with('detalles.habilidad')
+        $query = Planificacion::with('detalles.habilidad')
             ->where('asignatura_id', $asignaturaId)
             ->where('docente_id', $user->id)
-            ->where('periodo_academico', $periodo->nombre)
-            ->get();
+            ->where('periodo_academico', $periodo->nombre);
+
+        if($paralelo) {
+            $query->where('paralelo', $paralelo);
+        }
+
+        $planificaciones = $query->get();
 
         $habilidades = [];
         foreach ($planificaciones as $plan) {
@@ -204,7 +180,7 @@ class DocenteController extends Controller
     }
 
     // ==========================================
-    // 6. RÚBRICA Y CALIFICACIÓN
+    // 6. RÚBRICA Y CALIFICACIÓN (MODIFICADO)
     // ==========================================
     public function rubrica(Request $request) 
     {
@@ -213,22 +189,23 @@ class DocenteController extends Controller
             'asignatura_id' => 'required', 
             'habilidad_blanda_id' => 'required', 
             'parcial' => 'required', 
-            'periodo' => 'required'
+            'periodo' => 'required',
+            'paralelo' => 'required' // [NUEVO] Obligatorio
         ]);
 
         $periodo = PeriodoAcademico::where('nombre', $request->periodo)->first();
         if (!$periodo) return response()->json(['message' => 'Periodo no encontrado'], 404);
 
-        // Si el frontend envía paralelo, filtrar por él también en la rúbrica
-        $paralelo = $request->input('paralelo', null);
-
-        $todosLosEstudiantes = $this->_getEstudiantes($request->asignatura_id, $periodo->id, $paralelo)
+        // 1. Obtener estudiantes del paralelo correcto
+        $todosLosEstudiantes = $this->_getEstudiantes($request->asignatura_id, $periodo->id, $request->paralelo)
             ->sortBy(fn($e) => $e->apellidos . ' ' . $e->nombres);
         
+        // 2. Buscar Planificación del paralelo correcto
         $planificacion = Planificacion::where('asignatura_id', $request->asignatura_id)
             ->where('docente_id', $user->id)
             ->where('periodo_academico', $request->periodo)
             ->where('parcial', $request->parcial)
+            ->where('paralelo', $request->paralelo) // [FILTRO]
             ->first();
 
         $evaluaciones = collect();
@@ -238,13 +215,14 @@ class DocenteController extends Controller
                 ->get();
         }
 
-        // Notas Parcial 1
+        // 3. Notas Parcial 1 (Referencia)
         $evaluacionesP1 = collect();
         if ($request->parcial == '2') {
              $planP1 = Planificacion::where('asignatura_id', $request->asignatura_id)
                 ->where('docente_id', $user->id)
                 ->where('periodo_academico', $request->periodo)
                 ->where('parcial', '1')
+                ->where('paralelo', $request->paralelo) // [FILTRO]
                 ->first();
              if ($planP1) {
                  $evaluacionesP1 = Evaluacion::where('planificacion_id', $planP1->id)
@@ -253,6 +231,7 @@ class DocenteController extends Controller
              }
         }
 
+        // 4. Obtener Actividades
         $actividades = [];
         if ($planificacion) {
              $detalle = $planificacion->detalles()
@@ -263,6 +242,7 @@ class DocenteController extends Controller
              }
         }
 
+        // 5. Armar respuesta
         $listaFinal = $todosLosEstudiantes->map(function($est) use ($evaluaciones, $evaluacionesP1) {
             $nota = $evaluaciones->where('estudiante_id', $est->id)->first();
             $notaP1 = $evaluacionesP1->where('estudiante_id', $est->id)->first();
@@ -283,18 +263,25 @@ class DocenteController extends Controller
     }
 
     // ==========================================
-    // 7. GUARDAR NOTAS
+    // 7. GUARDAR NOTAS (MODIFICADO)
     // ==========================================
     public function guardarNotas(Request $request) 
     {
         $user = $request->user();
+        
+        $request->validate([
+            'paralelo' => 'required' // [NUEVO] Obligatorio
+        ]);
+
         DB::transaction(function () use ($request, $user) {
+            // Buscamos o creamos el plan ESPECÍFICO para este paralelo
             $plan = Planificacion::firstOrCreate(
                 [
                     'asignatura_id' => $request->asignatura_id, 
                     'periodo_academico' => $request->periodo, 
                     'parcial' => $request->parcial,
-                    'docente_id' => $user->id
+                    'docente_id' => $user->id,
+                    'paralelo' => $request->paralelo // [CLAVE] Diferencia A de B
                 ]
             );
 
@@ -305,7 +292,10 @@ class DocenteController extends Controller
                             'planificacion_id' => $plan->id, 
                             'estudiante_id' => $nota['estudiante_id'], 
                             'habilidad_blanda_id' => $request->habilidad_blanda_id, 
-                            'parcial' => $request->parcial
+                            // parcial ya está en planificacion, pero por redundancia histórica se mantiene si la tabla lo pide
+                            // si tu tabla evaluaciones tiene columna 'parcial', se deja, sino se quita.
+                            // Asumiremos que la lógica de negocio la usa para búsquedas rápidas.
+                            'parcial' => $request->parcial 
                         ], 
                         ['nivel' => $nota['nivel']]
                     ); 
@@ -316,37 +306,34 @@ class DocenteController extends Controller
     }
 
     // ==========================================
-    // 8. VERIFICAR PROGRESO
+    // 8. VERIFICAR PROGRESO (Estrellas)
     // ==========================================
     public function verificarProgreso(Request $request)
     {
-        $request->validate([
-            'asignatura_id' => 'required',
-            'periodo' => 'required'
-        ]);
-
+        $request->validate(['asignatura_id' => 'required', 'periodo' => 'required']);
         $periodo = PeriodoAcademico::where('nombre', $request->periodo)->first();
         if (!$periodo) return response()->json([]);
 
         $user = $request->user();
-        $parcialConsultado = $request->input('parcial', '1'); 
+        $parcial = $request->input('parcial', '1'); 
         $paralelo = $request->input('paralelo', null);
 
         $estudiantes = $this->_getEstudiantes($request->asignatura_id, $periodo->id, $paralelo);
         $totalEstudiantes = $estudiantes->count();
-
         if ($totalEstudiantes === 0) return response()->json([]);
 
         $planP1 = Planificacion::where('asignatura_id', $request->asignatura_id)
             ->where('docente_id', $user->id)
             ->where('periodo_academico', $request->periodo)
             ->where('parcial', '1')
+            ->when($paralelo, fn($q) => $q->where('paralelo', $paralelo))
             ->first();
 
         $planP2 = Planificacion::where('asignatura_id', $request->asignatura_id)
             ->where('docente_id', $user->id)
             ->where('periodo_academico', $request->periodo)
             ->where('parcial', '2')
+            ->when($paralelo, fn($q) => $q->where('paralelo', $paralelo))
             ->first();
 
         if (!$planP1) return response()->json([]);
@@ -355,14 +342,12 @@ class DocenteController extends Controller
         $habilidadesIds = $planP1->detalles()->pluck('habilidad_blanda_id');
 
         foreach ($habilidadesIds as $habilidadId) {
-            // Parcial 1
             $conteoP1 = Evaluacion::where('planificacion_id', $planP1->id)
                 ->where('habilidad_blanda_id', $habilidadId)
                 ->whereIn('estudiante_id', $estudiantes->pluck('id'))
                 ->count();
             $completoP1 = $totalEstudiantes > 0 && $conteoP1 >= $totalEstudiantes;
 
-            // Parcial 2
             $completoP2 = false;
             if ($planP2) {
                 $conteoP2 = Evaluacion::where('planificacion_id', $planP2->id)
@@ -372,16 +357,13 @@ class DocenteController extends Controller
                 $completoP2 = $totalEstudiantes > 0 && $conteoP2 >= $totalEstudiantes;
             }
 
-            $estadoFinal = ($parcialConsultado == '2') ? $completoP2 : $completoP1;
-
             $progreso[] = [
                 'habilidad_id' => $habilidadId,
-                'completado' => $estadoFinal, 
+                'completado' => ($parcial == '2') ? $completoP2 : $completoP1, 
                 'p1_ok' => $completoP1,
                 'p2_ok' => $completoP2
             ];
         }
-
         return response()->json($progreso);
     }
 
@@ -399,8 +381,6 @@ class DocenteController extends Controller
             if (!$estudiante) return response()->json(['message' => 'Estudiante no encontrado.'], 404);
             
             $asignatura = Asignatura::find($request->asignatura_id);
-            
-            // Al ser manual, si no tenemos paralelo, asignamos 'A' o podrías pedirlo en el request
             $paralelo = $request->input('paralelo', 'A');
 
             $matricula = Matricula::firstOrCreate(
@@ -409,7 +389,7 @@ class DocenteController extends Controller
                     'ciclo_id' => $asignatura->ciclo_id ?? 1, 
                     'fecha_matricula' => now(), 
                     'estado' => 'Activo',
-                    'paralelo' => $paralelo 
+                    'paralelo' => $paralelo
                 ]
             );
             
