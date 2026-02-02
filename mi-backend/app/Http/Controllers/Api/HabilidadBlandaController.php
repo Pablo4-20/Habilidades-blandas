@@ -87,14 +87,13 @@ class HabilidadBlandaController extends Controller
     }
 
     // 5. IMPORTAR MASIVA (CSV con Actividades)
-    public function import(Request $request)
+   public function import(Request $request)
     {
         $request->validate(['file' => 'required|file']);
         
         $file = $request->file('file');
         $contenido = file_get_contents($file->getRealPath());
         
-        // Corrección de codificación si es necesario
         if (!mb_detect_encoding($contenido, 'UTF-8', true)) {
             $contenido = mb_convert_encoding($contenido, 'UTF-8', 'ISO-8859-1');
         }
@@ -102,7 +101,6 @@ class HabilidadBlandaController extends Controller
         $lines = preg_split("/\r\n|\n|\r/", $contenido);
         $separador = ',';
 
-        // Detectar separador automáticamente
         foreach ($lines as $linea) {
             if (trim($linea) !== '') {
                 if (substr_count($linea, ';') > substr_count($linea, ',')) $separador = ';';
@@ -116,21 +114,16 @@ class HabilidadBlandaController extends Controller
 
         DB::transaction(function () use ($lines, $separador, &$habilidadesNuevas, &$habilidadesActualizadas, &$actividadesTotal) {
             foreach ($lines as $linea) {
-                // 1. IGNORAR LÍNEAS VACÍAS (ESTO SOLUCIONA EL CONTEO EXTRA)
                 if (trim($linea) === '') continue;
                 
                 $row = str_getcsv($linea, $separador);
                 
-                // 2. VALIDAR QUE TENGA AL MENOS EL NOMBRE
                 if (!isset($row[0]) || trim($row[0]) === '') continue;
-
-                // 3. IGNORAR CABECERA SI EXISTE
                 if (strtolower(trim($row[0])) === 'nombre') continue;
 
                 $nombre = $this->formatearTexto($row[0]);
                 $descripcion = isset($row[1]) ? trim($row[1]) : '';
 
-                // Buscar o Crear la Habilidad
                 $habilidad = HabilidadBlanda::updateOrCreate(
                     ['nombre' => $nombre],
                     ['descripcion' => $descripcion]
@@ -142,29 +135,25 @@ class HabilidadBlandaController extends Controller
                     $habilidadesActualizadas++;
                 }
 
-                // Procesar Actividades (Columnas 2 en adelante)
                 for ($i = 2; $i < count($row); $i++) {
                     $actDesc = trim($row[$i]);
                     if (!empty($actDesc)) {
-                        $actividad = ActividadHabilidad::firstOrCreate([
+                        ActividadHabilidad::firstOrCreate([
                             'habilidad_blanda_id' => $habilidad->id,
                             'descripcion' => $actDesc
                         ]);
-                        
-                        // Solo contamos si se creó o si ya existía (para saber cuántas actividades detectó el archivo)
-                        // Si quieres contar solo las NUEVAS actividades, usa $actividad->wasRecentlyCreated
                         $actividadesTotal++;
                     }
                 }
             }
         });
 
+        // --- CORRECCIÓN AQUÍ: MENSAJE CONCATENADO ---
         return response()->json([
-            'message' => "Proceso completado.",
+            'message' => "Carga exitosa: $habilidadesNuevas nuevas, $habilidadesActualizadas actualizadas. ($actividadesTotal actividades procesadas).",
             'resumen' => [
-                'habilidades_creadas' => $habilidadesNuevas,
-                'habilidades_actualizadas' => $habilidadesActualizadas,
-                'actividades_procesadas' => $actividadesTotal
+                'creadas' => $habilidadesNuevas,
+                'actualizadas' => $habilidadesActualizadas
             ]
         ]);
     }
