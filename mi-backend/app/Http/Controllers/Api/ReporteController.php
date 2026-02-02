@@ -357,4 +357,108 @@ class ReporteController extends Controller
             return response()->json(['message' => 'Error al guardar: ' . $e->getMessage()], 500);
         }
     }
+
+    // ==========================================
+    // 4. FICHA RESUMEN (ACTA DE CALIFICACIÓN FINAL)
+    // ==========================================
+    public function obtenerFichaResumen(Request $request)
+    {
+        $request->validate([
+            'asignatura_id' => 'required',
+            'periodo' => 'required',
+            'paralelo' => 'required' // [NUEVO] Requerido para diferenciar A de B
+        ]);
+
+        $user = $request->user();
+        
+        // 1. Validar Periodo
+        $periodoObj = PeriodoAcademico::where('nombre', $request->periodo)->first();
+        if (!$periodoObj) return response()->json(['message' => 'Periodo no encontrado'], 404);
+
+        // 2. Obtener Estudiantes del Paralelo Específico
+        $estudiantes = $this->_getEstudiantes($request->asignatura_id, $periodoObj->id, $request->paralelo);
+        
+        // 3. Obtener Asignatura
+        $asignatura = Asignatura::with(['carrera', 'ciclo'])->find($request->asignatura_id);
+        
+        // 4. Obtener Planificaciones (P1 y P2) del Paralelo Específico
+        $planes = Planificacion::with(['detalles.habilidad'])
+            ->where('asignatura_id', $request->asignatura_id)
+            ->where('docente_id', $user->id)
+            ->where('periodo_academico', $request->periodo)
+            ->where('paralelo', $request->paralelo) // [CLAVE] Filtro por paralelo
+            ->get();
+
+        // Estructurar columnas (Habilidades)
+        $columnas = [];
+        $habilidadesMap = []; // Para búsqueda rápida
+
+        foreach($planes as $plan) {
+            foreach($plan->detalles as $det) {
+                if($det->habilidad) {
+                    $key = 'h_' . $det->habilidad->id;
+                    // Evitar duplicados si la habilidad está en ambos parciales
+                    if(!isset($habilidadesMap[$key])) {
+                        $columna = [
+                            'id' => $det->habilidad->id,
+                            'nombre' => $det->habilidad->nombre,
+                            'parcial' => $plan->parcial // 1 o 2
+                        ];
+                        $columnas[] = $columna;
+                        $habilidadesMap[$key] = $columna;
+                    }
+                }
+            }
+        }
+
+        // Ordenar columnas: Primero P1, luego P2
+        usort($columnas, function($a, $b) {
+            if ($a['parcial'] == $b['parcial']) return 0;
+            return ($a['parcial'] < $b['parcial']) ? -1 : 1;
+        });
+
+        // 5. Construir Filas (Estudiantes con sus notas)
+        $filas = $estudiantes->map(function($est) use ($planes) {
+            $fila = [
+                'id' => $est->id,
+                'cedula' => $est->cedula,
+                'nombres' => $est->apellidos . ' ' . $est->nombres,
+                'notas' => []
+            ];
+
+            // Buscar notas en todas las planificaciones del paralelo
+            foreach($planes as $plan) {
+                $evaluaciones = Evaluacion::where('planificacion_id', $plan->id)
+                    ->where('estudiante_id', $est->id)
+                    ->get();
+
+                foreach($evaluaciones as $ev) {
+                    $fila['notas']['h_' . $ev->habilidad_blanda_id] = $ev->nivel;
+                }
+            }
+            
+            // Calcular Promedio
+            $suma = 0; 
+            $count = 0;
+            foreach($fila['notas'] as $nota) {
+                if($nota) { $suma += $nota; $count++; }
+            }
+            $fila['promedio'] = $count > 0 ? round($suma / $count, 2) : 0;
+
+            return $fila;
+        });
+
+        return response()->json([
+            'info' => [
+                'docente' => $user->nombres . ' ' . $user->apellidos,
+                'materia' => $asignatura->nombre,
+                'paralelo' => $request->paralelo,
+                'carrera' => $asignatura->carrera->nombre ?? 'N/A',
+                'ciclo' => $asignatura->ciclo->nombre ?? 'N/A',
+                'periodo' => $request->periodo
+            ],
+            'columnas' => $columnas,
+            'filas' => $filas
+        ]);
+    }
 }

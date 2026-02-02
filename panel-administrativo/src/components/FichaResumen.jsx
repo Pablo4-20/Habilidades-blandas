@@ -6,7 +6,8 @@ import autoTable from 'jspdf-autotable';
 import CustomSelect from './ui/CustomSelect'; 
 import { 
     PrinterIcon, BookOpenIcon, CalendarDaysIcon, 
-    DocumentCheckIcon, TableCellsIcon, DocumentTextIcon
+    DocumentCheckIcon, TableCellsIcon, DocumentTextIcon,
+    LockClosedIcon
 } from '@heroicons/react/24/outline';
 
 // --- IMPORTACIÓN DE LOGOS ---
@@ -15,8 +16,12 @@ import logoDer from '../assets/software.png';
 
 const FichaResumen = () => {
     const [asignacionesRaw, setAsignacionesRaw] = useState([]);
+    
+    // Estados de selección
     const [selectedMateriaId, setSelectedMateriaId] = useState('');
+    const [selectedParalelo, setSelectedParalelo] = useState(''); // [NUEVO] Estado para el paralelo
     const [selectedPeriodo, setSelectedPeriodo] = useState('');
+    
     const [loadingGeneral, setLoadingGeneral] = useState(false);
     const [loadingIndividual, setLoadingIndividual] = useState(false);
 
@@ -34,6 +39,37 @@ const FichaResumen = () => {
         };
         cargarDatos();
     }, []);
+
+    // --- MANEJO DE SELECTOR DE MATERIA (ID + PARALELO) ---
+    const handleCambioMateria = (val) => {
+        if (!val) {
+            setSelectedMateriaId('');
+            setSelectedParalelo('');
+            return;
+        }
+        // Separamos el valor compuesto "ID-PARALELO"
+        const [id, par] = val.split('-');
+        setSelectedMateriaId(id);
+        setSelectedParalelo(par);
+    };
+
+    // Construcción de opciones con Paralelo
+    const opcionesMaterias = useMemo(() => {
+        if (!selectedPeriodo) return [];
+        // Filtramos por periodo
+        const delPeriodo = asignacionesRaw.filter(a => a.periodo === selectedPeriodo);
+        
+        return delPeriodo.map(item => ({
+            value: `${item.id}-${item.paralelo}`, // CLAVE ÚNICA
+            label: `${item.nombre} - Paralelo ${item.paralelo}`, 
+            subtext: item.carrera 
+        }));
+    }, [asignacionesRaw, selectedPeriodo]);
+
+    // Valor actual del select
+    const valorSelectMateria = (selectedMateriaId && selectedParalelo) 
+        ? `${selectedMateriaId}-${selectedParalelo}` 
+        : '';
 
     // ------------------------------------------------------------------------
     // OPCIÓN 1: FICHA RESUMEN GENERAL (PDF HORIZONTAL)
@@ -130,18 +166,32 @@ const FichaResumen = () => {
             doc.text(`Generado el: ${fechaActual}`, pageWidth - 14, footerY + 5, { align: "right" });
 
             doc.save(`Ficha_Resumen_${info.periodo}.pdf`);
-        } catch (error) { console.error(error); Swal.fire('Error', 'Error al generar.', 'error'); } 
+        } catch (error) { 
+            console.error(error); 
+            // Manejo de error 404 para Ficha General
+            if (error.response && error.response.status === 404) {
+                Swal.fire('Atención', 'No hay datos de ejecución para generar la ficha resumen.', 'warning');
+            } else {
+                Swal.fire('Error', 'Error al generar.', 'error');
+            }
+        } 
         finally { setLoadingGeneral(false); }
     };
 
     // ------------------------------------------------------------------------
-    // OPCIÓN 2: ACTAS INDIVIDUALES (LÓGICA MODIFICADA PARA FIRMA)
+    // OPCIÓN 2: ACTAS INDIVIDUALES (LÓGICA ACTUALIZADA CON PARALELO)
     // ------------------------------------------------------------------------
     const descargarActasIndividuales = async () => {
-        if (!selectedMateriaId || !selectedPeriodo) return Swal.fire('Error', 'Selecciona una materia.', 'warning');
+        if (!selectedMateriaId || !selectedPeriodo || !selectedParalelo) return Swal.fire('Error', 'Selecciona una materia.', 'warning');
+        
         setLoadingIndividual(true);
         try {
-            const res = await api.post('/reportes/pdf-data', { asignatura_id: selectedMateriaId, periodo: selectedPeriodo });
+            // [MODIFICADO] Enviamos el paralelo al backend
+            const res = await api.post('/reportes/pdf-data', { 
+                asignatura_id: selectedMateriaId, 
+                periodo: selectedPeriodo,
+                paralelo: selectedParalelo
+            });
             const data = res.data;
             if (!data.reportes || data.reportes.length === 0) { Swal.fire('Info', 'Sin datos.', 'info'); return; }
 
@@ -199,7 +249,8 @@ const FichaResumen = () => {
 
                     y += 8;
                     doc.setFont("helvetica", "bold"); doc.text("Ciclo:", xLabelL, y);
-                    doc.setFont("helvetica", "normal"); doc.text(String(info.ciclo), xValueL, y); 
+                    // Mostramos Ciclo y Paralelo
+                    doc.setFont("helvetica", "normal"); doc.text(`${info.ciclo} "${info.paralelo || selectedParalelo}"`, xValueL, y); 
 
                     doc.setFont("helvetica", "bold"); doc.text("Asignatura:", xLabelR, y);
                     doc.setFont("helvetica", "normal"); 
@@ -253,38 +304,29 @@ const FichaResumen = () => {
                         }
                     });
 
-                    // ===============================================
-                    // LÓGICA DE FIRMA MODIFICADA (DINÁMICA)
-                    // ===============================================
-                    
-                    // 1. Calculamos dónde terminó la tabla y añadimos un margen (ej. 25 unidades)
+                    // --- PIE DE FIRMA ---
                     let yFirma = doc.lastAutoTable.finalY + 25;
-                    const alturaNecesaria = 30; // Espacio aprox para línea, nombre, cargo y fecha
+                    const alturaNecesaria = 30;
 
-                    // 2. Verificamos si cabe en la página actual
                     if (yFirma + alturaNecesaria > pageHeight - 10) {
-                        // Si no cabe, nueva página
                         doc.addPage();
-                        drawHeader(doc); // Opcional: poner cabecera en la hoja de solo firmas
-                        yFirma = 40; // Empezamos arriba en la nueva hoja
+                        drawHeader(doc);
+                        yFirma = 40;
                     }
                     
-                    // 3. Dibujamos la firma en la posición calculada (sea a continuación o en nueva hoja)
                     doc.setDrawColor(0); 
-                    doc.line(14, yFirma, 80, yFirma); // Línea
+                    doc.line(14, yFirma, 80, yFirma);
                     
                     doc.setFont("helvetica", "normal");
                     doc.setFontSize(10);
                     doc.setTextColor(0);
                     
-                    // Nombre del docente autenticado
                     doc.text(info.docente, 14, yFirma + 5);
                     
                     doc.setFont("helvetica", "bold");
                     doc.setFontSize(8);
                     doc.text("DOCENTE", 14, yFirma + 9);
 
-                    // Fecha a la misma altura o un poco abajo
                     doc.setFont("helvetica", "normal");
                     doc.setFontSize(8);
                     doc.setTextColor(100);
@@ -292,21 +334,25 @@ const FichaResumen = () => {
                 }
             });
 
-            if (paginaAgregada) doc.save(`Actas_${info.asignatura}.pdf`); 
+            if (paginaAgregada) doc.save(`Actas_${info.asignatura}_${selectedParalelo}.pdf`); 
             else Swal.fire('Info', 'Sin estudiantes calificados.', 'info');
 
-        } catch (error) { console.error(error); Swal.fire('Error', 'Error al generar.', 'error'); } 
+        } catch (error) { 
+            console.error(error); 
+            // --- MANEJO ESPECÍFICO DE ERROR 404 (DATOS NO ENCONTRADOS) ---
+            if (error.response && error.response.status === 404) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Atención',
+                    text: 'No se ha realizado la planificación ni evaluación para este paralelo.',
+                    confirmButtonColor: '#F59E0B' // Color ámbar/amarillo
+                });
+            } else {
+                Swal.fire('Error', 'Error al generar.', 'error'); 
+            }
+        } 
         finally { setLoadingIndividual(false); }
     };
-
-    const opcionesMaterias = useMemo(() => {
-        if (!selectedPeriodo) return [];
-        const unicas = []; const map = new Map();
-        asignacionesRaw.filter(a => a.periodo === selectedPeriodo).forEach(item => {
-            if(!map.has(item.id)) { map.set(item.id, true); unicas.push({ value: item.id, label: item.nombre, subtext: `${item.carrera} (${item.paralelo})` }); }
-        });
-        return unicas;
-    }, [asignacionesRaw, selectedPeriodo]);
 
     return (
         <div className="space-y-8 animate-fade-in p-6 bg-gray-50 min-h-screen">
@@ -336,7 +382,15 @@ const FichaResumen = () => {
                         Nóminas detalladas con las calificaciones de una <strong>materia específica</strong>.
                     </p>
                     <div className="w-full mb-6 text-left relative z-10">
-                        <CustomSelect label="" placeholder={opcionesMaterias.length > 0 ? "Seleccione Materia..." : "Sin materias"} options={opcionesMaterias} value={selectedMateriaId} onChange={setSelectedMateriaId} icon={BookOpenIcon} />
+                        {/* SELECTOR ACTUALIZADO PARA PARALELO */}
+                        <CustomSelect 
+                            label="" 
+                            placeholder={opcionesMaterias.length > 0 ? "Seleccione Materia..." : "Sin materias"} 
+                            options={opcionesMaterias} 
+                            value={valorSelectMateria} 
+                            onChange={handleCambioMateria} 
+                            icon={BookOpenIcon} 
+                        />
                     </div>
                     <button onClick={descargarActasIndividuales} disabled={!selectedMateriaId || loadingIndividual} className="w-full mt-auto bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-green-200 transition transform active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50">
                         {loadingIndividual ? 'Generando...' : <><PrinterIcon className="h-5 w-5"/> Descargar Actas</>}
