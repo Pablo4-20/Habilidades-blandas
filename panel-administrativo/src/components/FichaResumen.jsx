@@ -6,20 +6,20 @@ import autoTable from 'jspdf-autotable';
 import CustomSelect from './ui/CustomSelect'; 
 import { 
     PrinterIcon, BookOpenIcon, CalendarDaysIcon, 
-    DocumentCheckIcon, TableCellsIcon, DocumentTextIcon,
-    LockClosedIcon
+    DocumentCheckIcon, TableCellsIcon, DocumentTextIcon
 } from '@heroicons/react/24/outline';
 
 // --- IMPORTACIÓN DE LOGOS ---
 import logoIzq from '../assets/facultad.png'; 
-import logoDer from '../assets/software.png';
+import logoSoftware from '../assets/software.png'; // Renombramos para diferenciar
+import logoTec from '../assets/tecnologias.png';   // <--- NUEVO LOGO (Asegúrate que el archivo exista en assets)
 
 const FichaResumen = () => {
     const [asignacionesRaw, setAsignacionesRaw] = useState([]);
     
     // Estados de selección
     const [selectedMateriaId, setSelectedMateriaId] = useState('');
-    const [selectedParalelo, setSelectedParalelo] = useState(''); // [NUEVO] Estado para el paralelo
+    const [selectedParalelo, setSelectedParalelo] = useState(''); 
     const [selectedPeriodo, setSelectedPeriodo] = useState('');
     
     const [loadingGeneral, setLoadingGeneral] = useState(false);
@@ -47,7 +47,6 @@ const FichaResumen = () => {
             setSelectedParalelo('');
             return;
         }
-        // Separamos el valor compuesto "ID-PARALELO"
         const [id, par] = val.split('-');
         setSelectedMateriaId(id);
         setSelectedParalelo(par);
@@ -56,17 +55,15 @@ const FichaResumen = () => {
     // Construcción de opciones con Paralelo
     const opcionesMaterias = useMemo(() => {
         if (!selectedPeriodo) return [];
-        // Filtramos por periodo
         const delPeriodo = asignacionesRaw.filter(a => a.periodo === selectedPeriodo);
         
         return delPeriodo.map(item => ({
-            value: `${item.id}-${item.paralelo}`, // CLAVE ÚNICA
+            value: `${item.id}-${item.paralelo}`, 
             label: `${item.nombre} - Paralelo ${item.paralelo}`, 
             subtext: item.carrera 
         }));
     }, [asignacionesRaw, selectedPeriodo]);
 
-    // Valor actual del select
     const valorSelectMateria = (selectedMateriaId && selectedParalelo) 
         ? `${selectedMateriaId}-${selectedParalelo}` 
         : '';
@@ -95,10 +92,17 @@ const FichaResumen = () => {
                 hour: '2-digit', minute: '2-digit'
             });
 
+            // --- LÓGICA DE SELECCIÓN DE LOGO ---
+            // Si la carrera contiene "tecnolog" (mayus o minus), usa el logo de tecnología, si no, el de software
+            const logoDerecha = (info.carrera && info.carrera.toLowerCase().includes('tecnolog')) 
+                                ? logoTec 
+                                : logoSoftware;
+
             // --- ENCABEZADO ---
             const imgW = 20; const imgH = 20; 
             try { doc.addImage(logoIzq, 'PNG', 10, 5, imgW, imgH); } catch (e) {}
-            try { doc.addImage(logoDer, 'PNG', pageWidth - 30, 5, imgW, imgH); } catch (e) {}
+            // Logo dinámico
+            try { doc.addImage(logoDerecha, 'PNG', pageWidth - 30, 5, imgW, imgH); } catch (e) {}
 
             doc.setFontSize(14); doc.setTextColor(40, 53, 147);
             doc.text("UNIVERSIDAD ESTATAL DE BOLIVAR", pageWidth / 2, 12, { align: "center" });
@@ -168,7 +172,6 @@ const FichaResumen = () => {
             doc.save(`Ficha_Resumen_${info.periodo}.pdf`);
         } catch (error) { 
             console.error(error); 
-            // Manejo de error 404 para Ficha General
             if (error.response && error.response.status === 404) {
                 Swal.fire('Atención', 'No hay datos de ejecución para generar la ficha resumen.', 'warning');
             } else {
@@ -179,7 +182,7 @@ const FichaResumen = () => {
     };
 
     // ------------------------------------------------------------------------
-    // OPCIÓN 2: ACTAS INDIVIDUALES (LÓGICA ACTUALIZADA CON PARALELO)
+    // OPCIÓN 2: ACTAS INDIVIDUALES (LÓGICA CON LOGO DINÁMICO)
     // ------------------------------------------------------------------------
     const descargarActasIndividuales = async () => {
         if (!selectedMateriaId || !selectedPeriodo || !selectedParalelo) return Swal.fire('Error', 'Selecciona una materia.', 'warning');
@@ -196,8 +199,8 @@ const FichaResumen = () => {
 
             const doc = new jsPDF(); 
             const info = data.info;
-            const pageWidth = doc.internal.pageSize.getWidth(); // ~210mm
-            const pageHeight = doc.internal.pageSize.getHeight(); // ~297mm
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const pageHeight = doc.internal.pageSize.getHeight();
 
             const fechaActual = new Date().toLocaleString('es-ES', {
                 year: 'numeric', month: 'long', day: 'numeric',
@@ -206,8 +209,15 @@ const FichaResumen = () => {
 
             const drawHeader = (doc) => {
                 const imgW = 20; const imgH = 20; 
+                
+                // --- LÓGICA DE SELECCIÓN DE LOGO (REPETIDA PARA ACTAS) ---
+                const logoDerecha = (info.carrera && info.carrera.toLowerCase().includes('tecnolog')) 
+                                    ? logoTec 
+                                    : logoSoftware;
+
                 try { doc.addImage(logoIzq, 'PNG', 10, 8, imgW, imgH); } catch (e) {}
-                try { doc.addImage(logoDer, 'PNG', pageWidth - 30, 8, imgW, imgH); } catch (e) {}
+                // Logo dinámico
+                try { doc.addImage(logoDerecha, 'PNG', pageWidth - 30, 8, imgW, imgH); } catch (e) {}
 
                 doc.setFontSize(13); doc.setTextColor(40, 53, 147); 
                 doc.text("UNIVERSIDAD ESTATAL DE BOLIVAR", pageWidth/2, 15, { align: "center" });
@@ -287,12 +297,11 @@ const FichaResumen = () => {
 
                     const body = ests.map((e) => [e.nombre, e.n1, e.n2, e.n3, e.n4, e.n5]);
 
-                   autoTable(doc, {
+                    autoTable(doc, {
                         startY: y,
                         head: [['Estudiante', 'Nivel 1', 'Nivel 2', 'Nivel 3', 'Nivel 4', 'Nivel 5']],
                         body: body,
                         theme: 'grid', 
-                        // Mantenemos el estilo compacto que te gustó
                         styles: { cellPadding: 1, fontSize: 9 },
                         headStyles: { fillColor: [255, 255, 255], textColor: 0, fontStyle: 'bold', lineWidth: 0.1, lineColor: 0 },
                         bodyStyles: { textColor: 0, lineColor: 0, lineWidth: 0.1 },
@@ -303,23 +312,21 @@ const FichaResumen = () => {
                         }
                     });
 
-                    // --- CÁLCULO DE POSICIÓN DE FIRMA (AJUSTADO A 20) ---
+                    // --- FIRMA ---
                     const finalY = doc.lastAutoTable.finalY; 
                     
-                    const espacioAntesFirma = 20;    // <--- AQUI LO TIENES EN 20
+                    const espacioAntesFirma = 20;    
                     const alturaBloqueFirma = 25;    
                     const margenInferiorPagina = 10; 
                     
                     let yFirma = finalY + espacioAntesFirma;
 
-                    // Verificamos si entra en la hoja
                     if (yFirma + alturaBloqueFirma > pageHeight - margenInferiorPagina) {
                         doc.addPage();
                         drawHeader(doc);
-                        yFirma = 45; // Posición limpia si salta a nueva página
+                        yFirma = 45; 
                     }
                     
-                    // DIBUJAR FIRMA
                     doc.setDrawColor(0); 
                     doc.line(14, yFirma, 80, yFirma); 
                     
@@ -387,7 +394,6 @@ const FichaResumen = () => {
                         Nóminas detalladas con las calificaciones de una <strong>materia específica</strong>.
                     </p>
                     <div className="w-full mb-6 text-left relative z-10">
-                        {/* SELECTOR ACTUALIZADO PARA PARALELO */}
                         <CustomSelect 
                             label="" 
                             placeholder={opcionesMaterias.length > 0 ? "Seleccione Materia..." : "Sin materias"} 
