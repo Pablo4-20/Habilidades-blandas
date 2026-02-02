@@ -94,6 +94,7 @@ class HabilidadBlandaController extends Controller
         $file = $request->file('file');
         $contenido = file_get_contents($file->getRealPath());
         
+        // Corrección de codificación si es necesario
         if (!mb_detect_encoding($contenido, 'UTF-8', true)) {
             $contenido = mb_convert_encoding($contenido, 'UTF-8', 'ISO-8859-1');
         }
@@ -101,7 +102,7 @@ class HabilidadBlandaController extends Controller
         $lines = preg_split("/\r\n|\n|\r/", $contenido);
         $separador = ',';
 
-        // Detectar separador
+        // Detectar separador automáticamente
         foreach ($lines as $linea) {
             if (trim($linea) !== '') {
                 if (substr_count($linea, ';') > substr_count($linea, ',')) $separador = ';';
@@ -109,48 +110,63 @@ class HabilidadBlandaController extends Controller
             }
         }
 
-        $creados = 0;
-        $actualizados = 0;
+        $habilidadesNuevas = 0;
+        $habilidadesActualizadas = 0;
+        $actividadesTotal = 0;
 
-        DB::transaction(function () use ($lines, $separador, &$creados, &$actualizados) {
+        DB::transaction(function () use ($lines, $separador, &$habilidadesNuevas, &$habilidadesActualizadas, &$actividadesTotal) {
             foreach ($lines as $linea) {
+                // 1. IGNORAR LÍNEAS VACÍAS (ESTO SOLUCIONA EL CONTEO EXTRA)
                 if (trim($linea) === '') continue;
                 
                 $row = str_getcsv($linea, $separador);
                 
-                // Formato CSV esperado: Nombre | Descripción | Actividad 1 | Actividad 2 | ...
-                if (!isset($row[0]) || strtolower(trim($row[0])) === 'nombre') continue;
+                // 2. VALIDAR QUE TENGA AL MENOS EL NOMBRE
+                if (!isset($row[0]) || trim($row[0]) === '') continue;
+
+                // 3. IGNORAR CABECERA SI EXISTE
+                if (strtolower(trim($row[0])) === 'nombre') continue;
 
                 $nombre = $this->formatearTexto($row[0]);
                 $descripcion = isset($row[1]) ? trim($row[1]) : '';
 
                 // Buscar o Crear la Habilidad
-                $habilidad = HabilidadBlanda::firstOrCreate(
+                $habilidad = HabilidadBlanda::updateOrCreate(
                     ['nombre' => $nombre],
                     ['descripcion' => $descripcion]
                 );
 
                 if ($habilidad->wasRecentlyCreated) {
-                    $creados++;
+                    $habilidadesNuevas++;
                 } else {
-                    $actualizados++;
+                    $habilidadesActualizadas++;
                 }
 
                 // Procesar Actividades (Columnas 2 en adelante)
-                // Se agregan solo si no existen para no duplicar en cargas sucesivas
                 for ($i = 2; $i < count($row); $i++) {
                     $actDesc = trim($row[$i]);
                     if (!empty($actDesc)) {
-                        ActividadHabilidad::firstOrCreate([
+                        $actividad = ActividadHabilidad::firstOrCreate([
                             'habilidad_blanda_id' => $habilidad->id,
                             'descripcion' => $actDesc
                         ]);
+                        
+                        // Solo contamos si se creó o si ya existía (para saber cuántas actividades detectó el archivo)
+                        // Si quieres contar solo las NUEVAS actividades, usa $actividad->wasRecentlyCreated
+                        $actividadesTotal++;
                     }
                 }
             }
         });
 
-        return response()->json(['message' => "Proceso completado. $creados habilidades nuevas, $actualizados actualizadas con sus actividades."]);
+        return response()->json([
+            'message' => "Proceso completado.",
+            'resumen' => [
+                'habilidades_creadas' => $habilidadesNuevas,
+                'habilidades_actualizadas' => $habilidadesActualizadas,
+                'actividades_procesadas' => $actividadesTotal
+            ]
+        ]);
     }
 
     private function formatearTexto($texto) {
