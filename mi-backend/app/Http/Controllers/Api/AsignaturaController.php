@@ -40,8 +40,6 @@ class AsignaturaController extends Controller
             'unidad_curricular_id' => 'required'
         ];
 
-        // Si es admin, exigimos que seleccione la carrera.
-        // Si es coordinador, la carrera la ponemos nosotros (no es required en el form).
         if ($user->rol !== 'coordinador') {
             $rules['carrera_id'] = 'required';
         }
@@ -50,8 +48,8 @@ class AsignaturaController extends Controller
 
         // DETERMINAR ID DE CARRERA
         $carreraIdFinal = ($user->rol === 'coordinador' && $user->carrera_id)
-            ? $user->carrera_id  // Forzamos la del usuario
-            : $request->carrera_id; // Usamos la del formulario
+            ? $user->carrera_id
+            : $request->carrera_id;
 
         $nombreFormateado = $this->formatearTexto($request->nombre);
         
@@ -63,7 +61,7 @@ class AsignaturaController extends Controller
 
         $data = $request->all();
         $data['nombre'] = $nombreFormateado;
-        $data['carrera_id'] = $carreraIdFinal; // Guardamos la ID segura
+        $data['carrera_id'] = $carreraIdFinal;
 
         $asignatura = Asignatura::create($data);
         return response()->json($asignatura, 201);
@@ -84,7 +82,6 @@ class AsignaturaController extends Controller
         $data = $request->all();
         $data['nombre'] = $nombreFormateado;
         
-        // El coordinador no puede cambiar la carrera de una asignatura
         if ($user->rol === 'coordinador') {
             unset($data['carrera_id']);
         }
@@ -97,7 +94,6 @@ class AsignaturaController extends Controller
         $user = $request->user();
         $asignatura = Asignatura::findOrFail($id);
 
-        // [SEGURIDAD]
         if ($user->rol === 'coordinador' && $user->carrera_id) {
             if ($asignatura->carrera_id !== $user->carrera_id) {
                 return response()->json(['message' => 'No tiene permisos para eliminar esto.'], 403);
@@ -113,7 +109,6 @@ class AsignaturaController extends Controller
         $request->validate(['file' => 'required|file']);
         $user = $request->user();
         
-        // Determinar si forzamos carrera
         $forcedCarreraId = null;
         if ($user->rol === 'coordinador' && $user->carrera_id) {
             $forcedCarreraId = $user->carrera_id;
@@ -146,7 +141,7 @@ class AsignaturaController extends Controller
             $row = str_getcsv($linea, $separador);
             
             if (!isset($row[0]) || trim($row[0]) === '') continue;
-            if (strtolower(trim($row[0])) === 'nombre') continue; // Saltar cabecera
+            if (strtolower(trim($row[0])) === 'nombre') continue; 
 
             if (count($row) < 4) {
                 $errores[] = "Fila " . ($index + 1) . ": Formato incompleto (requiere 4 columnas).";
@@ -155,24 +150,39 @@ class AsignaturaController extends Controller
 
             // 1. PROCESAMIENTO
             $nombre = $this->formatearTexto($row[0]);
-            $carreraNombre = $this->formatearTexto($row[1]); 
+            
+            // Obtenemos el nombre crudo de la carrera para buscar mejor
+            $carreraInputRaw = trim($row[1]);
+            
             $cicloRaw = trim($row[2]);
             $cicloNombre = $this->convertirCicloARomano($cicloRaw); 
-            
-            // [CORRECCIÓN AQUI] Leemos el valor crudo sin forzar Mayúsculas/Minúsculas todavía
             $unidadRaw = trim($row[3]); 
 
-            // 2. OBTENER ID CARRERA (SEGURIDAD)
+            // 2. OBTENER ID CARRERA (LÓGICA MEJORADA)
             $carreraIdFinal = null;
 
             if ($forcedCarreraId) {
-                // Si es coordinador, USAMOS SU ID
                 $carreraIdFinal = $forcedCarreraId;
             } else {
-                // Si es Admin, buscamos por nombre
-                $carrera = Carrera::where('nombre', 'LIKE', "%$carreraNombre%")->first();
+                // BÚSQUEDA INTELIGENTE DE CARRERA
+                $carrera = null;
+
+                // A. Si dice "TI" o "T.I.", asumimos Tecnologías
+                if (in_array(strtoupper($carreraInputRaw), ['TI', 'T.I.', 'TECNOLOGIAS'])) {
+                    $carrera = Carrera::where('nombre', 'LIKE', '%Tecnolog%')->first();
+                } 
+                // B. Búsqueda exacta insensible a mayúsculas/minúsculas
                 if (!$carrera) {
-                    $errores[] = "Fila " . ($index + 1) . ": Carrera '$carreraNombre' no existe.";
+                    $carrera = Carrera::whereRaw('LOWER(nombre) = ?', [strtolower($carreraInputRaw)])->first();
+                }
+                // C. Búsqueda parcial (LIKE)
+                if (!$carrera) {
+                    $carrera = Carrera::where('nombre', 'LIKE', '%' . $carreraInputRaw . '%')->first();
+                }
+
+                if (!$carrera) {
+                    // Fallo definitivo: reportar error mostrando qué buscó
+                    $errores[] = "Fila " . ($index + 1) . ": Carrera '$carreraInputRaw' no encontrada.";
                     continue;
                 }
                 $carreraIdFinal = $carrera->id;
@@ -180,7 +190,7 @@ class AsignaturaController extends Controller
 
             $ciclo = Ciclo::where('nombre', $cicloNombre)->first();
             
-            // [CORRECCIÓN AQUI] Búsqueda insensible a mayúsculas para evitar error "de" vs "De"
+            // Búsqueda de Unidad Curricular insensible a mayúsculas
             $unidad = UnidadCurricular::whereRaw('LOWER(nombre) LIKE ?', ['%' . strtolower($unidadRaw) . '%'])->first();
 
             if (!$ciclo) {

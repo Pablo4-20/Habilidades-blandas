@@ -7,7 +7,8 @@ import {
     UserGroupIcon, 
     ArrowPathIcon, InformationCircleIcon,
     ClockIcon, ListBulletIcon, StarIcon, CalendarDaysIcon, LockClosedIcon, CheckCircleIcon,
-    ChevronLeftIcon, ChevronRightIcon, BookOpenIcon 
+    ChevronLeftIcon, ChevronRightIcon, BookOpenIcon,
+    ExclamationTriangleIcon // [NUEVO] Icono agregado
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 
@@ -24,7 +25,7 @@ const EvaluacionDocente = () => {
     // Filtros seleccionados
     const [selectedPeriodo, setSelectedPeriodo] = useState(''); 
     const [selectedAsignatura, setSelectedAsignatura] = useState('');
-    const [selectedParalelo, setSelectedParalelo] = useState(''); // [NUEVO] Estado para el paralelo
+    const [selectedParalelo, setSelectedParalelo] = useState(''); 
     const [selectedParcial, setSelectedParcial] = useState('1');
     
     const [habilidadActiva, setHabilidadActiva] = useState(null); 
@@ -90,12 +91,10 @@ const EvaluacionDocente = () => {
 
             const data = res.data;
             
-            // Si el servidor dice que TODO está bien
             if (data.planificacion_completa === true) {
                 setPermisoCalificar(true);
                 verificarEstadoP1();
             } else {
-                // Diagnóstico preciso del problema
                 let titulo = 'Acceso Denegado';
                 let mensaje = 'La planificación está incompleta.';
 
@@ -116,7 +115,6 @@ const EvaluacionDocente = () => {
                     confirmButtonText: 'Entendido',
                     allowOutsideClick: false
                 }).then(() => {
-                    // Resetear selección
                     setSelectedAsignatura('');
                     setSelectedParalelo('');
                     setHabilidadesPlanificadas([]);
@@ -133,7 +131,7 @@ const EvaluacionDocente = () => {
         }
     };
 
-    // --- EFECTO AL SELECCIONAR MATERIA ---
+    // --- EFECTOS ---
     useEffect(() => {
         setEstudiantes([]);
         setHabilidadesPlanificadas([]);
@@ -149,7 +147,6 @@ const EvaluacionDocente = () => {
         }
     }, [selectedAsignatura, selectedPeriodo, selectedParalelo]);
 
-    // --- CARGAR DATOS DE LA VISTA ---
     useEffect(() => {
         if (selectedAsignatura && selectedParalelo && selectedParcial && selectedPeriodo && permisoCalificar) {
             cargarPlanificacionYProgreso(false);
@@ -232,7 +229,7 @@ const EvaluacionDocente = () => {
                 habilidad_blanda_id: habilidadActiva,
                 parcial: selectedParcial,
                 periodo: selectedPeriodo,
-                paralelo: selectedParalelo // Enviar paralelo
+                paralelo: selectedParalelo 
             });
             
             if (res.data && res.data.estudiantes) {
@@ -261,7 +258,7 @@ const EvaluacionDocente = () => {
                 habilidad_blanda_id: habilidadActiva,
                 parcial: selectedParcial,
                 periodo: selectedPeriodo,
-                paralelo: selectedParalelo, // Guardar con paralelo
+                paralelo: selectedParalelo, 
                 notas
             });
 
@@ -319,32 +316,27 @@ const EvaluacionDocente = () => {
         } catch (error) { Swal.fire('Error', 'No se pudo guardar.', 'error'); }
     };
 
-    // --- MANEJO DE SELECTOR COMPUESTO (Materia + Paralelo) ---
     const handleCambioMateria = (val) => {
         if (!val) {
             setSelectedAsignatura('');
             setSelectedParalelo('');
             return;
         }
-        // Separamos el valor compuesto "ID-PARALELO"
         const [id, par] = val.split('-');
         setSelectedAsignatura(id);
         setSelectedParalelo(par);
     };
 
-    const pendientes = estudiantes.filter(e => !e.nivel).length;
     const asignaturasFiltradas = asignaturas.filter(a => a.periodo === selectedPeriodo);
     
-    // Crear opciones con clave compuesta para el select
     const opcionesAsignaturas = asignaturasFiltradas.map(a => ({ 
-        value: `${a.id}-${a.paralelo}`, // CLAVE ÚNICA COMPUESTA
+        value: `${a.id}-${a.paralelo}`, 
         label: `${a.nombre} - Paralelo ${a.paralelo}`, 
         subtext: a.carrera, 
         periodo: a.periodo,
         icon: BookOpenIcon
     }));
 
-    // Valor actual del selector
     const valorSelectMateria = (selectedAsignatura && selectedParalelo) 
         ? `${selectedAsignatura}-${selectedParalelo}` 
         : '';
@@ -386,7 +378,6 @@ const EvaluacionDocente = () => {
         return hab ? hab.nombre : '';
     };
     
-    // Función para ignorar tildes y mayúsculas
     const normalizeText = (text) => {
         return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
     };
@@ -406,6 +397,11 @@ const EvaluacionDocente = () => {
         }
         setSelectedParcial(val);
     };
+
+    // --- CÁLCULO DE FALTANTES PARA EL UI ---
+    const estudiantesFaltantes = estudiantes
+        .map((est, index) => (!est.nivel ? index + 1 : null))
+        .filter(n => n !== null);
 
     const totalPages = Math.ceil(estudiantes.length / ITEMS_PER_PAGE);
     const indexOfLastItem = currentPage * ITEMS_PER_PAGE;
@@ -434,7 +430,6 @@ const EvaluacionDocente = () => {
                             </div>
                         </div>
                         <div className={!selectedPeriodo ? 'opacity-50 pointer-events-none' : ''}>
-                            {/* SELECTOR ACTUALIZADO QUE MANEJA PARALELO */}
                             <CustomSelect 
                                 label="Materia y Paralelo" 
                                 options={opcionesAsignaturas} 
@@ -555,10 +550,26 @@ const EvaluacionDocente = () => {
                                         <span className="font-medium">Página {currentPage} de {totalPages || 1}</span>
                                         <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || totalPages === 0} className="p-1.5 rounded-lg border border-gray-300 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition"><ChevronRightIcon className="h-4 w-4"/></button>
                                     </div>
+                                    
+                                    {/* --- SECCIÓN DE ALERTAS MODIFICADA --- */}
                                     <div className="flex items-center gap-4">
-                                        <span className={`text-xs font-bold px-3 py-1 rounded-full ${pendientes > 0 ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>{pendientes > 0 ? `Faltan ${pendientes}` : '¡Todos calificados!'}</span>
+                                        {estudiantesFaltantes.length > 0 ? (
+                                            <div className="flex flex-col items-end animate-pulse">
+                                                <span className="text-xs font-bold text-amber-700 bg-amber-100 px-3 py-0.5 rounded-full flex items-center gap-1 border border-amber-200">
+                                                    <ExclamationTriangleIcon className="h-3 w-3"/> Faltan {estudiantesFaltantes.length}
+                                                </span>
+                                                <span className="text-[10px] text-amber-600 font-bold mt-0.5 max-w-[200px] truncate text-right" title={`Faltan los números: ${estudiantesFaltantes.join(', ')}`}>
+                                                    N°: {estudiantesFaltantes.join(', ')}
+                                                </span>
+                                            </div>
+                                        ) : (
+                                            <span className="text-xs font-bold px-3 py-1 rounded-full bg-green-100 text-green-700 flex items-center gap-1 border border-green-200 shadow-sm">
+                                                <CheckCircleIcon className="h-4 w-4"/> ¡Todos calificados!
+                                            </span>
+                                        )}
                                         <button onClick={handleGuardar} className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-6 rounded-xl shadow-lg transition transform hover:scale-105 active:scale-95 text-sm"><CheckCircleIcon className="h-5 w-5"/> Guardar Notas</button>
                                     </div>
+                                    {/* -------------------------------------- */}
                                 </div>
                             </div>
                         </>
