@@ -19,7 +19,7 @@ class EstudianteController extends Controller
             ->get();
     }
 
-    // --- 1. CREACIÓN MANUAL (CONVERTIDO A TITLE CASE) ---
+    // --- 1. CREACIÓN MANUAL ---
     public function store(Request $request)
     {
         $request->validate([
@@ -36,7 +36,6 @@ class EstudianteController extends Controller
             ], 422);
         }
 
-        // Preparamos los datos convirtiendo a Title Case
         $data = $request->all();
         $data['nombres']   = mb_convert_case($request->nombres, MB_CASE_TITLE, "UTF-8");
         $data['apellidos'] = mb_convert_case($request->apellidos, MB_CASE_TITLE, "UTF-8");
@@ -45,7 +44,7 @@ class EstudianteController extends Controller
         return response()->json($estudiante, 201);
     }
 
-    // --- 2. ACTUALIZACIÓN (CONVERTIDO A TITLE CASE) ---
+    // --- 2. ACTUALIZACIÓN ---
     public function update(Request $request, $id)
     {
         $estudiante = Estudiante::findOrFail($id);
@@ -64,7 +63,6 @@ class EstudianteController extends Controller
             ], 422);
         }
 
-        // Convertimos antes de guardar
         $data = $request->all();
         if ($request->has('nombres')) {
             $data['nombres'] = mb_convert_case($request->nombres, MB_CASE_TITLE, "UTF-8");
@@ -83,7 +81,7 @@ class EstudianteController extends Controller
         return response()->json(['message' => 'Eliminado']);
     }
 
-    // --- 3. IMPORTACIÓN MASIVA (YA TENÍA LA LÓGICA, SE MANTIENE) ---
+    // --- 3. IMPORTACIÓN MASIVA CORREGIDA ---
     public function import(Request $request)
     {
         $request->validate(['file' => 'required|file']);
@@ -91,6 +89,7 @@ class EstudianteController extends Controller
         
         $contenido = file_get_contents($file->getRealPath());
         $lines = preg_split("/\r\n|\n|\r/", $contenido);
+        // Detección automática de separador
         $separador = str_contains($lines[0] ?? '', ';') ? ';' : ',';
 
         $creados = 0;
@@ -100,23 +99,24 @@ class EstudianteController extends Controller
             if (trim($linea) === '') continue;
             $row = str_getcsv($linea, $separador);
             
+            // Validaciones básicas de fila
             if (count($row) < 5) continue; 
             if (strtolower(trim($row[0])) === 'cedula') continue; 
 
             $cedula = trim($row[0]);
             
+            // Validar existencia previa
             if (Estudiante::where('cedula', $cedula)->exists()) {
-                $errores[] = "Fila ".($index+1).": $cedula ya es estudiante.";
+                $errores[] = "Fila ".($index+1).": $cedula omitido (ya existe).";
                 continue; 
             }
 
             if (User::where('cedula', $cedula)->exists()) {
-                $errores[] = "Fila ".($index+1).": $cedula ya existe como Personal.";
+                $errores[] = "Fila ".($index+1).": $cedula omitido (es Personal Admin).";
                 continue;
             }
 
             try {
-                // Aquí ya tenías mb_convert_case, está perfecto.
                 Estudiante::create([
                     'cedula'    => $cedula,
                     'nombres'   => mb_convert_case(trim($row[1]), MB_CASE_TITLE, "UTF-8"),
@@ -127,12 +127,15 @@ class EstudianteController extends Controller
                 ]);
                 $creados++;
             } catch (\Exception $e) {
-                $errores[] = "Fila ".($index+1).": Error al guardar.";
+                $errores[] = "Fila ".($index+1).": Error BD al guardar.";
             }
         }
 
+        // [CORRECCIÓN CLAVE] Devolver las variables por separado para el Frontend
         return response()->json([
-            'message' => "Proceso terminado. Creados: $creados.",
+            'message' => "Proceso terminado.",
+            'creados' => $creados,       // <--- Variable que busca el Frontend
+            'actualizados' => 0,         // <--- Enviamos 0 para evitar 'undefined'
             'errores' => $errores
         ]);
     }

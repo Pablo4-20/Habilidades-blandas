@@ -5,7 +5,7 @@ import CustomSelect from './ui/CustomSelect';
 import { 
     DocumentTextIcon, BookOpenIcon, CalendarDaysIcon,
     ChartBarIcon, ArrowRightIcon, ArrowLeftIcon, ArrowDownTrayIcon, LockClosedIcon,
-    SparklesIcon, CheckCircleIcon, ExclamationTriangleIcon
+    SparklesIcon, CheckCircleIcon, ExclamationTriangleIcon, UserGroupIcon // Icono nuevo
 } from '@heroicons/react/24/outline';
 
 const ReportesDocente = () => {
@@ -14,7 +14,7 @@ const ReportesDocente = () => {
     
     // Filtros
     const [selectedMateriaId, setSelectedMateriaId] = useState('');
-    const [selectedParalelo, setSelectedParalelo] = useState(''); // [NUEVO]
+    const [selectedParalelo, setSelectedParalelo] = useState('');
     const [selectedPeriodo, setSelectedPeriodo] = useState('');
     
     const [dataCompleta, setDataCompleta] = useState(null); 
@@ -96,7 +96,7 @@ const ReportesDocente = () => {
             const res = await api.post('/reportes/pdf-data', { 
                 asignatura_id: selectedMateriaId, 
                 periodo: selectedPeriodo,
-                paralelo: selectedParalelo // [NUEVO]
+                paralelo: selectedParalelo 
             });
             setDataCompleta(res.data);
             
@@ -147,6 +147,7 @@ const ReportesDocente = () => {
                     conclusiones: [{ id: planID, habilidad_id: habID, texto: texto }] 
                 });
                 
+                // Intentar guardar en ambos parciales para consistencia
                 if (itemActual.p1 && itemActual.p2) {
                      await api.post('/reportes/guardar-todo', { 
                         conclusiones: [{ id: itemActual.p1.planificacion_id, habilidad_id: habID, texto: texto }] 
@@ -160,8 +161,40 @@ const ReportesDocente = () => {
         }
     };
 
-    // 7. GUARDAR TODO (Botón Final)
+    // 7. GUARDAR TODO (Botón Final) - CON VALIDACIÓN DE COMPLETITUD
     const guardarTodo = async () => {
+        
+        // --- NUEVA VALIDACIÓN: Verificar que TODOS los estudiantes estén calificados ---
+        for (const grupo of reportesAgrupados) {
+            // Obtenemos la lista de estudiantes matriculados desde el detalle que envía el backend
+            const listaEstudiantes = grupo.p1?.detalle_p1 || grupo.p2?.detalle_p2 || [];
+            const totalMatriculados = listaEstudiantes.length;
+
+            const evaluadosP1 = calcularTotalEvaluados(grupo.p1?.estadisticas);
+            const evaluadosP2 = calcularTotalEvaluados(grupo.p2?.estadisticas);
+
+            // Verificamos Parcial 1
+            if (grupo.p1 && evaluadosP1 < totalMatriculados) {
+                return Swal.fire({
+                    title: 'Evaluación Incompleta',
+                    html: `En la habilidad <b>"${grupo.habilidad}"</b> (Parcial 1):<br/>Ha calificado a <b>${evaluadosP1}</b> de <b>${totalMatriculados}</b> estudiantes.<br/><br/>Debe calificar a todos para finalizar.`,
+                    icon: 'warning',
+                    confirmButtonText: 'Entendido'
+                });
+            }
+
+            // Verificamos Parcial 2
+            if (grupo.p2 && evaluadosP2 < totalMatriculados) {
+                return Swal.fire({
+                    title: 'Evaluación Incompleta',
+                    html: `En la habilidad <b>"${grupo.habilidad}"</b> (Parcial 2):<br/>Ha calificado a <b>${evaluadosP2}</b> de <b>${totalMatriculados}</b> estudiantes.<br/><br/>Debe calificar a todos para finalizar.`,
+                    icon: 'warning',
+                    confirmButtonText: 'Entendido'
+                });
+            }
+        }
+        // -----------------------------------------------------------------------------
+
         setGuardando(true);
         try {
             const listaParaEnviar = [];
@@ -178,6 +211,7 @@ const ReportesDocente = () => {
                 const tP1 = calcularTotalEvaluados(grupo.p1?.estadisticas);
                 const tP2 = calcularTotalEvaluados(grupo.p2?.estadisticas);
                 
+                // Solo enviamos si hay texto y calificaciones, aunque la validación previa ya asegura completitud
                 if (texto && (tP1 + tP2 > 0)) {
                     if (planP2) listaParaEnviar.push({ id: planP2, habilidad_id: habId, texto });
                     if (planP1) listaParaEnviar.push({ id: planP1, habilidad_id: habId, texto });
@@ -185,13 +219,13 @@ const ReportesDocente = () => {
             });
 
             if (listaParaEnviar.length === 0) {
-                Swal.fire('Info', 'No hay datos válidos para guardar.', 'info');
+                Swal.fire('Info', 'No ha ingresado conclusiones para guardar.', 'info');
                 setGuardando(false);
                 return;
             }
 
             await api.post('/reportes/guardar-todo', { conclusiones: listaParaEnviar });
-            Swal.fire({ title: '¡Guardado!', text: 'Reporte actualizado.', icon: 'success', timer: 1500, showConfirmButton: false });
+            Swal.fire({ title: '¡Guardado!', text: 'Reporte actualizado correctamente.', icon: 'success', timer: 1500, showConfirmButton: false });
         } catch (error) {
             Swal.fire('Error', 'No se pudo guardar.', 'error');
         } finally {
@@ -204,16 +238,23 @@ const ReportesDocente = () => {
         return Object.values(stats).reduce((acc, curr) => acc + Number(curr), 0);
     };
 
-    const MiniGrafico = ({ stats, titulo }) => {
+    const MiniGrafico = ({ stats, titulo, totalMatriculados }) => {
         if (!stats) return <div className="h-32 flex items-center justify-center border-2 border-dashed border-gray-200 rounded-xl bg-gray-50 text-gray-400 text-xs">{titulo}: Pendiente</div>;
+        
         const totalEvaluados = calcularTotalEvaluados(stats);
         const maxVal = Math.max(...Object.values(stats)) || 1; 
+        
+        // Color del indicador: Rojo si faltan, Verde si están completos
+        const esCompleto = totalEvaluados >= totalMatriculados;
+        const badgeColor = esCompleto ? 'bg-green-100 text-green-700 border-green-200' : 'bg-orange-100 text-orange-700 border-orange-200';
 
         return (
             <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col h-full">
                 <div className="flex justify-between items-center mb-4">
                     <h5 className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{titulo}</h5>
-                    <span className="bg-blue-50 text-blue-600 text-[9px] font-bold px-1.5 py-0.5 rounded-full border border-blue-100">Total: {totalEvaluados}</span>
+                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${badgeColor} flex items-center gap-1`}>
+                         <UserGroupIcon className="h-3 w-3" /> {totalEvaluados} / {totalMatriculados}
+                    </span>
                 </div>
                 <div className="flex items-end justify-between h-32 gap-2 px-2"> 
                     {[1, 2, 3, 4, 5].map(nivel => {
@@ -254,13 +295,12 @@ const ReportesDocente = () => {
         const delPeriodo = asignacionesRaw.filter(a => a.periodo === selectedPeriodo);
         
         return delPeriodo.map(item => ({
-            value: `${item.id}-${item.paralelo}`, // ID Compuesto
+            value: `${item.id}-${item.paralelo}`, 
             label: `${item.nombre} - Paralelo ${item.paralelo}`, 
             subtext: item.carrera 
         }));
     }, [asignacionesRaw, selectedPeriodo]);
 
-    // Valor del selector
     const valorSelectMateria = (selectedMateriaId && selectedParalelo) 
         ? `${selectedMateriaId}-${selectedParalelo}` 
         : '';
@@ -269,10 +309,18 @@ const ReportesDocente = () => {
     const itemActual = reportesAgrupados[pasoActual];
     const keyTextAreaActual = itemActual ? (itemActual.uniqueKeyP2 || itemActual.uniqueKeyP1) : null;
     
-    // Lógica de bloqueo
+    // Cálculos para validación visual
+    const listaEstudiantes = itemActual ? (itemActual.p1?.detalle_p1 || itemActual.p2?.detalle_p2 || []) : [];
+    const totalMatriculados = listaEstudiantes.length;
+
     const totalP1 = itemActual ? calcularTotalEvaluados(itemActual.p1?.estadisticas) : 0;
     const totalP2 = itemActual ? calcularTotalEvaluados(itemActual.p2?.estadisticas) : 0;
-    const hayCalificaciones = totalP1 > 0 && totalP2 > 0;
+    
+    // Condición visual para habilitar/deshabilitar textarea
+    // La validación estricta está en el botón "Finalizar", pero aquí damos feedback visual
+    const esCompletoP1 = totalP1 >= totalMatriculados;
+    const esCompletoP2 = totalP2 >= totalMatriculados;
+    const habilitarEscritura = esCompletoP1 && esCompletoP2 && totalMatriculados > 0;
 
     return (
         <div className="space-y-4 animate-fade-in pb-20 p-4 bg-gray-50 min-h-screen">
@@ -287,7 +335,6 @@ const ReportesDocente = () => {
                     <CalendarDaysIcon className="h-5 w-5"/><span>{selectedPeriodo || 'Cargando...'}</span><LockClosedIcon className="h-4 w-4 ml-auto text-blue-400 opacity-50"/>
                 </div>
                 <div className={!selectedPeriodo ? 'opacity-50' : ''}>
-                    {/* Selector actualizado con manejo de paralelo */}
                     <CustomSelect 
                         label="" 
                         placeholder={opcionesMaterias.length > 0 ? "Seleccionar Asignatura..." : "Sin materias"} 
@@ -318,31 +365,34 @@ const ReportesDocente = () => {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <MiniGrafico stats={itemActual.p1?.estadisticas} titulo="Resultados P1" />
-                            <MiniGrafico stats={itemActual.p2?.estadisticas} titulo="Resultados P2" />
+                            <MiniGrafico stats={itemActual.p1?.estadisticas} titulo="Resultados P1" totalMatriculados={totalMatriculados} />
+                            <MiniGrafico stats={itemActual.p2?.estadisticas} titulo="Resultados P2" totalMatriculados={totalMatriculados} />
                         </div>
 
-                        <div className={`p-5 rounded-xl border transition-colors relative ${hayCalificaciones ? 'bg-blue-50/50 border-blue-100 focus-within:bg-blue-50 focus-within:border-blue-300' : 'bg-gray-100 border-gray-200 opacity-80 cursor-not-allowed'}`}>
+                        <div className={`p-5 rounded-xl border transition-colors relative ${habilitarEscritura ? 'bg-blue-50/50 border-blue-100 focus-within:bg-blue-50 focus-within:border-blue-300' : 'bg-gray-100 border-gray-200'}`}>
                             <div className="flex justify-between items-center mb-3">
-                                <label className={`block text-xs font-bold flex items-center gap-2 ${hayCalificaciones ? 'text-gray-700' : 'text-gray-400'}`}>
+                                <label className={`block text-xs font-bold flex items-center gap-2 ${habilitarEscritura ? 'text-gray-700' : 'text-gray-500'}`}>
                                     <ChartBarIcon className="h-4 w-4"/> Análisis y Conclusiones
                                 </label>
                                 
-                                {hayCalificaciones ? (
+                                {habilitarEscritura ? (
                                     autoGuardado && <span className="text-[10px] text-green-600 font-bold flex items-center gap-1 animate-pulse"><CheckCircleIcon className="h-3 w-3"/> Guardando...</span>
                                 ) : (
-                                    <span className="text-[10px] text-red-500 font-bold flex items-center gap-1 bg-white px-2 py-1 rounded border border-red-200 shadow-sm"><ExclamationTriangleIcon className="h-3 w-3"/> Complete ambos parciales</span>
+                                    <span className="text-[10px] text-orange-600 font-bold flex items-center gap-1 bg-white px-2 py-1 rounded border border-orange-200 shadow-sm">
+                                        <ExclamationTriangleIcon className="h-3 w-3"/> Califique a TODOS ({totalMatriculados}) los estudiantes
+                                    </span>
                                 )}
                             </div>
                             
                             <textarea 
                                 rows="4"
-                                disabled={!hayCalificaciones}
-                                className={`w-full px-4 py-3 border rounded-lg outline-none text-sm resize-none transition-all ${hayCalificaciones ? 'border-blue-200 bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-300' : 'border-gray-300 bg-gray-200 text-gray-500 cursor-not-allowed'}`}
-                                placeholder={hayCalificaciones ? `Escriba aquí sus conclusiones sobre el desarrollo de la habilidad "${itemActual.habilidad}" en el curso...` : "Debe calificar el 1er y 2do parcial para habilitar el análisis."}
+                                // Opcional: Bloquear escritura si no está completo
+                                disabled={!habilitarEscritura} 
+                                className={`w-full px-4 py-3 border rounded-lg outline-none text-sm resize-none transition-all ${habilitarEscritura ? 'border-blue-200 bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-300' : 'border-gray-300 bg-gray-200 text-gray-500 cursor-not-allowed'}`}
+                                placeholder={habilitarEscritura ? `Escriba aquí sus conclusiones sobre el desarrollo de la habilidad "${itemActual.habilidad}" en el curso...` : "Debe calificar a TODOS los estudiantes en ambos parciales para habilitar el análisis."}
                                 value={conclusiones[keyTextAreaActual] || ''}
                                 onChange={(e) => {
-                                    if (keyTextAreaActual && hayCalificaciones) {
+                                    if (keyTextAreaActual && habilitarEscritura) {
                                         setConclusiones(prev => ({ ...prev, [keyTextAreaActual]: e.target.value }));
                                     }
                                 }}

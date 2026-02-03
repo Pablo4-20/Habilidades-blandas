@@ -89,15 +89,17 @@ class ReporteGeneralController extends Controller
                 if (!$asignacion->asignatura) continue;
 
                 $nombreDocente = $asignacion->docente ? ($asignacion->docente->nombres . ' ' . $asignacion->docente->apellidos) : 'Sin Asignar';
-                // Convertimos el ciclo a número para que el PDF agrupe bien (ej. 1, 2, 3 en vez de "Ciclo I")
+                // Convertimos el ciclo a número para que el PDF agrupe bien
                 $cicloNumerico = $this->_convertirCiclo($asignacion->asignatura->ciclo->nombre ?? '');
                 
                 // 2. BUSCAR PLANIFICACIONES (Solo Parcial 2 o General)
+                // --- CORRECCIÓN: Filtramos también por PARALELO para no mezclar A y B ---
                 $planes = Planificacion::with(['detalles.habilidad'])
                     ->where('asignatura_id', $asignacion->asignatura_id)
                     ->where('docente_id', $asignacion->docente_id)
                     ->where('periodo_academico', $request->periodo)
-                    ->where('parcial', '2') // Generalmente el reporte final es del parcial 2, o puedes quitar esto si quieres ambos
+                    ->where('paralelo', $asignacion->paralelo) // <--- FILTRO CLAVE AGREGADO
+                    ->where('parcial', '2') 
                     ->get();
 
                 // Si no hay planes, enviamos fila vacía para que conste que no se hizo
@@ -106,16 +108,17 @@ class ReporteGeneralController extends Controller
                         'id_planificacion' => null,
                         'id_habilidad' => null,
                         'asignatura' => $asignacion->asignatura->nombre,
+                        'paralelo' => $asignacion->paralelo, // <--- DATO NUEVO
                         'carrera' => $asignacion->asignatura->carrera->nombre ?? '',
                         'ciclo' => $cicloNumerico,
                         'docente' => $nombreDocente,
                         'habilidad' => 'Sin Planificar',
                         'estado' => 'Pendiente',
                         'progreso' => 0,
-                        'cumplimiento' => '0%', // REQUERIDO POR FRONTEND
+                        'cumplimiento' => '0%',
                         'promedio' => 0,
                         'conclusion' => 'Docente no ha planificado.',
-                        'n1'=>0, 'n2'=>0, 'n3'=>0, 'n4'=>0, 'n5'=>0, // REQUERIDO POR FRONTEND
+                        'n1'=>0, 'n2'=>0, 'n3'=>0, 'n4'=>0, 'n5'=>0,
                         'detalle_estudiantes' => [], 
                         'sort_asignatura' => $asignacion->asignatura->nombre,
                         'sort_parcial' => 0
@@ -128,8 +131,6 @@ class ReporteGeneralController extends Controller
                 $idsEstudiantes = $estudiantes->pluck('id');
 
                 foreach ($planes as $plan) {
-                    // Si tienes ambos parciales y quieres diferenciarlos, descomenta:
-                    // $nombreAsignaturaPlan = $asignacion->asignatura->nombre . ' (P' . $plan->parcial . ')';
                     $nombreAsignaturaPlan = $asignacion->asignatura->nombre;
 
                     if ($plan->detalles->isEmpty()) continue;
@@ -147,17 +148,15 @@ class ReporteGeneralController extends Controller
                             ->where('habilidad_blanda_id', $detalle->habilidad_blanda_id)
                             ->get();
 
-                        // --- CÁLCULO DE ESTADÍSTICAS (LO QUE FALTABA) ---
+                        // --- CÁLCULO DE ESTADÍSTICAS ---
                         $conteos = [1=>0, 2=>0, 3=>0, 4=>0, 5=>0];
                         $sumaNotas = 0;
                         $countNotas = 0;
 
                         foreach ($evaluaciones as $eval) {
-                            // Conteo para niveles N1-N5
                             if ($eval->nivel >= 1 && $eval->nivel <= 5) {
                                 $conteos[$eval->nivel]++;
                             }
-                            // Para promedio
                             if ($eval->nivel > 0) {
                                 $sumaNotas += $eval->nivel;
                                 $countNotas++;
@@ -183,17 +182,17 @@ class ReporteGeneralController extends Controller
                             'id_planificacion' => $plan->id,
                             'id_habilidad' => $detalle->habilidad_blanda_id,
                             'asignatura' => $nombreAsignaturaPlan,
+                            'paralelo' => $asignacion->paralelo, // <--- DATO NUEVO
                             'carrera' => $asignacion->asignatura->carrera->nombre ?? '',
                             'ciclo' => $cicloNumerico,
                             'docente' => $nombreDocente,
                             'habilidad' => $nombreHabilidad,
                             'estado' => $estado,
                             'progreso' => $progreso,
-                            'cumplimiento' => $progreso . '%', // AÑADIDO: Formato string para PDF
+                            'cumplimiento' => $progreso . '%',
                             'promedio' => $promedioCurso,
                             'conclusion' => $reporteDB ? $reporteDB->conclusion_progreso : '', 
                             
-                            // AÑADIDO: Contadores individuales
                             'n1' => $conteos[1],
                             'n2' => $conteos[2],
                             'n3' => $conteos[3],
@@ -207,10 +206,11 @@ class ReporteGeneralController extends Controller
                 }
             }
 
-            // Ordenar: Primero por ciclo, luego por asignatura
+            // Ordenar: Primero por ciclo, luego por asignatura, luego por paralelo
             $filasOrdenadas = collect($filas)->sortBy([
                 ['ciclo', 'asc'],
-                ['sort_asignatura', 'asc']
+                ['sort_asignatura', 'asc'],
+                ['paralelo', 'asc'] // <--- Ordenar también por paralelo
             ])->values();
 
             return response()->json(['info' => $info, 'filas' => $filasOrdenadas]);

@@ -146,10 +146,16 @@ const Matriculacion = () => {
         if (!fileToUpload) return Swal.fire('Error', 'Selecciona un archivo', 'warning');
         if (!periodoActivo) return Swal.fire('Error', 'No hay periodo activo', 'error'); 
         
-        Swal.fire({ title: 'Procesando...', text: 'Distribuyendo estudiantes por ciclos...', didOpen: () => Swal.showLoading() });
+        Swal.fire({ 
+            title: 'Procesando...', 
+            text: 'Analizando archivo y matriculando...', 
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading() 
+        });
         
         try {
             let fileToSend = fileToUpload;
+            // Conversión Excel a CSV si es necesario
             if (fileToUpload.name.endsWith('.xlsx') || fileToUpload.name.endsWith('.xls')) {
                 const data = await fileToUpload.arrayBuffer();
                 const workbook = XLSX.read(data);
@@ -165,12 +171,24 @@ const Matriculacion = () => {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
 
-            Swal.fire('Éxito', res.data.message, 'success');
+            // Determinar icono según si hubo procesados o puras advertencias
+            const iconType = res.data.status === 'warning' ? 'warning' : 'success';
+
+            // Mostrar resultado detallado con formato (pre-line respeta los \n del backend)
+            Swal.fire({
+                title: res.data.status === 'warning' ? 'Atención' : 'Proceso Terminado',
+                html: `<pre style="text-align: left; font-family: sans-serif; white-space: pre-wrap;">${res.data.message}</pre>`,
+                icon: iconType,
+                confirmButtonText: 'Entendido'
+            });
+
             setFileToUpload(null);
             setShowModalCarga(false);
             fetchMatriculados();
+            
         } catch (error) {
-            Swal.fire('Error', error.response?.data?.message || 'Falló la importación', 'error');
+            console.error(error);
+            Swal.fire('Error', error.response?.data?.message || 'Falló la importación del archivo.', 'error');
         }
     };
 

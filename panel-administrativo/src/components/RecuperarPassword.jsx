@@ -19,7 +19,7 @@ const RecuperarPassword = () => {
         setLoading(true);
 
         try {
-            // Enviamos la cédula al backend
+            
             await api.post('/forgot-password', { cedula });
             
             Swal.fire({
@@ -70,7 +70,7 @@ const RecuperarPassword = () => {
 
                 
 
-                {/* --- 3. FORMULARIO GRANDE (BIG CARD) --- */}
+                {/* --- 3. FORMULARIO GRANDE  */}
                 <div className="w-full max-w-xl"> 
                     <div className="bg-white/5 p-4 rounded-[2rem] backdrop-blur-md border border-white/10 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)]">
                         <div className="bg-white rounded-[1.5rem] p-8 md:p-14 w-full relative overflow-hidden">
@@ -84,7 +84,7 @@ const RecuperarPassword = () => {
                             </div>
 
                             <form onSubmit={handleSubmit} className="space-y-8">
-                                {/* Input Cédula - TAMAÑO GRANDE */}
+                                {/* Input Cédula  */}
                                 <div>
                                     <label className="block text-lg font-semibold text-gray-800 mb-3">Cédula de Identidad</label>
                                     <div className="relative">
@@ -97,14 +97,14 @@ const RecuperarPassword = () => {
                                             placeholder="Ej: 0201234567"
                                             required
                                         />
-                                        {/* Icono decorativo dentro del input */}
+                                        
                                         <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400">
                                             <IdCardIcon />
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Botón Submit - TAMAÑO GRANDE */}
+                                {/* Botón Submit  */}
                                 <button 
                                     type="submit" 
                                     disabled={loading}

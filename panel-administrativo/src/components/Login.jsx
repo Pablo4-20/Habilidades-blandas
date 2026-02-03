@@ -21,7 +21,7 @@ const Login = () => {
     const navigate = useNavigate();
     const location = useLocation(); 
 
-    // --- NUEVO EFECTO: BLOQUEAR BOTÓN ATRÁS ---
+    //  BLOQUEAR BOTÓN ATRÁS ---
     // Esto impide que el usuario regrese al dashboard después de cerrar sesión
     useEffect(() => {
         // 1. Empujamos el estado actual al historial
@@ -139,14 +139,14 @@ const Login = () => {
                 <div className="text-center w-full max-w-7xl animate-fade-in-down">
                     
                     {/* TÍTULO EN UNA SOLA LÍNEA  */}
-                    {/* Usamos whitespace-nowrap en md+ para forzar una línea */}
+                  
                     <h1 className="text-3xl md:text-5xl lg:text-6xl font-extrabold text-white mb-6 tracking-tight md:whitespace-nowrap">
                         Desarrollo de <span className="text-[#D90429]">Habilidades Blandas</span>
                     </h1>
 
                 </div>
 
-                {/* --- 3. FORMULARIO GRANDE (BIG CARD) --- */}
+                {/* --- 3. FORMULARIO GRANDE  */}
                 <div className="w-full max-w-xl"> 
                     <div className="bg-white/5 p-4 rounded-[2rem] backdrop-blur-md border border-white/10 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)]">
                         <div className="bg-white rounded-[1.5rem] p-8 md:p-14 w-full relative overflow-hidden">
@@ -168,7 +168,7 @@ const Login = () => {
                             )}
 
                             <form onSubmit={handleLogin} className="space-y-8">
-                                {/* Input Email - TAMAÑO GRANDE */}
+                                {/* Input Email */}
                                 <div>
                                     <label className="block text-lg font-semibold text-gray-800 mb-3">Correo Institucional</label>
                                     <input 
@@ -181,7 +181,7 @@ const Login = () => {
                                     />
                                 </div>
 
-                                {/* Input Password - TAMAÑO GRANDE */}
+                                {/* Input Password  */}
                                 <div>
                                     <div className="flex justify-between items-center mb-3">
                                         <label className="block text-lg font-semibold text-gray-800">Contraseña</label>
@@ -210,7 +210,7 @@ const Login = () => {
                                     </div>
                                 </div>
 
-                                {/* Botón Submit - TAMAÑO GRANDE */}
+                                {/* Botón Submit  */}
                                 <button 
                                     type="submit" 
                                     disabled={isLoading}

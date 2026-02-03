@@ -4,9 +4,9 @@ import api from '../services/api';
 import Swal from 'sweetalert2';
 
 const RestablecerPassword = () => {
-    const { token } = useParams(); // Token de la URL
+    const { token } = useParams(); 
     const [searchParams] = useSearchParams();
-    const email = searchParams.get('email'); // Email de la URL (?email=...)
+    const email = searchParams.get('email'); 
     const navigate = useNavigate();
 
     const [password, setPassword] = useState('');
@@ -37,7 +37,7 @@ const RestablecerPassword = () => {
                 text: 'Ya puedes ingresar con tu nueva clave.',
                 confirmButtonColor: '#2563EB'
             }).then(() => {
-                navigate('/'); // Redirigir al login
+                navigate('/'); 
             });
 
         } catch (error) {

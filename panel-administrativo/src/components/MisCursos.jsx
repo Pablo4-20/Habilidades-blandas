@@ -54,10 +54,10 @@ const MisCursos = () => {
     const handleSeleccionarMateria = async (materia) => {
         setMateriaSeleccionada(materia);
         setLoading(true);
-        setCurrentPage(1); // Reset paginación
-        setBusqueda('');   // Reset búsqueda
+        setCurrentPage(1); 
+        setBusqueda('');   
         try {
-            // [CAMBIO CLAVE] Enviamos el paralelo en la URL para que el backend filtre
+            
             const paralelo = materia.paralelo || 'A';
             const res = await api.get(`/docente/curso/${materia.asignatura_id}/${paralelo}/estudiantes`);
             setEstudiantes(res.data);
@@ -129,7 +129,7 @@ const MisCursos = () => {
                 await api.post('/docente/agregar-estudiante', {
                     cedula: cedula,
                     asignatura_id: materiaSeleccionada.asignatura_id,
-                    paralelo: materiaSeleccionada.paralelo // [OPCIONAL] Si quisieras enviar paralelo también
+                    paralelo: materiaSeleccionada.paralelo 
                 });
                 exitos++;
             } catch (e) { errores++; }
@@ -216,11 +216,11 @@ const MisCursos = () => {
                                 <div className="bg-white p-2 space-y-1">
                                     {grupo.materias.map(m => (
                                         <button 
-                                            // [CAMBIO CLAVE] Key única combinando ID y Paralelo
+                                           
                                             key={`${m.asignatura_id}-${m.paralelo}`} 
                                             onClick={() => handleSeleccionarMateria(m)}
                                             className={`w-full text-left p-2 rounded-lg transition ${
-                                                // Comparar tanto asignatura como paralelo para marcar activo
+                                               
                                                 (materiaSeleccionada?.asignatura_id === m.asignatura_id && materiaSeleccionada?.paralelo === m.paralelo)
                                                 ? 'bg-blue-600 text-white shadow-md' 
                                                 : 'hover:bg-gray-50 text-gray-600'
@@ -348,7 +348,7 @@ const MisCursos = () => {
                 )}
             </main>
 
-            {/* MODAL (Sin cambios funcionales, solo se incluye para que el archivo esté completo) */}
+            {/* MODAL  */}
             {showModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col h-[80vh]">

@@ -254,7 +254,7 @@ const PlanificacionDocente = () => {
         for (let id of habilidadesSeleccionadas) {
             const nombreHab = catalogoHabilidades.find(h => h.id === id)?.nombre;
             if (!resultadosAprendizaje[id] || resultadosAprendizaje[id].trim().length < 5) {
-                return Swal.fire('Información Incompleta', `Debes definir un Resultado de Aprendizaje válido para: ${nombreHab}`, 'warning');
+                return Swal.fire('Información Incompleta', `Debe definir un Resultado de Aprendizaje válido para: ${nombreHab}`, 'warning');
             }
             if (!actividadesPorHabilidad[id] || actividadesPorHabilidad[id].length === 0) {
                 return Swal.fire('Faltan actividades', `Selecciona actividades para: ${nombreHab}`, 'warning');

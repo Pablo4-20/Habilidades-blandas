@@ -10,7 +10,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use App\Rules\ValidaCedula;
-// Importamos la notificación personalizada
 use App\Notifications\CredencialesVerificacion; 
 
 class UserController extends Controller
@@ -20,9 +19,9 @@ class UserController extends Controller
         return User::with('carrera')->orderBy('id', 'desc')->get();
     }
 
-    // 2. Crear un nuevo usuario manualmente
     public function store(Request $request)
     {
+        // ... (Tu código de store se mantiene igual) ...
         $request->validate([
             'cedula'    => ['required', 'unique:users,cedula', new ValidaCedula],
             'nombres'   => 'required|string',   
@@ -30,8 +29,6 @@ class UserController extends Controller
             'email'     => ['required', 'email','unique:users,email','regex:/^.+@(ueb\.edu\.ec|mailes\.ueb\.edu\.ec)$/i'],
             'rol'       => 'required|in:admin,coordinador,docente,estudiante',
             'carrera_id'=> 'nullable|exists:carreras,id' 
-        ], [
-            'email.regex' => 'El correo debe pertenecer al dominio ueb.edu.ec o mailes.ueb.edu.ec'
         ]);
 
         if (Estudiante::where('cedula', $request->cedula)->exists()) {
@@ -39,8 +36,6 @@ class UserController extends Controller
         }
 
         $carreraId = ($request->rol === 'coordinador') ? $request->carrera_id : null;
-        
-        // 1. Capturamos la contraseña PLANA antes de encriptar
         $rawPassword = $request->password ?? 'password'; 
 
         $user = User::create([
@@ -48,30 +43,25 @@ class UserController extends Controller
             'nombres'   => mb_convert_case($request->nombres, MB_CASE_TITLE, "UTF-8"), 
             'apellidos' => mb_convert_case($request->apellidos, MB_CASE_TITLE, "UTF-8"),
             'email'     => $request->email,
-            'password'  => Hash::make($rawPassword), // Aquí se guarda encriptada
+            'password'  => Hash::make($rawPassword), 
             'rol'       => $request->rol,
             'carrera_id'=> $carreraId,
             'must_change_password' => true
         ]);
 
-        // 2. Enviamos la notificación personalizada con la clave plana
-        // NOTA: Quitamos 'event(new Registered($user))' para que no envíe doble correo
         $user->notify(new CredencialesVerificacion($rawPassword));
-
-        return response()->json(['message' => 'Usuario creado y credenciales enviadas', 'user' => $user]);
+        return response()->json(['message' => 'Usuario creado', 'user' => $user]);
     }
 
     public function destroy($id)
     {
-        if (auth()->id() == $id) {
-            return response()->json(['message' => 'No puedes eliminar tu propia cuenta.'], 403);
-        }
+        if (auth()->id() == $id) return response()->json(['message' => 'No puedes eliminarte.'], 403);
         $user = User::findOrFail($id);
         $user->delete();
-        return response()->json(['message' => 'Usuario eliminado correctamente']);
+        return response()->json(['message' => 'Eliminado']);
     }
 
-    // --- CARGA MASIVA INTELIGENTE ---
+    // --- CARGA MASIVA CORREGIDA ---
     public function import(Request $request)
     {
         $request->validate(['file' => 'required|file']);
@@ -85,21 +75,22 @@ class UserController extends Controller
             return str_getcsv($linea, $separador);
         }, file($file->getRealPath()));
 
-        array_shift($data); 
+        array_shift($data); // Quitar cabecera
 
-        $count = 0;
+        $creados = 0;       // Renombrado de $count a $creados para claridad
         $actualizados = 0;
+        $errores = [];
 
         foreach ($data as $index => $row) {
             if (empty($row) || count($row) < 6) continue;
 
             try {
-                // ... (Lógica de normalización igual que antes) ...
                 $cedulaCSV   = trim($row[0]);
                 $cedulaFinal = str_pad($cedulaCSV, 10, '0', STR_PAD_LEFT);
                 
                 if (Estudiante::where('cedula', $cedulaFinal)->exists()) {
-                    throw new \Exception("La cédula $cedulaFinal ya está registrada como Estudiante.");
+                    $errores[] = "Fila " . ($index + 1) . ": Cédula registrada como estudiante.";
+                    continue;
                 }
 
                 $nombresFinal   = mb_convert_case(trim($row[1]), MB_CASE_TITLE, "UTF-8");
@@ -110,7 +101,8 @@ class UserController extends Controller
                 $carreraId      = null;
 
                 if (!preg_match('/^.+@(ueb\.edu\.ec|mailes\.ueb\.edu\.ec)$/i', $emailFinal)) {
-                    throw new \Exception("El correo $emailFinal no es institucional.");
+                    $errores[] = "Fila " . ($index + 1) . ": Correo no institucional.";
+                    continue;
                 }
 
                 if ($rolFinal === 'coordinador' && $nombreCarrera) {
@@ -118,7 +110,6 @@ class UserController extends Controller
                     if ($carreraObj) $carreraId = $carreraObj->id;
                 }
 
-                // Capturamos la contraseña del CSV
                 $rawPassword = trim($row[4]);
 
                 $usuario = User::where('cedula', $cedulaFinal)
@@ -131,7 +122,7 @@ class UserController extends Controller
                     'nombres'   => $nombresFinal,
                     'apellidos' => $apellidosFinal,
                     'email'     => $emailFinal,
-                    'password'  => bcrypt($rawPassword), // Encriptada para DB
+                    'password'  => bcrypt($rawPassword), 
                     'rol'       => $rolFinal,
                     'carrera_id'=> $carreraId, 
                     'must_change_password' => true
@@ -139,36 +130,32 @@ class UserController extends Controller
 
                 if ($usuario) {
                     $usuario->update($datosUsuario);
-                    // Opcional: ¿Quieres reenviar credenciales al actualizar? 
-                    // Si sí, descomenta la siguiente línea:
-                    // $usuario->notify(new CredencialesVerificacion($rawPassword));
                     $actualizados++;
                 } else {
                     $nuevoUsuario = User::create($datosUsuario);
-                    
-                    // ENVÍO DE CORREO con la contraseña del CSV
                     $nuevoUsuario->notify(new CredencialesVerificacion($rawPassword));
-                    
-                    $count++;
+                    $creados++;
                 }
 
             } catch (\Exception $e) {
-                return response()->json([
-                    'message' => "Error en Fila " . ($index + 1) . ": " . $e->getMessage()
-                ], 500);
+                // Ahora capturamos el error en el array en lugar de detener todo
+                $errores[] = "Fila " . ($index + 1) . ": " . $e->getMessage();
             }
         }
 
+        // [CORRECCIÓN CLAVE] Estructura JSON correcta
         return response()->json([
-            'message' => "Proceso completado: $count nuevos, $actualizados actualizados."
+            'message' => "Proceso completado.",
+            'creados' => $creados,
+            'actualizados' => $actualizados,
+            'errores' => $errores
         ]);
     }
     
-    // 4. Actualizar usuario (Se mantiene igual)
     public function update(Request $request, string $id)
     {
+        // ... (Tu código de update se mantiene igual) ...
         $user = User::findOrFail($id);
-
         $request->validate([
             'cedula'    => ['required', Rule::unique('users', 'cedula')->ignore($user->id), new ValidaCedula],
             'nombres'   => 'required|string',
@@ -176,30 +163,14 @@ class UserController extends Controller
             'email'     => ['required', 'email', Rule::unique('users', 'email')->ignore($user->id), 'regex:/^.+@(ueb\.edu\.ec|mailes\.ueb\.edu\.ec)$/i'],
             'rol'       => 'required',
             'carrera_id'=> 'nullable|exists:carreras,id'
-        ], [
-            'email.regex' => 'El correo debe pertenecer al dominio ueb.edu.ec o mailes.ueb.edu.ec'
         ]);
 
         $data = $request->except(['password']);
+        if ($request->filled('nombres')) $data['nombres'] = mb_convert_case($request->nombres, MB_CASE_TITLE, "UTF-8");
+        if ($request->filled('apellidos')) $data['apellidos'] = mb_convert_case($request->apellidos, MB_CASE_TITLE, "UTF-8");
+        if ($request->filled('password')) $data['password'] = Hash::make($request->password);
         
-        if ($request->filled('nombres')) {
-            $data['nombres'] = mb_convert_case($request->nombres, MB_CASE_TITLE, "UTF-8");
-        }
-        if ($request->filled('apellidos')) {
-            $data['apellidos'] = mb_convert_case($request->apellidos, MB_CASE_TITLE, "UTF-8");
-        }
-
-        if ($request->filled('password')) {
-            $data['password'] = Hash::make($request->password);
-            // Si quieres que al cambiar clave manualmente también le llegue correo, 
-            // agrégalo aquí usando $request->password
-        }
-
-        if ($request->rol === 'coordinador') {
-            $data['carrera_id'] = $request->carrera_id;
-        } else {
-            $data['carrera_id'] = null;
-        }
+        $data['carrera_id'] = ($request->rol === 'coordinador') ? $request->carrera_id : null;
 
         $user->update($data);
         return response()->json($user);

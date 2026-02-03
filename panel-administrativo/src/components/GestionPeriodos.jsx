@@ -27,12 +27,12 @@ const GestionPeriodos = () => {
             const res = await api.get('/periodos');
             const data = Array.isArray(res.data) ? res.data : [];
             
-            // Ordenar por fecha de inicio descendente (más reciente primero)
+            // Ordenar por fecha_inicio descendente
             data.sort((a, b) => new Date(b.fecha_inicio) - new Date(a.fecha_inicio));
             
             setPeriodos(data);
             
-            // Validar si existe alguno activo
+           
             const existeActivo = data.some(p => p.activo === 1 || p.activo === true);
             setHayActivo(existeActivo);
 
@@ -72,7 +72,7 @@ const GestionPeriodos = () => {
         e.preventDefault();
         
         if (!editingId && hayActivo) {
-            return Swal.fire('Acción Bloqueada', 'Ya existe un periodo activo. Debes finalizarlo antes de crear uno nuevo.', 'warning');
+            return Swal.fire('Acción Bloqueada', 'Ya existe un periodo activo. Debe finalizarlo antes de crear uno nuevo.', 'warning');
         }
 
         try {
@@ -84,7 +84,7 @@ const GestionPeriodos = () => {
                 Swal.fire({
                     icon: 'success',
                     title: 'Periodo Creado',
-                    text: 'El nombre se ha generado automáticamente.'
+                    text: 'El periodo se ha generado automáticamente.'
                 });
             }
             cancelarEdicion();

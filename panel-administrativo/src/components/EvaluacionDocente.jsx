@@ -101,7 +101,7 @@ const EvaluacionDocente = () => {
 
                 if (data.debug_sincronizados === false) {
                     titulo = 'Planificación Desactualizada';
-                    mensaje = 'Has modificado las habilidades en un parcial pero no en el otro. El 1er y 2do Parcial deben tener EXACTAMENTE las mismas habilidades seleccionadas.';
+                    mensaje = 'Ha modificado las habilidades en un parcial pero no en el otro. El 1er y 2do Parcial deben tener EXACTAMENTE las mismas habilidades seleccionadas.';
                 } else if (!data.debug_p1_completo) {
                     mensaje = 'La planificación del Primer Parcial tiene habilidades sin actividades o resultados de aprendizaje.';
                 } else if (!data.debug_p2_completo) {
@@ -400,7 +400,7 @@ const EvaluacionDocente = () => {
             Swal.fire({
                 icon: 'warning',
                 title: 'Parcial Bloqueado',
-                text: 'Debes completar el 100% de las habilidades del Primer Parcial para desbloquear el Segundo Parcial.'
+                text: 'Debe completar el 100% de las habilidades del Primer Parcial para desbloquear el Segundo Parcial.'
             });
             return;
         }

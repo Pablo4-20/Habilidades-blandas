@@ -148,7 +148,6 @@ class HabilidadBlandaController extends Controller
             }
         });
 
-        // --- CORRECCIÓN AQUÍ: MENSAJE CONCATENADO ---
         return response()->json([
             'message' => "Carga exitosa: $habilidadesNuevas nuevas, $habilidadesActualizadas actualizadas. ($actividadesTotal actividades procesadas).",
             'resumen' => [

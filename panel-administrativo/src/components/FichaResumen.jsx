@@ -11,8 +11,8 @@ import {
 
 // --- IMPORTACIÓN DE LOGOS ---
 import logoIzq from '../assets/facultad.png'; 
-import logoSoftware from '../assets/software.png'; // Renombramos para diferenciar
-import logoTec from '../assets/tecnologias.png';   // <--- NUEVO LOGO (Asegúrate que el archivo exista en assets)
+import logoSoftware from '../assets/software.png'; 
+import logoTec from '../assets/tecnologias.png';   
 
 const FichaResumen = () => {
     const [asignacionesRaw, setAsignacionesRaw] = useState([]);

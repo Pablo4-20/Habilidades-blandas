@@ -18,7 +18,7 @@ const ReportesCoordinador = () => {
     const [periodos, setPeriodos] = useState([]);
     const [loading, setLoading] = useState(false);
     
-    // PAGINACIÓN (AJUSTADO A 6)
+    // PAGINACIÓN
     const [currentPage, setCurrentPage] = useState(1);
     const ITEMS_PER_PAGE = 6; 
 
@@ -74,8 +74,14 @@ const ReportesCoordinador = () => {
     // --- PROCESAMIENTO Y PAGINACIÓN ---
     const getSortedData = () => {
         const data = [...reporteData];
-        // Ordenar por Asignatura (A-Z)
-        data.sort((a, b) => a.asignatura.localeCompare(b.asignatura));
+        // Ordenar por Asignatura (A-Z) y Paralelo
+        data.sort((a, b) => {
+            if (a.asignatura < b.asignatura) return -1;
+            if (a.asignatura > b.asignatura) return 1;
+            if (a.paralelo < b.paralelo) return -1;
+            if (a.paralelo > b.paralelo) return 1;
+            return 0;
+        });
         return data;
     };
 
@@ -89,7 +95,7 @@ const ReportesCoordinador = () => {
     const descargarPDF = () => {
         const doc = new jsPDF('l'); 
         const pageWidth = doc.internal.pageSize.getWidth();
-        const pageHeight = doc.internal.pageSize.getHeight(); // Necesario para calcular el pie de página
+        const pageHeight = doc.internal.pageSize.getHeight(); 
         const nombreCarrera = reporteInfo?.carrera || 'Carrera Desconocida';
 
         const gruposPorCiclo = reporteData.reduce((acc, curr) => {
@@ -127,7 +133,8 @@ const ReportesCoordinador = () => {
             doc.text(`CICLO: ${ciclo}`, 15, 45);
 
             const body = gruposPorCiclo[ciclo].map(r => [
-                r.asignatura, 
+                r.asignatura,
+                r.paralelo || '-', // <--- AÑADIDO PARALELO AL PDF
                 r.docente || 'Sin Asignar', 
                 r.habilidad, 
                 r.estado, 
@@ -136,17 +143,17 @@ const ReportesCoordinador = () => {
 
             autoTable(doc, {
                 startY: 48,
-                margin: { bottom: 40 }, // [CAMBIO 1] Margen inferior para no tapar la firma
-                head: [['Asignatura', 'Docente', 'Habilidad', 'Estado', 'Avance']],
+                margin: { bottom: 40 }, 
+                // AÑADIDO ENCABEZADO PARALELO
+                head: [['Asignatura', 'Paralelo', 'Docente', 'Habilidad', 'Estado', 'Avance']],
                 body: body,
                 theme: 'grid',
                 headStyles: { fillColor: [41, 128, 185], halign: 'center' },
                 styles: { fontSize: 9, halign: 'center', valign: 'middle' },
-                columnStyles: { 0: { halign: 'left' }, 1: { halign: 'left' } }
+                columnStyles: { 0: { halign: 'left' }, 2: { halign: 'left' } } // Ajustar alineación nombre docente
             });
         });
 
-        // [CAMBIO 2] Agregar Pie de Página en TODAS las hojas
         const totalPagesDoc = doc.internal.getNumberOfPages();
         const fechaActual = new Date().toLocaleDateString('es-ES', { 
             year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' 
@@ -156,9 +163,9 @@ const ReportesCoordinador = () => {
             doc.setPage(i);
             
             // --- FIRMA COORDINADOR (Izquierda) ---
-            doc.setDrawColor(0); // Color negro
+            doc.setDrawColor(0); 
             doc.setLineWidth(0.5);
-            doc.line(15, pageHeight - 30, 85, pageHeight - 30); // Línea de firma
+            doc.line(15, pageHeight - 30, 85, pageHeight - 30); 
             
             doc.setFontSize(10);
             doc.setTextColor(0);
@@ -166,11 +173,8 @@ const ReportesCoordinador = () => {
 
             // --- FECHA DE GENERACIÓN (Derecha) ---
             doc.setFontSize(9);
-            doc.setTextColor(100); // Gris
+            doc.setTextColor(100); 
             doc.text(`Generado el: ${fechaActual}`, pageWidth - 15, pageHeight - 23, { align: 'right' });
-            
-            // Opcional: Número de página al centro
-            // doc.text(`Página ${i} de ${totalPagesDoc}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
         }
         
         doc.save(`Reporte_Habilidades_${filtroPeriodo}.pdf`);
@@ -274,6 +278,9 @@ const ReportesCoordinador = () => {
                         <thead className="bg-white sticky top-0 z-10">
                             <tr>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Asignatura</th>
+                                {/* --- COLUMNA NUEVA --- */}
+                                <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase">Paralelo</th>
+                                {/* --------------------- */}
                                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Docente</th>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Habilidad</th>
                                 <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase">Estado</th>
@@ -281,8 +288,8 @@ const ReportesCoordinador = () => {
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-50">
-                            {loading ? <tr><td colSpan="5" className="text-center py-12 text-gray-400">Cargando...</td></tr> : 
-                             currentItems.length === 0 ? <tr><td colSpan="5" className="text-center py-12 text-gray-400 italic">No se encontraron datos.</td></tr> :
+                            {loading ? <tr><td colSpan="6" className="text-center py-12 text-gray-400">Cargando...</td></tr> : 
+                             currentItems.length === 0 ? <tr><td colSpan="6" className="text-center py-12 text-gray-400 italic">No se encontraron datos.</td></tr> :
                              currentItems.map((r, i) => (
                                 <tr key={`${r.id}-${i}`} className="hover:bg-blue-50/30 transition">
                                     <td className="px-6 py-4 align-top">
@@ -292,6 +299,13 @@ const ReportesCoordinador = () => {
                                             <span className="bg-gray-100 px-2 py-0.5 rounded">{r.ciclo}</span>
                                         </div>
                                     </td>
+                                    {/* --- CELDA NUEVA --- */}
+                                    <td className="px-6 py-4 align-top text-center">
+                                        <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-md text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                            {r.paralelo || '-'}
+                                        </span>
+                                    </td>
+                                    {/* ------------------- */}
                                     <td className="px-6 py-4 align-top text-sm text-gray-700 font-medium">
                                         {r.docente || <span className="text-gray-400 italic">Sin asignar</span>}
                                     </td>

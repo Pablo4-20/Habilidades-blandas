@@ -60,7 +60,6 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
             { name: 'Asignar Materias', path: '/dashboard/asignaciones', icon: AcademicCapIcon },
             { name: 'Matriculación', path: '/dashboard/matriculacion', icon: UserPlusIcon },      
             { name: 'Reportes Generales', path: '/dashboard/reportes', icon: DocumentChartBarIcon },
-            // --- NUEVA OPCIÓN AGREGADA ---
             { name: 'Ficha Resumen', path: '/dashboard/ficha-resumen-coordinador', icon: ClipboardDocumentListIcon },
         ],
         docente: [
@@ -68,7 +67,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
             { name: 'Mis Cursos', path: '/dashboard/mis-cursos', icon: BookOpenIcon },
             { name: 'Planificación', path: '/dashboard/planificacion', icon: ClipboardDocumentCheckIcon },
             { name: 'Calificar', path: '/dashboard/evaluacion', icon: UsersIcon },
-            { name: 'Mis Observaciones HB', path: '/dashboard/reportes-docente', icon: DocumentChartBarIcon },
+            { name: 'Observaciones HB', path: '/dashboard/reportes-docente', icon: DocumentChartBarIcon },
             { name: 'Fichas Resumen', path: '/dashboard/fichas-resumen', icon: DocumentCheckIcon },
         ]
     };

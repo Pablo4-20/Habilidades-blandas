@@ -16,13 +16,13 @@ const FichaResumenCoordinador = () => {
     const [periodos, setPeriodos] = useState([]);
     const [loading, setLoading] = useState(false);
     
-    // Solo manejamos filtro de periodo, carrera es automática por el usuario logueado
+    
     const [filtroPeriodo, setFiltroPeriodo] = useState('');
 
     useEffect(() => {
         const fetchPeriodos = async () => {
             try {
-                // CORRECCIÓN: Usar /periodos/activos para detectar el activo automáticamente
+                
                 const res = await api.get('/periodos/activos');
                 const lista = Array.isArray(res.data) ? res.data : [];
                 setPeriodos(lista);
@@ -45,7 +45,7 @@ const FichaResumenCoordinador = () => {
     const fetchDatos = async () => {
         setLoading(true);
         try {
-            // CORRECCIÓN: Enviamos es_coordinador: true para que el backend no filtre por docente
+            
             const res = await api.post(`/reportes/pdf-data-general`, {
                 periodo: filtroPeriodo,
                 es_coordinador: true 

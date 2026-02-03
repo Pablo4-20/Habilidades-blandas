@@ -11,12 +11,12 @@ const RoleGuard = ({ allowedRoles }) => {
 
     // 3. VERIFICACIÓN CRÍTICA: ¿El rol del usuario está en la lista permitida?
     if (!allowedRoles.includes(user.rol)) {
-        // Si intenta entrar donde no debe, lo regresamos al Dashboard Principal
-        // Esto corrige el problema de "ir hacia atrás" a páginas prohibidas
+        
+        
         return <Navigate to="/dashboard" replace />;
     }
 
-    // 4. Si todo está bien, renderiza la ruta hija (Outlet)
+   
     return <Outlet />;
 };
 

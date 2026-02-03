@@ -180,8 +180,8 @@ const AsignarMaterias = () => {
                 ...initialFormState, 
                 periodo_id: periodoActivo.nombre,
                 carrera_id: carreras.length === 1 ? carreras[0].id : '',
-                docente_id: prev.docente_id, // Mantenemos el docente actual
-                paralelo: 'A' // Reiniciamos paralelo a A por comodidad
+                docente_id: prev.docente_id, 
+                paralelo: 'A' 
             }));
 
         } catch (error) {

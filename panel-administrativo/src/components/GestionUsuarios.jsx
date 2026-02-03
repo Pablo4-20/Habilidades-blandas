@@ -110,7 +110,7 @@ const GestionUsuarios = () => {
         setBusqueda(''); setFiltroRol(''); 
         setFileToUpload(null); setFileName('');
         setErrors({});
-        setCurrentPage(1); // Resetear página al cambiar tab
+        setCurrentPage(1); 
     }, [activeTab]);
 
     const handleTabChange = (tab) => {
@@ -212,7 +212,7 @@ const GestionUsuarios = () => {
         }
     };
 
-    // --- IMPORTACIÓN Y PLANTILLAS (Sin cambios) ---
+    // --- IMPORTACIÓN Y PLANTILLAS 
     const downloadTemplate = () => {
         let data = [];
         let name = "";
@@ -524,7 +524,7 @@ const GestionUsuarios = () => {
                 </div>
             </div>
 
-            {/* MODAL CREAR/EDITAR (Sin cambios funcionales, solo estilo) */}
+            {/* MODAL CREAR/EDITAR */}
             {showModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-fade-in">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
@@ -638,7 +638,7 @@ const GestionUsuarios = () => {
                 </div>
             )}
 
-            {/* MODAL IMPORTAR MASIVO (Sin cambios, solo diseño mantenido) */}
+            {/* MODAL IMPORTAR MASIVO  */}
             {showImportModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-4 animate-fade-in">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-8 text-center relative overflow-hidden">

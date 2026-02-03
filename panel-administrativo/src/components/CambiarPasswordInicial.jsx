@@ -33,7 +33,7 @@ const CambiarPasswordInicial = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        if (!isFormValid) return; // Doble seguridad
+        if (!isFormValid) return; 
 
         try {
             await api.post('/change-initial-password', {
@@ -64,7 +64,7 @@ const CambiarPasswordInicial = () => {
         }
     };
 
-    // Componente auxiliar para ítems de la lista de requisitos (AUMENTADO DE TAMAÑO)
+   
     const RequirementItem = ({ fulfilled, text }) => (
         <li className={`flex items-center gap-3 text-base transition-colors duration-300 ${fulfilled ? 'text-green-600 font-bold' : 'text-gray-400'}`}>
             {fulfilled ? (
@@ -78,36 +78,36 @@ const CambiarPasswordInicial = () => {
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-blue-50 p-4">
-            {/* AUMENTADO: max-w-2xl (antes max-w-md), p-12 (antes p-8), border-t-8 */}
+            
             <div className="bg-white p-12 rounded-3xl shadow-2xl w-full max-w-2xl border-t-8 border-blue-900">
                 
                 <div className="flex items-center gap-4 mb-4">
-                    {/* AUMENTADO: p-4 */}
+                    
                     <div className="bg-blue-100 p-4 rounded-xl text-blue-900">
-                        {/* AUMENTADO: h-12 w-12 */}
+                        
                         <ShieldCheckIcon className="h-12 w-12" />
                     </div>
-                    {/* AUMENTADO: text-4xl */}
+                    
                     <h2 className="text-4xl font-bold text-blue-900">Seguridad de Cuenta</h2>
                 </div>
                 
-                {/* AUMENTADO: text-lg */}
+                
                 <p className="text-gray-500 mb-8 text-lg">
                     Configura tu nueva contraseña segura para continuar.
                 </p>
 
-                {/* AUMENTADO: space-y-8 */}
+                
                 <form onSubmit={handleSubmit} className="space-y-8">
                     {/* CAMPO 1: NUEVA CONTRASEÑA */}
                     <div>
-                        {/* AUMENTADO: text-xl */}
+                        
                         <label className="block text-xl font-bold text-gray-700 mb-2">Nueva Contraseña</label>
                         <div className="relative">
                             <input 
                                 type={showPass ? "text" : "password"} 
                                 value={password} 
                                 onChange={e => setPassword(e.target.value)} 
-                                /* AUMENTADO: p-4, text-lg, rounded-xl */
+                                
                                 className="w-full border border-gray-300 p-4 pr-12 rounded-xl focus:ring-4 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-lg" 
                                 placeholder="Ingresa tu clave..."
                                 required 
@@ -117,13 +117,13 @@ const CambiarPasswordInicial = () => {
                                 onClick={() => setShowPass(!showPass)}
                                 className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-blue-600 transition-colors"
                             >
-                                {/* AUMENTADO: h-7 w-7 */}
+                                
                                 {showPass ? <EyeSlashIcon className="h-7 w-7"/> : <EyeIcon className="h-7 w-7"/>}
                             </button>
                         </div>
 
                         {/* LISTA DE REQUISITOS EN TIEMPO REAL */}
-                        {/* AUMENTADO: space-y-2, p-5 */}
+                        
                         <ul className="mt-4 space-y-2 pl-2 bg-gray-50 p-5 rounded-xl border border-gray-100">
                             <RequirementItem fulfilled={validations.minLength} text="Mínimo 8 caracteres" />
                             <RequirementItem fulfilled={validations.hasUpper} text="Al menos una mayúscula (A-Z)" />
@@ -135,14 +135,14 @@ const CambiarPasswordInicial = () => {
 
                     {/* CAMPO 2: CONFIRMAR CONTRASEÑA */}
                     <div>
-                        {/* AUMENTADO: text-xl */}
+                        
                         <label className="block text-xl font-bold text-gray-700 mb-2">Confirmar Contraseña</label>
                         <div className="relative">
                             <input 
                                 type={showConfirmPass ? "text" : "password"} 
                                 value={confirmPassword} 
                                 onChange={e => setConfirmPassword(e.target.value)} 
-                                /* AUMENTADO: p-4, text-lg, rounded-xl */
+                                
                                 className={`w-full border p-4 pr-12 rounded-xl focus:ring-4 outline-none transition-all text-lg ${
                                     confirmPassword.length > 0 
                                         ? validations.match ? 'border-green-500 focus:ring-green-200' : 'border-red-300 focus:ring-red-200'
@@ -156,13 +156,13 @@ const CambiarPasswordInicial = () => {
                                 onClick={() => setShowConfirmPass(!showConfirmPass)}
                                 className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-blue-600 transition-colors"
                             >
-                                {/* AUMENTADO: h-7 w-7 */}
+                                
                                 {showConfirmPass ? <EyeSlashIcon className="h-7 w-7"/> : <EyeIcon className="h-7 w-7"/>}
                             </button>
                         </div>
                         {/* Mensaje de coincidencia */}
                         {confirmPassword.length > 0 && (
-                            // AUMENTADO: text-sm
+                            
                             <div className={`text-sm mt-2 font-bold flex items-center gap-2 ${validations.match ? 'text-green-600' : 'text-red-500'}`}>
                                 {validations.match ? (
                                     <><CheckCircleIcon className="h-5 w-5"/> Las contraseñas coinciden</>
@@ -177,7 +177,7 @@ const CambiarPasswordInicial = () => {
                         <button 
                             type="submit" 
                             disabled={!isFormValid}
-                            /* AUMENTADO: py-5, text-xl, rounded-2xl */
+                            
                             className={`w-full font-bold py-5 rounded-2xl transition shadow-xl flex justify-center items-center gap-3 text-xl ${
                                 isFormValid 
                                 ? 'bg-red-600 hover:bg-red-700 text-white hover:shadow-red-200 cursor-pointer' 

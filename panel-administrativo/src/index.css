@@ -1,3 +1,44 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@media (max-width: 768px) {
+  .overflow-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+    width: 100%;
+  }
+  
+  /* Ajustar inputs y selectores para que no se salgan de la pantalla */
+  input, select {
+    max-width: 100%;
+    font-size: 16px !important; /* Evita zoom automático en iPhone */
+  }
+}
+
+/* 2. Truco para la Barra Lateral (Sidebar) en Móvil sin editar su código */
+@media (max-width: 768px) {
+  /* Cuando la sidebar está "cerrada" (clase w-20), la ocultamos totalmente en vez de mostrarla chiquita */
+  div[class*="w-20"] {
+    width: 0px !important;
+    overflow: hidden !important;
+    border: none !important;
+    padding: 0 !important;
+    opacity: 0 !important;
+  }
+
+  /* Cuando la sidebar está "abierta" (clase w-64), la hacemos flotante (overlay) */
+  div[class*="w-64"] {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 50;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5) !important;
+  }
+}

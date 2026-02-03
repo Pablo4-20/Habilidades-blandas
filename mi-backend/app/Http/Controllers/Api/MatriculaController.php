@@ -41,7 +41,7 @@ class MatriculaController extends Controller
         return response()->json($matriculas);
     }
 
-    // --- CARGA MASIVA (CORREGIDA Y ROBUSTA) ---
+    // --- CARGA MASIVA MEJORADA ---
     public function import(Request $request)
     {
         $request->validate(['file' => 'required|file']);
@@ -61,39 +61,53 @@ class MatriculaController extends Controller
         // Detectar separador automáticamente (si hay ; usa ; si no ,)
         $separador = str_contains($lines[0] ?? '', ';') ? ';' : ',';
 
+        // CONTADORES PARA EL REPORTE
         $procesados = 0;
         $actualizados = 0;
-        $omitidos = 0;
+        $sinCambios = 0;
+        $erroresEstudiante = 0; // Estudiante no existe en BD
+        $erroresCiclo = 0;      // Ciclo no existe en BD
+        $filasTotales = 0;
 
         DB::beginTransaction();
         try {
             foreach ($lines as $index => $linea) {
-                // Saltar líneas vacías
                 if (trim($linea) === '') continue;
                 
                 $row = str_getcsv($linea, $separador);
                 
-                // Saltar cabecera o filas incompletas (Mínimo Cédula, Carrera, Ciclo)
+                // Validación básica de estructura
                 if (count($row) < 3 || strtolower(trim($row[0])) === 'cedula' || strtolower(trim($row[0])) === 'identificacion') continue;
 
+                $filasTotales++;
                 $cedula = trim($row[0]);
                 $carreraFinal = $carreraForzada ? $carreraForzada : trim($row[1]);
                 $cicloNombre = $this->normalizarCiclo(trim($row[2]));
                 
-                // LÓGICA DE PARALELO: Leer columna 3 (4ta posición), limpiar espacios, convertir a mayúscula.
-                // Si está vacía o no existe, predeterminar 'A'.
+                // Lógica Paralelo
                 $rawParalelo = isset($row[3]) ? trim($row[3]) : '';
                 $paralelo = ($rawParalelo !== '') ? strtoupper($rawParalelo) : 'A';
 
-                // 1. Validar Estudiante y Ciclo
+                // 1. Validar existencia del ESTUDIANTE
                 $estudiante = Estudiante::where('cedula', $cedula)->first();
+                if (!$estudiante) {
+                    $erroresEstudiante++; // <--- Contamos el error
+                    continue; 
+                }
+
+                // 2. Validar existencia del CICLO
                 $cicloNuevo = Ciclo::where('nombre', $cicloNombre)->first();
+                if (!$cicloNuevo) {
+                    $erroresCiclo++; // <--- Contamos el error
+                    continue;
+                }
 
-                if (!$estudiante || !$cicloNuevo) continue;
+                // Actualizar carrera si es necesario
+                if ($estudiante->carrera !== $carreraFinal) {
+                    $estudiante->update(['carrera' => $carreraFinal]);
+                }
 
-                $estudiante->update(['carrera' => $carreraFinal]);
-
-                // 2. BUSCAR O CREAR MATRÍCULA
+                // 3. MATRICULAR
                 $matriculaExistente = Matricula::where('estudiante_id', $estudiante->id)
                     ->where('periodo_id', $periodoActivo->id)
                     ->with('ciclo')
@@ -103,7 +117,7 @@ class MatriculaController extends Controller
                     $pesoActual = $this->getPesoCiclo($matriculaExistente->ciclo->nombre);
                     $pesoNuevo = $this->getPesoCiclo($cicloNuevo->nombre);
 
-                    // Actualizar si sube de ciclo O si el ciclo es el mismo pero CAMBIA el paralelo
+                    // Actualizar si sube de ciclo O cambia de paralelo
                     if ($pesoNuevo > $pesoActual || ($pesoNuevo == $pesoActual && $matriculaExistente->paralelo !== $paralelo)) {
                         $matriculaExistente->update([
                             'ciclo_id' => $cicloNuevo->id,
@@ -112,29 +126,47 @@ class MatriculaController extends Controller
                         ]);
                         $actualizados++;
                     } else {
-                        $omitidos++;
+                        $sinCambios++;
                     }
                 } else {
                     Matricula::create([
                         'estudiante_id' => $estudiante->id,
                         'periodo_id'    => $periodoActivo->id,
                         'ciclo_id'      => $cicloNuevo->id,
-                        'paralelo'      => $paralelo, // Ahora sí se guardará gracias al $fillable
+                        'paralelo'      => $paralelo,
                         'fecha_matricula' => now(),
                         'estado'        => 'Activo'
                     ]);
                     $procesados++;
                 }
             }
+            
             DB::commit();
             
+            // CONSTRUIR MENSAJE DETALLADO
+            $mensaje = "Proceso finalizado sobre $filasTotales filas detectadas.\n\n";
+            $mensaje .= "✅ Nuevos Matriculados: $procesados\n";
+            $mensaje .= "🔄 Actualizados: $actualizados\n";
+            
+            // Agregar advertencias si hay errores
+            if ($erroresEstudiante > 0) {
+                $mensaje .= "\n⚠️ $erroresEstudiante filas omitidas: Estudiantes no registrados en el sistema (Gestión Usuarios).";
+            }
+            if ($erroresCiclo > 0) {
+                $mensaje .= "\n⚠️ $erroresCiclo filas omitidas: Ciclo no válido.";
+            }
+            if ($sinCambios > 0) {
+                $mensaje .= "\nℹ️ $sinCambios filas sin cambios (ya estaban matriculados correctamente).";
+            }
+
             return response()->json([
-                'message' => "Proceso completado.\nNuevos: $procesados\nActualizados: $actualizados"
+                'message' => $mensaje,
+                'status' => ($procesados + $actualizados) > 0 ? 'success' : 'warning'
             ]);
 
         } catch (\Exception $e) {
             DB::rollback();
-            return response()->json(['message' => 'Error: ' . $e->getMessage()], 500);
+            return response()->json(['message' => 'Error crítico: ' . $e->getMessage()], 500);
         }
     }
 
