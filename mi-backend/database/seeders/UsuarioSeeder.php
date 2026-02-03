@@ -39,7 +39,7 @@ class UsuarioSeeder extends Seeder
         ['email' => 'car.software@ueb.edu.ec'],
         [
             'cedula' => '0000000002',
-            'nombres' => 'Carrera',
+            'nombres' => 'Coordinador-Software',
             'apellidos' => 'Sofftware',
             'password' => Hash::make('0000000002'),
             'rol' => 'coordinador',
@@ -54,7 +54,7 @@ class UsuarioSeeder extends Seeder
             ['email' => 'car.tecnologias@ueb.edu.ec'],
             [
                 'cedula' => '0000000003',
-                'nombres' => 'Carrera',
+                'nombres' => 'Coordinador-Tecnologías de la Información',
                 'apellidos' => 'Tecnologías de la Información',
                 'password' => Hash::make('0000000003'),
                 'rol' => 'coordinador',
