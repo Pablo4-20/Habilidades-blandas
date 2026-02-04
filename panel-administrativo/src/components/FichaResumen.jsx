@@ -6,7 +6,8 @@ import autoTable from 'jspdf-autotable';
 import CustomSelect from './ui/CustomSelect'; 
 import { 
     PrinterIcon, BookOpenIcon, CalendarDaysIcon, 
-    DocumentCheckIcon, TableCellsIcon, DocumentTextIcon
+    DocumentCheckIcon, TableCellsIcon, DocumentTextIcon,
+    FunnelIcon // <--- Importamos el icono para el filtro
 } from '@heroicons/react/24/outline';
 
 // --- IMPORTACIÓN DE LOGOS ---
@@ -22,6 +23,9 @@ const FichaResumen = () => {
     const [selectedParalelo, setSelectedParalelo] = useState(''); 
     const [selectedPeriodo, setSelectedPeriodo] = useState('');
     
+    // --- NUEVO ESTADO: CARRERA ---
+    const [selectedCarrera, setSelectedCarrera] = useState('Todas'); 
+
     const [loadingGeneral, setLoadingGeneral] = useState(false);
     const [loadingIndividual, setLoadingIndividual] = useState(false);
 
@@ -52,7 +56,7 @@ const FichaResumen = () => {
         setSelectedParalelo(par);
     };
 
-    // Construcción de opciones con Paralelo
+    // Construcción de opciones con Paralelo (Actas Individuales)
     const opcionesMaterias = useMemo(() => {
         if (!selectedPeriodo) return [];
         const delPeriodo = asignacionesRaw.filter(a => a.periodo === selectedPeriodo);
@@ -68,6 +72,18 @@ const FichaResumen = () => {
         ? `${selectedMateriaId}-${selectedParalelo}` 
         : '';
 
+    // --- NUEVO: OPCIONES DE CARRERA (Ficha Resumen) ---
+    const opcionesCarreras = useMemo(() => {
+        if (!asignacionesRaw.length) return [];
+        // Extraer nombres de carreras únicos
+        const carrerasUnicas = [...new Set(asignacionesRaw.map(a => a.carrera).filter(Boolean))];
+        
+        return [
+            { value: 'Todas', label: 'Todas las Carreras' },
+            ...carrerasUnicas.map(c => ({ value: c, label: c }))
+        ];
+    }, [asignacionesRaw]);
+
     // ------------------------------------------------------------------------
     // OPCIÓN 1: FICHA RESUMEN GENERAL (PDF HORIZONTAL)
     // ------------------------------------------------------------------------
@@ -75,11 +91,15 @@ const FichaResumen = () => {
         if (!selectedPeriodo) return;
         setLoadingGeneral(true);
         try {
-            const res = await api.post('/reportes/pdf-data-general', { periodo: selectedPeriodo });
+            // Enviamos el periodo Y la carrera seleccionada
+            const res = await api.post('/reportes/pdf-data-general', { 
+                periodo: selectedPeriodo,
+                carrera: selectedCarrera // <--- FILTRO ENVIADO
+            });
             const { info, filas } = res.data;
 
             if (!filas || filas.length === 0) {
-                Swal.fire('Info', 'No hay datos de ejecución.', 'info');
+                Swal.fire('Info', 'No hay datos de ejecución para la selección actual.', 'info');
                 return;
             }
 
@@ -93,7 +113,6 @@ const FichaResumen = () => {
             });
 
             // --- LÓGICA DE SELECCIÓN DE LOGO ---
-            // Si la carrera contiene "tecnolog" (mayus o minus), usa el logo de tecnología, si no, el de software
             const logoDerecha = (info.carrera && info.carrera.toLowerCase().includes('tecnolog')) 
                                 ? logoTec 
                                 : logoSoftware;
@@ -101,7 +120,6 @@ const FichaResumen = () => {
             // --- ENCABEZADO ---
             const imgW = 20; const imgH = 20; 
             try { doc.addImage(logoIzq, 'PNG', 10, 5, imgW, imgH); } catch (e) {}
-            // Logo dinámico
             try { doc.addImage(logoDerecha, 'PNG', pageWidth - 30, 5, imgW, imgH); } catch (e) {}
 
             doc.setFontSize(14); doc.setTextColor(40, 53, 147);
@@ -216,7 +234,6 @@ const FichaResumen = () => {
                                     : logoSoftware;
 
                 try { doc.addImage(logoIzq, 'PNG', 10, 8, imgW, imgH); } catch (e) {}
-                // Logo dinámico
                 try { doc.addImage(logoDerecha, 'PNG', pageWidth - 30, 8, imgW, imgH); } catch (e) {}
 
                 doc.setFontSize(13); doc.setTextColor(40, 53, 147); 
@@ -408,16 +425,30 @@ const FichaResumen = () => {
                     </button>
                 </div>
 
-                {/* OPCIÓN 2: FICHA RESUMEN DE EJECUCIÓN */}
+                {/* OPCIÓN 2: FICHA RESUMEN DE EJECUCIÓN (MODIFICADO) */}
                 <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center text-center hover:shadow-md transition duration-300 group relative">
                     <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-t-3xl"></div>
                     <div className="bg-blue-50 p-4 rounded-full mb-6 group-hover:scale-110 transition duration-300">
                         <TableCellsIcon className="h-10 w-10 text-blue-600"/>
                     </div>
                     <h3 className="text-xl font-bold text-gray-900 mb-2">Ficha Resumen de Ejecución</h3>
-                    <p className="text-gray-500 text-sm mb-8 px-4">
-                        Documento consolidado con la tabla resumen de <strong>todas sus asignaturas</strong>.
+                    <p className="text-gray-500 text-sm mb-4 px-4">
+                        Documento consolidado con la tabla resumen de <strong>sus asignaturas</strong>.
                     </p>
+                    
+                    {/* --- NUEVO SELECTOR DE CARRERA --- */}
+                    <div className="w-full mb-6 text-left relative z-10">
+                        <CustomSelect 
+                            label="" 
+                            placeholder="Todas las Carreras" 
+                            options={opcionesCarreras} 
+                            value={selectedCarrera} 
+                            onChange={setSelectedCarrera} 
+                            icon={FunnelIcon} 
+                        />
+                    </div>
+                    {/* ---------------------------------- */}
+
                     <button onClick={descargarFichaResumen} disabled={!selectedPeriodo || loadingGeneral} className="w-full mt-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-blue-200 transition transform active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50">
                         {loadingGeneral ? 'Generando...' : <><PrinterIcon className="h-5 w-5"/> Descargar Ficha Resumen</>}
                     </button>

@@ -8,11 +8,13 @@ use App\Models\Evaluacion;
 use App\Models\Reporte;
 use App\Models\Planificacion;
 use App\Models\Asignatura;
+use App\Models\Asignacion; 
 use App\Models\PeriodoAcademico;
 use App\Models\DetalleMatricula;
 use App\Models\Matricula;
 use App\Models\Carrera;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class ReporteController extends Controller
 {
@@ -24,7 +26,7 @@ class ReporteController extends Controller
         $asignatura = Asignatura::with(['carrera', 'ciclo'])->find($asignaturaId);
         if (!$asignatura) return collect();
 
-        // 1. Manuales (Agregados por docente)
+        // 1. Manuales (Agregados por docente en DetalleMatricula)
         $estudiantesDirectos = DetalleMatricula::where('asignatura_id', $asignaturaId)
             ->where('estado_materia', '!=', 'Baja')
             ->whereHas('matricula', function($q) use ($periodoId, $paralelo) {
@@ -36,11 +38,12 @@ class ReporteController extends Controller
             ->map(fn($d) => optional($d->matricula)->estudiante)
             ->filter();
 
-        // 2. Automáticos (Por ciclo y carrera)
+        // IDs que ya están registrados manualmente para no duplicarlos
         $idsConRegistro = DetalleMatricula::where('asignatura_id', $asignaturaId)
             ->whereHas('matricula', fn($q) => $q->where('periodo_id', $periodoId))
             ->pluck('matricula_id');
 
+        // 2. Automáticos (Por ciclo y carrera en Matricula)
         $estudiantesCiclo = collect();
         if ($asignatura->ciclo_id) {
             $queryAutomaticos = Matricula::where('periodo_id', $periodoId)
@@ -84,14 +87,14 @@ class ReporteController extends Controller
     }
 
     // ==========================================
-    // 1. ACTAS INDIVIDUALES (Para el Docente)
+    // 1. ACTAS INDIVIDUALES (Para el Docente - PDF Vertical)
     // ==========================================
     public function datosParaPdf(Request $request)
     {
         $request->validate([
             'asignatura_id' => 'required', 
             'periodo' => 'required',
-            'paralelo' => 'required' // [NUEVO] Requerido
+            'paralelo' => 'required' 
         ]);
         
         $user = $request->user();
@@ -99,16 +102,14 @@ class ReporteController extends Controller
         $periodoObj = PeriodoAcademico::where('nombre', $request->periodo)->first();
         if (!$periodoObj) return response()->json(['message' => 'Periodo no encontrado'], 404);
 
-        // [MODIFICADO] Pasar paralelo al helper
         $estudiantes = $this->_getEstudiantes($request->asignatura_id, $periodoObj->id, $request->paralelo);
         $idsEstudiantes = $estudiantes->pluck('id');
 
-        // [MODIFICADO] Filtrar planificación por paralelo
         $planes = Planificacion::with(['asignatura', 'docente', 'detalles.habilidad'])
             ->where('asignatura_id', $request->asignatura_id)
             ->where('docente_id', $user->id)
             ->where('periodo_academico', $request->periodo)
-            ->where('paralelo', $request->paralelo) // <--- Filtro clave
+            ->where('paralelo', $request->paralelo) 
             ->get();
 
         if ($planes->isEmpty()) {
@@ -123,7 +124,7 @@ class ReporteController extends Controller
             'carrera' => $planes[0]->asignatura->carrera->nombre ?? 'N/A',
             'docente' => $user->nombres . ' ' . $user->apellidos,
             'asignatura' => $planes[0]->asignatura->nombre,
-            'paralelo' => $request->paralelo, // Agregamos info visual
+            'paralelo' => $request->paralelo,
             'ciclo' => $cicloNumerico, 
             'periodo' => $request->periodo,
         ];
@@ -183,7 +184,7 @@ class ReporteController extends Controller
     }
 
     // ==========================================
-    // 2. FICHA RESUMEN GENERAL (PDF Horizontal)
+    // 2. FICHA RESUMEN DE EJECUCIÓN (PDF Horizontal - Coordinador/Docente)
     // ==========================================
     public function pdfDataGeneral(Request $request)
     {
@@ -193,26 +194,20 @@ class ReporteController extends Controller
         $periodoObj = PeriodoAcademico::where('nombre', $request->periodo)->first();
         if (!$periodoObj) return response()->json(['message' => 'Periodo no encontrado'], 404);
 
-        $query = Planificacion::with(['asignatura.carrera', 'asignatura.ciclo', 'docente', 'detalles.habilidad'])
-            ->where('periodo_academico', $request->periodo)
-            ->where('parcial', '2'); 
+        // 1. OBTENER ASIGNACIONES (Fuente principal para mostrar pendientes en 0%)
+        // Utilizamos Asignacion para garantizar que aparezcan materias no planificadas.
+        $query = Asignacion::with(['asignatura.carrera', 'asignatura.ciclo', 'docente'])
+            ->where('periodo', $request->periodo);
 
+        // Si NO es coordinador, filtrar solo las materias del docente autenticado
         if (!$request->es_coordinador) {
             $query->where('docente_id', $user->id);
         }
 
-        // Validación de consistencia administrativa (si borraron la asignación, ocultar el reporte)
-        $query->whereExists(function ($subq) {
-            $subq->select(DB::raw(1))
-                 ->from('asignaciones')
-                 ->whereColumn('asignaciones.docente_id', 'planificaciones.docente_id')
-                 ->whereColumn('asignaciones.asignatura_id', 'planificaciones.asignatura_id')
-                 ->whereColumn('asignaciones.periodo', 'planificaciones.periodo_academico')
-                 ->whereColumn('asignaciones.paralelo', 'planificaciones.paralelo'); // <--- Validar paralelo
-        });
-
+        // --- FILTRO DE CARRERA (CRÍTICO PARA NO MEZCLAR) ---
         $nombreCarreraReporte = 'General';
 
+        // Caso A: Usuario tiene carrera fija (Coordinadores de carrera específica)
         if ($user->carrera_id) {
             $query->whereHas('asignatura.carrera', function($q) use ($user) {
                 $q->where('id', $user->carrera_id);
@@ -220,6 +215,7 @@ class ReporteController extends Controller
             $carreraObj = Carrera::find($user->carrera_id);
             $nombreCarreraReporte = $carreraObj ? $carreraObj->nombre : 'Tu Carrera';
 
+        // Caso B: Filtro dinámico desde el frontend (Select de carrera)
         } elseif ($request->has('carrera') && $request->carrera !== 'Todas') {
             $nombre = $request->carrera;
             $query->whereHas('asignatura.carrera', function($q) use ($nombre) {
@@ -227,87 +223,116 @@ class ReporteController extends Controller
             });
             $nombreCarreraReporte = $nombre;
         }
-        
-        $planes = $query->get();
 
-        if ($nombreCarreraReporte === 'General' && $planes->isNotEmpty()) {
-            $primerPlan = $planes->first();
-            if ($primerPlan->asignatura && $primerPlan->asignatura->carrera) {
-                $nombreCarreraReporte = $primerPlan->asignatura->carrera->nombre;
+        $asignaciones = $query->get();
+
+        // Determinar nombre de carrera visual si es "General" pero hay datos
+        if ($nombreCarreraReporte === 'General' && $asignaciones->isNotEmpty()) {
+            $primerAsig = $asignaciones->first();
+            if ($primerAsig->asignatura && $primerAsig->asignatura->carrera) {
+                $nombreCarreraReporte = $primerAsig->asignatura->carrera->nombre;
             }
         }
-
-        $planes = $planes->sort(function($a, $b) {
-            $cicloA = $this->_convertirCiclo($a->asignatura->ciclo->nombre ?? '');
-            $cicloB = $this->_convertirCiclo($b->asignatura->ciclo->nombre ?? '');
-            if ($cicloA === $cicloB) {
-                return strcmp($a->asignatura->nombre, $b->asignatura->nombre);
-            }
-            return $cicloA <=> $cicloB;
-        });
 
         $filas = [];
         $resultadosAprendizaje = []; 
 
-        foreach ($planes as $plan) {
-            // Se asume que el reporte general agrupa paralelos o muestra filas separadas.
-            // Aquí mostraremos filas separadas por materia y paralelo.
-            $estudiantes = $this->_getEstudiantes($plan->asignatura_id, $periodoObj->id, $plan->paralelo);
-            $idsEstudiantes = $estudiantes->pluck('id');
-            $cicloNumerico = $this->_convertirCiclo($plan->asignatura->ciclo->nombre ?? 'N/A');
+        foreach ($asignaciones as $asignacion) {
+            if (!$asignacion->asignatura) continue;
 
-            foreach ($plan->detalles as $detalle) {
-                
-                if (!empty($detalle->resultado_aprendizaje)) {
-                    $resultadosAprendizaje[] = $detalle->resultado_aprendizaje;
-                }
+            $cicloNumerico = $this->_convertirCiclo($asignacion->asignatura->ciclo->nombre ?? 'N/A');
+            $nombreDocente = $asignacion->docente ? ($asignacion->docente->nombres . ' ' . $asignacion->docente->apellidos) : 'Sin Asignar';
+            $nombreAsignatura = $asignacion->asignatura->nombre . " (" . $asignacion->paralelo . ")";
 
-                if (!$detalle->habilidad) continue;
+            // Buscar Planificación del Parcial 2 (Cierre) para esta asignación y paralelo
+            $planes = Planificacion::with(['detalles.habilidad'])
+                ->where('asignatura_id', $asignacion->asignatura_id)
+                ->where('docente_id', $asignacion->docente_id)
+                ->where('periodo_academico', $request->periodo)
+                ->where('paralelo', $asignacion->paralelo)
+                ->where('parcial', '2') 
+                ->get();
 
-                $evaluaciones = Evaluacion::where('planificacion_id', $plan->id)
-                    ->where('habilidad_blanda_id', $detalle->habilidad_blanda_id)
-                    ->whereIn('estudiante_id', $idsEstudiantes)
-                    ->get();
-
-                $conteos = [1=>0, 2=>0, 3=>0, 4=>0, 5=>0];
-                $sumaNotas = 0;
-                $totalEval = 0;
-
-                foreach ($evaluaciones as $eval) { 
-                    if ($eval->nivel) $conteos[$eval->nivel]++; 
-                    if (isset($eval->nota)) { 
-                        $sumaNotas += $eval->nota; 
-                        $totalEval++; 
-                    }
-                }
-                
-                $promedio = $totalEval > 0 ? round($sumaNotas / $totalEval, 2) : 0;
-                $progreso = ($evaluaciones->count() > 0) ? 100 : 50;
-
-                $reporteDB = Reporte::where('planificacion_id', $plan->id)
-                    ->where('habilidad_blanda_id', $detalle->habilidad_blanda_id)
-                    ->first();
-
-                // Añadimos el paralelo al nombre de la asignatura para distinguirlo en el reporte
-                $nombreAsignatura = $plan->asignatura->nombre . " (" . $plan->paralelo . ")";
-
+            // CASO 1: Sin Planificación (0%)
+            if ($planes->isEmpty()) {
                 $filas[] = [
-                    'id_planificacion' => $plan->id,
-                    'id_habilidad' => $detalle->habilidad_blanda_id,
+                    'id_planificacion' => null,
+                    'id_habilidad' => null,
                     'ciclo'      => $cicloNumerico,
                     'asignatura' => $nombreAsignatura,
-                    'habilidad'  => $detalle->habilidad->nombre,
-                    'n1' => $conteos[1],
-                    'n2' => $conteos[2],
-                    'n3' => $conteos[3],
-                    'n4' => $conteos[4],
-                    'n5' => $conteos[5],
-                    'promedio' => $promedio,
-                    'conclusion' => $reporteDB ? ($reporteDB->conclusion_progreso ?? '') : '', 
-                    'cumplimiento' => $progreso . '%'
+                    'docente'    => $nombreDocente,
+                    'habilidad'  => 'Sin Planificar',
+                    'n1' => 0, 'n2' => 0, 'n3' => 0, 'n4' => 0, 'n5' => 0,
+                    'promedio' => 0,
+                    'conclusion' => '', 
+                    'cumplimiento' => '0%'
                 ];
+                continue;
+            }
+
+            // CASO 2: Con Planificación (50% o 100%)
+            $estudiantes = $this->_getEstudiantes($asignacion->asignatura_id, $periodoObj->id, $asignacion->paralelo);
+            $idsEstudiantes = $estudiantes->pluck('id');
+
+            foreach ($planes as $plan) {
+                foreach ($plan->detalles as $detalle) {
+                    
+                    if (!empty($detalle->resultado_aprendizaje)) {
+                        $resultadosAprendizaje[] = $detalle->resultado_aprendizaje;
+                    }
+
+                    if (!$detalle->habilidad) continue;
+
+                    $evaluaciones = Evaluacion::where('planificacion_id', $plan->id)
+                        ->where('habilidad_blanda_id', $detalle->habilidad_blanda_id)
+                        ->whereIn('estudiante_id', $idsEstudiantes)
+                        ->get();
+
+                    // Estadísticas
+                    $conteos = [1=>0, 2=>0, 3=>0, 4=>0, 5=>0];
+                    $sumaNotas = 0;
+                    $totalEval = 0;
+                    foreach ($evaluaciones as $eval) { 
+                        if ($eval->nivel) $conteos[$eval->nivel]++; 
+                        if (isset($eval->nota)) { $sumaNotas += $eval->nota; $totalEval++; }
+                    }
+                    $promedio = $totalEval > 0 ? round($sumaNotas / $totalEval, 2) : 0;
+
+                    // Verificar Conclusión (Reporte)
+                    $reporteDB = Reporte::where('planificacion_id', $plan->id)
+                        ->where('habilidad_blanda_id', $detalle->habilidad_blanda_id)
+                        ->first();
+                    
+                    $tieneConclusion = $reporteDB && !empty($reporteDB->conclusion_progreso);
+
+                    // LÓGICA DE PROGRESO SOLICITADA:
+                    // - Si tiene plan -> 50%
+                    // - Si tiene conclusión -> 100%
+                    $progreso = $tieneConclusion ? 100 : 50;
+
+                    $filas[] = [
+                        'id_planificacion' => $plan->id,
+                        'id_habilidad' => $detalle->habilidad_blanda_id,
+                        'ciclo'      => $cicloNumerico,
+                        'asignatura' => $nombreAsignatura,
+                        'docente'    => $nombreDocente,
+                        'habilidad'  => $detalle->habilidad->nombre,
+                        'n1' => $conteos[1], 'n2' => $conteos[2], 'n3' => $conteos[3], 'n4' => $conteos[4], 'n5' => $conteos[5],
+                        'promedio' => $promedio,
+                        'conclusion' => $tieneConclusion ? $reporteDB->conclusion_progreso : '', 
+                        'cumplimiento' => $progreso . '%'
+                    ];
+                }
             }
         }
+
+        // Ordenar por ciclo y luego por asignatura
+        $filasOrdenadas = collect($filas)->sort(function($a, $b) {
+            if ($a['ciclo'] === $b['ciclo']) {
+                return strcmp($a['asignatura'], $b['asignatura']);
+            }
+            return $a['ciclo'] <=> $b['ciclo'];
+        })->values();
 
         $info = [
             'carrera' => $nombreCarreraReporte,
@@ -316,11 +341,11 @@ class ReporteController extends Controller
             'resultado_aprendizaje' => implode(" | ", array_unique($resultadosAprendizaje)) 
         ];
 
-        return response()->json(['info' => $info, 'filas' => $filas]);
+        return response()->json(['info' => $info, 'filas' => $filasOrdenadas]);
     }
 
     // ==========================================
-    // 3. GUARDAR OBSERVACIONES (Sin Cambios)
+    // 3. GUARDAR OBSERVACIONES (Masivo)
     // ==========================================
     public function guardarConclusionesMasivas(Request $request)
     {
@@ -353,56 +378,53 @@ class ReporteController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
-            \Log::error("Error guardando reporte: " . $e->getMessage());
+            Log::error("Error guardando reporte: " . $e->getMessage());
             return response()->json(['message' => 'Error al guardar: ' . $e->getMessage()], 500);
         }
     }
 
     // ==========================================
-    // 4. FICHA RESUMEN (ACTA DE CALIFICACIÓN FINAL)
+    // 4. FICHA RESUMEN (ACTA DE CALIFICACIÓN FINAL CON NOTAS)
     // ==========================================
     public function obtenerFichaResumen(Request $request)
     {
         $request->validate([
             'asignatura_id' => 'required',
             'periodo' => 'required',
-            'paralelo' => 'required' // [NUEVO] Requerido para diferenciar A de B
+            'paralelo' => 'required' 
         ]);
 
         $user = $request->user();
         
-        // 1. Validar Periodo
         $periodoObj = PeriodoAcademico::where('nombre', $request->periodo)->first();
         if (!$periodoObj) return response()->json(['message' => 'Periodo no encontrado'], 404);
 
-        // 2. Obtener Estudiantes del Paralelo Específico
+        // Obtener Estudiantes del Paralelo Específico
         $estudiantes = $this->_getEstudiantes($request->asignatura_id, $periodoObj->id, $request->paralelo);
         
-        // 3. Obtener Asignatura
         $asignatura = Asignatura::with(['carrera', 'ciclo'])->find($request->asignatura_id);
         
-        // 4. Obtener Planificaciones (P1 y P2) del Paralelo Específico
+        // Obtener Planificaciones (P1 y P2) del Paralelo Específico
         $planes = Planificacion::with(['detalles.habilidad'])
             ->where('asignatura_id', $request->asignatura_id)
             ->where('docente_id', $user->id)
             ->where('periodo_academico', $request->periodo)
-            ->where('paralelo', $request->paralelo) // [CLAVE] Filtro por paralelo
+            ->where('paralelo', $request->paralelo) 
             ->get();
 
         // Estructurar columnas (Habilidades)
         $columnas = [];
-        $habilidadesMap = []; // Para búsqueda rápida
+        $habilidadesMap = []; 
 
         foreach($planes as $plan) {
             foreach($plan->detalles as $det) {
                 if($det->habilidad) {
                     $key = 'h_' . $det->habilidad->id;
-                    // Evitar duplicados si la habilidad está en ambos parciales
                     if(!isset($habilidadesMap[$key])) {
                         $columna = [
                             'id' => $det->habilidad->id,
                             'nombre' => $det->habilidad->nombre,
-                            'parcial' => $plan->parcial // 1 o 2
+                            'parcial' => $plan->parcial 
                         ];
                         $columnas[] = $columna;
                         $habilidadesMap[$key] = $columna;
@@ -417,7 +439,7 @@ class ReporteController extends Controller
             return ($a['parcial'] < $b['parcial']) ? -1 : 1;
         });
 
-        // 5. Construir Filas (Estudiantes con sus notas)
+        // Construir Filas (Estudiantes con sus notas)
         $filas = $estudiantes->map(function($est) use ($planes) {
             $fila = [
                 'id' => $est->id,
@@ -426,7 +448,6 @@ class ReporteController extends Controller
                 'notas' => []
             ];
 
-            // Buscar notas en todas las planificaciones del paralelo
             foreach($planes as $plan) {
                 $evaluaciones = Evaluacion::where('planificacion_id', $plan->id)
                     ->where('estudiante_id', $est->id)
@@ -437,7 +458,6 @@ class ReporteController extends Controller
                 }
             }
             
-            // Calcular Promedio
             $suma = 0; 
             $count = 0;
             foreach($fila['notas'] as $nota) {
