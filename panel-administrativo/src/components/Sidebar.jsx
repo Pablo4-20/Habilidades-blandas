@@ -1,11 +1,21 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { 
-    HomeIcon, UsersIcon, AcademicCapIcon, ClipboardDocumentCheckIcon, 
-    DocumentChartBarIcon, ArrowRightOnRectangleIcon, ChevronLeftIcon, 
-    ChevronRightIcon, SparklesIcon, BookOpenIcon, CalendarDaysIcon, 
-    DocumentCheckIcon, ClipboardDocumentListIcon, UserPlusIcon 
+    HomeIcon, 
+    UsersIcon, 
+    AcademicCapIcon, 
+    ClipboardDocumentCheckIcon, 
+    DocumentChartBarIcon, 
+    ArrowRightOnRectangleIcon,
+    ChevronLeftIcon,
+    ChevronRightIcon,
+    SparklesIcon,
+    BookOpenIcon,
+    CalendarDaysIcon,
+    DocumentCheckIcon,
+    ClipboardDocumentListIcon 
 } from '@heroicons/react/24/outline';
+import { UserPlusIcon } from '@heroicons/react/24/outline';
 
 const Sidebar = ({ isOpen, toggleSidebar }) => {
     const userStored = localStorage.getItem('user');
@@ -25,7 +35,8 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
             cancelButtonColor: '#9CA3AF',
             confirmButtonText: 'Sí, salir',
             cancelButtonText: 'Cancelar',
-            reverseButtons: true
+            reverseButtons: true,
+            backdrop: `rgba(0,0,0,0.4)`
         }).then((result) => {
             if (result.isConfirmed) {
                 localStorage.clear();
@@ -64,31 +75,31 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     return (
         <>
             {/* FONDO OSCURO (OVERLAY) SOLO PARA MÓVIL */}
-            {/* Se muestra solo si isOpen es true y estamos en móvil (md:hidden) */}
             <div 
                 className={`fixed inset-0 bg-black/50 z-40 transition-opacity duration-300 md:hidden ${
                     isOpen ? 'opacity-100 visible' : 'opacity-0 invisible pointer-events-none'
                 }`}
-                onClick={toggleSidebar} // Cierra al dar click afuera
+                onClick={toggleSidebar} 
             />
 
-            {/* BARRA LATERAL */}
             <div 
                 className={`
-                    fixed top-0 left-0 h-screen bg-white border-r border-gray-200 
+                    fixed top-0 left-0 bg-white border-r border-gray-200 
                     flex flex-col z-50 transition-all duration-300 ease-in-out
                     
-                    /* --- COMPORTAMIENTO MÓVIL --- */
+                    /* CORRECCIÓN 1: Altura dinámica para móviles (evita que la barra del navegador tape el logout) */
+                    h-[100dvh] 
+                    
+                    /* MÓVIL: */
                     w-64 
                     ${isOpen ? 'translate-x-0' : '-translate-x-full'}
                     
-                    /* --- COMPORTAMIENTO ESCRITORIO (md) --- */
-                    /* Anula la traslación del móvil y usa anchos variables */
+                    /* PC: */
                     md:translate-x-0 
                     ${isOpen ? 'md:w-64' : 'md:w-20'}
                 `}
             >
-                {/* HEADER DEL SIDEBAR */}
+                {/* HEADER */}
                 <div className="h-16 flex items-center justify-between px-4 border-b border-gray-100 shrink-0">
                     <h1 className={`font-bold text-blue-700 transition-all duration-200 whitespace-nowrap overflow-hidden ${
                         isOpen ? 'text-xl opacity-100 w-auto' : 'md:text-[0px] md:opacity-0 md:w-0'
@@ -96,14 +107,9 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                         Panel {role === 'admin' ? 'Admin' : 'UEB'}
                     </h1>
                     
-                    {/* Botón de colapsar (Solo visible en escritorio) */}
-                    <button onClick={toggleSidebar} className="hidden md:block p-1.5 rounded-lg bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-blue-600 transition">
+                    {/* Botón cerrar/colapsar */}
+                    <button onClick={toggleSidebar} className="p-1.5 rounded-lg bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-blue-600 transition focus:outline-none">
                         {isOpen ? <ChevronLeftIcon className="h-5 w-5" /> : <ChevronRightIcon className="h-5 w-5" />}
-                    </button>
-                    
-                    {/* Botón cerrar (Solo visible en móvil) */}
-                    <button onClick={toggleSidebar} className="md:hidden p-1.5 rounded-lg text-gray-500 hover:bg-gray-100">
-                        <ChevronLeftIcon className="h-6 w-6" />
                     </button>
                 </div>
 
@@ -116,42 +122,27 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                                 key={item.name}
                                 to={item.path}
                                 onClick={() => {
-                                    // En móvil, cerramos el menú al hacer clic en un enlace
-                                    if (window.innerWidth < 768) toggleSidebar();
+                                    if(window.innerWidth < 768) toggleSidebar();
                                 }}
+                                title={!isOpen ? item.name : ''}
                                 className={`
-                                    flex items-center px-3 py-3 rounded-lg transition-colors duration-200 group relative
+                                    flex items-center px-3 py-3 rounded-lg transition-colors duration-200 group
                                     ${isActive ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}
                                     ${!isOpen ? 'md:justify-center' : ''} 
                                 `}
                             >
-                                <item.icon 
-                                    className={`
-                                        flex-shrink-0 transition-all duration-300 
-                                        ${isActive ? 'text-blue-700' : 'text-gray-400 group-hover:text-gray-600'} 
-                                        ${isOpen ? 'h-5 w-5 mr-3' : 'h-6 w-6'}
-                                    `} 
-                                />
-                                
-                                <span className={`font-medium whitespace-nowrap transition-all duration-300 overflow-hidden ${
-                                    isOpen ? 'w-auto opacity-100' : 'md:w-0 md:opacity-0 absolute'
-                                }`}>
+                                <item.icon className={`flex-shrink-0 transition-all duration-300 ${isActive ? 'text-blue-700' : 'text-gray-400 group-hover:text-gray-600'} ${isOpen ? 'h-5 w-5 mr-3' : 'h-6 w-6'}`} />
+                                <span className={`font-medium whitespace-nowrap transition-all duration-300 overflow-hidden ${isOpen ? 'w-auto opacity-100' : 'md:w-0 md:opacity-0'}`}>
                                     {item.name}
                                 </span>
-                                
-                                {/* Tooltip para modo colapsado en escritorio */}
-                                {!isOpen && (
-                                    <div className="hidden md:group-hover:block absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-xs rounded whitespace-nowrap z-50">
-                                        {item.name}
-                                    </div>
-                                )}
                             </Link>
                         );
                     })}
                 </nav>
 
-                {/* USUARIO */}
-                <div className="p-4 border-t border-gray-200 shrink-0">
+                {/* USUARIO Y LOGOUT */}
+                {/* CORRECCIÓN 2: 'shrink-0' asegura que esta sección nunca se encoja ni se oculte */}
+                <div className="p-4 border-t border-gray-200 shrink-0 bg-white">
                     <div className={`flex items-center ${!isOpen ? 'md:justify-center' : ''}`}>
                         <div className="flex-shrink-0 h-9 w-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold border border-blue-200">
                             {user?.nombres ? user.nombres.charAt(0).toUpperCase() : '?'}
@@ -165,12 +156,12 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                         </div>
 
                         {isOpen && (
-                            <button onClick={handleLogout} className="ml-auto text-gray-400 hover:text-red-600 transition" title="Cerrar Sesión">
+                            <button onClick={handleLogout} className="ml-auto text-gray-400 hover:text-red-600 transition p-2 rounded-full hover:bg-red-50" title="Cerrar Sesión">
                                 <ArrowRightOnRectangleIcon className="h-5 w-5" />
                             </button>
                         )}
                     </div>
-                    {/* Botón logout cuando está colapsado */}
+                    
                     {!isOpen && (
                         <button onClick={handleLogout} className="hidden md:flex mt-4 w-full justify-center text-gray-400 hover:text-red-600 transition" title="Cerrar Sesión">
                             <ArrowRightOnRectangleIcon className="h-6 w-6" />
