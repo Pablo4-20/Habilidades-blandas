@@ -19,7 +19,7 @@ const MisCursos = () => {
     const [loading, setLoading] = useState(false);
     const [busqueda, setBusqueda] = useState('');
 
-    // PAGINACIÓN (LISTAS DE 9)
+    // PAGINACIÓN
     const [currentPage, setCurrentPage] = useState(1);
     const ITEMS_PER_PAGE = 9;
 
@@ -38,15 +38,12 @@ const MisCursos = () => {
         api.get('/docente/mis-cursos')
             .then(res => {
                 setPeriodoNombre(res.data.periodo);
-                
-                // ORDENAR CICLOS (I, II, III...)
                 const ordenCiclos = { 'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5, 'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10 };
                 const cursosOrdenados = (res.data.cursos || []).sort((a, b) => {
                     const valA = ordenCiclos[a.ciclo] || 99;
                     const valB = ordenCiclos[b.ciclo] || 99;
                     return valA - valB;
                 });
-
                 setMenuCursos(cursosOrdenados);
             }).catch(e => console.error("Error cargando menú", e));
     };
@@ -57,7 +54,6 @@ const MisCursos = () => {
         setCurrentPage(1); 
         setBusqueda('');   
         try {
-            
             const paralelo = materia.paralelo || 'A';
             const res = await api.get(`/docente/curso/${materia.asignatura_id}/${paralelo}/estudiantes`);
             setEstudiantes(res.data);
@@ -90,7 +86,6 @@ const MisCursos = () => {
         }
     };
 
-    // LÓGICA DE FILTRADO MODAL
     const estudiantesFiltradosModal = (() => {
         const termino = busquedaModal.toLowerCase();
         const seleccionados = listaGlobalEstudiantes.filter(e => 
@@ -169,7 +164,6 @@ const MisCursos = () => {
         });
     };
 
-    // --- LÓGICA DE FILTRADO Y PAGINACIÓN TABLA PRINCIPAL ---
     const getFilteredData = () => {
         return estudiantes.filter(e => 
             e.nombres.toLowerCase().includes(busqueda.toLowerCase()) || e.cedula.includes(busqueda)
@@ -182,17 +176,24 @@ const MisCursos = () => {
     const indexOfFirstItem = indexOfLastItem - ITEMS_PER_PAGE;
     const currentItems = filtradosListaClase.slice(indexOfFirstItem, indexOfLastItem);
 
-    // Resetear paginación al buscar
     useEffect(() => {
         setCurrentPage(1);
     }, [busqueda]);
 
-
     return (
-        <div className="flex h-[calc(100vh-theme(spacing.24))] -m-6 animate-fade-in bg-gray-50 relative">
-            {/* SIDEBAR DE CURSOS */}
-            <aside className="w-72 bg-white border-r border-gray-200 overflow-y-auto">
-                <div className="p-6 border-b">
+        /* CAMBIO 1: 
+           - 'h-auto': Altura automática en móvil para que crezca y use el scroll de la página.
+           - 'md:h-[calc(100vh...)]': Altura fija en PC para mantener el diseño de panel.
+        */
+        <div className="flex flex-col md:flex-row h-auto md:h-[calc(100vh-theme(spacing.24))] -m-6 animate-fade-in bg-gray-50 relative">
+            
+            {/* CAMBIO 2 - SIDEBAR:
+               - Eliminado 'max-h-48' en móvil.
+               - Ahora usa 'md:overflow-y-auto' y 'md:h-full' solo en escritorio.
+               - En móvil es un bloque normal que empuja el contenido hacia abajo.
+            */}
+            <aside className="w-full md:w-72 bg-white border-b md:border-b-0 md:border-r border-gray-200 shrink-0 md:overflow-y-auto md:h-full">
+                <div className="p-4 md:p-6 border-b sticky top-0 bg-white z-10">
                     <h2 className="font-bold flex items-center gap-2 text-gray-800">
                         <BookOpenIcon className="h-6 w-6 text-blue-600"/> Mis Clases
                     </h2>
@@ -200,7 +201,7 @@ const MisCursos = () => {
                         {periodoNombre || 'Cargando...'}
                     </span>
                 </div>
-                <div className="p-4 space-y-2">
+                <div className="p-3 md:p-4 space-y-2">
                     {menuCursos.map(grupo => (
                         <div key={grupo.ciclo} className="rounded-xl border border-gray-100 overflow-hidden">
                             <button 
@@ -216,11 +217,9 @@ const MisCursos = () => {
                                 <div className="bg-white p-2 space-y-1">
                                     {grupo.materias.map(m => (
                                         <button 
-                                           
                                             key={`${m.asignatura_id}-${m.paralelo}`} 
                                             onClick={() => handleSeleccionarMateria(m)}
                                             className={`w-full text-left p-2 rounded-lg transition ${
-                                               
                                                 (materiaSeleccionada?.asignatura_id === m.asignatura_id && materiaSeleccionada?.paralelo === m.paralelo)
                                                 ? 'bg-blue-600 text-white shadow-md' 
                                                 : 'hover:bg-gray-50 text-gray-600'
@@ -241,30 +240,32 @@ const MisCursos = () => {
             </aside>
 
             {/* CONTENIDO PRINCIPAL */}
-            <main className="flex-1 flex flex-col bg-white">
+            <main className="flex-1 flex flex-col bg-white overflow-hidden min-h-[500px] md:min-h-0">
                 {materiaSeleccionada ? (
                     <>
-                        <div className="p-6 border-b flex justify-between items-center bg-gray-50/50 shrink-0">
+                        {/* Header Contextual */}
+                        <div className="p-4 md:p-6 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gray-50/50 shrink-0">
                             <div>
-                                <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                                <h1 className="text-lg md:text-xl font-bold text-gray-900 flex flex-wrap items-center gap-2">
                                     {materiaSeleccionada.nombre}
-                                    <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-md">Paralelo {materiaSeleccionada.paralelo}</span>
+                                    <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-md whitespace-nowrap">Paralelo {materiaSeleccionada.paralelo}</span>
                                 </h1>
-                                <p className="text-sm text-gray-500">Oficial: {estudiantes.length} alumnos</p>
+                                <p className="text-sm text-gray-500 mt-1">Oficial: {estudiantes.length} alumnos</p>
                             </div>
-                            <div className="flex gap-3">
+                            
+                            <div className="flex flex-wrap gap-3 w-full md:w-auto">
                                 <button 
                                     onClick={abrirModalAgregar}
-                                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition shadow-lg shadow-blue-200"
+                                    className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition shadow-lg shadow-blue-200"
                                 >
-                                    <UserPlusIcon className="h-5 w-5"/> Agregar Alumno
+                                    <UserPlusIcon className="h-5 w-5"/> <span className="whitespace-nowrap">Agregar Alumno</span>
                                 </button>
-                                <div className="relative">
+                                <div className="relative flex-1 md:flex-none">
                                     <MagnifyingGlassIcon className="absolute left-3 top-2.5 h-5 w-5 text-gray-400"/>
                                     <input 
                                         type="text" 
                                         placeholder="Buscar..." 
-                                        className="pl-10 pr-4 py-2 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 w-56"
+                                        className="pl-10 pr-4 py-2 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-56"
                                         onChange={e => setBusqueda(e.target.value)}
                                         value={busqueda}
                                     />
@@ -273,8 +274,8 @@ const MisCursos = () => {
                         </div>
                         
                         {/* TABLA DE ALUMNOS */}
-                        <div className="flex-1 p-5"> 
-                            <table className="w-full text-left border-collapse">
+                        <div className="flex-1 overflow-auto p-4 md:p-5"> 
+                            <table className="w-full text-left border-collapse min-w-[500px] md:min-w-0">
                                 <thead>
                                     <tr className="text-gray-400 text-xs uppercase tracking-wider border-b">
                                         <th className="pb-3 font-bold pl-2">#</th>
@@ -292,14 +293,14 @@ const MisCursos = () => {
                                         <tr key={e.id} className="hover:bg-gray-50 group">
                                             <td className="py-3.5 pl-2 text-gray-500 text-sm">{indexOfFirstItem + i + 1}</td>
                                             <td className="py-3.5">
-                                                <div className="font-bold text-gray-900 text-base">{e.nombres}</div>
-                                                <div className="text-xs text-gray-500">{e.email}</div>
+                                                <div className="font-bold text-gray-900 text-sm md:text-base">{e.nombres}</div>
+                                                <div className="text-xs text-gray-500 break-all">{e.email}</div>
                                             </td>
                                             <td className="py-3.5 font-mono text-sm text-gray-600">{e.cedula}</td>
                                             <td className="py-3.5 text-right pr-2">
                                                 <button 
                                                     onClick={() => handleEliminarEstudiante(e.id)}
-                                                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition opacity-0 group-hover:opacity-100"
+                                                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition md:opacity-0 md:group-hover:opacity-100 opacity-100"
                                                     title="Dar de baja de esta materia"
                                                 >
                                                     <TrashIcon className="h-5 w-5"/>
@@ -312,9 +313,9 @@ const MisCursos = () => {
                         </div>
 
                         {/* PAGINACIÓN */}
-                        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between shrink-0">
-                            <span className="text-sm text-gray-500">
-                                Mostrando del <span className="font-bold text-gray-800">{currentItems.length > 0 ? indexOfFirstItem + 1 : 0}</span> al <span className="font-bold text-gray-800">{Math.min(indexOfLastItem, filtradosListaClase.length)}</span> de <span className="font-bold text-gray-800">{filtradosListaClase.length}</span> estudiantes
+                        <div className="px-4 md:px-6 py-4 border-t border-gray-100 bg-gray-50 flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0">
+                            <span className="text-sm text-gray-500 text-center sm:text-left">
+                                Mostrando <span className="font-bold text-gray-800">{currentItems.length > 0 ? indexOfFirstItem + 1 : 0}</span> - <span className="font-bold text-gray-800">{Math.min(indexOfLastItem, filtradosListaClase.length)}</span> de <span className="font-bold text-gray-800">{filtradosListaClase.length}</span>
                             </span>
                             
                             <div className="flex items-center gap-2">
@@ -327,7 +328,7 @@ const MisCursos = () => {
                                 </button>
                                 
                                 <span className="text-sm font-medium text-gray-600 px-3">
-                                    Página {currentPage} de {totalPages || 1}
+                                    {currentPage} / {totalPages || 1}
                                 </span >
 
                                 <button 
@@ -341,14 +342,14 @@ const MisCursos = () => {
                         </div>
                     </>
                 ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-gray-300">
+                    <div className="flex-1 flex flex-col items-center justify-center text-gray-300 min-h-[300px]">
                         <ClipboardDocumentListIcon className="h-20 w-20 mb-4 opacity-10"/>
-                        <p className="text-xl font-medium">Seleccione una asignatura para ver la nómina</p>
+                        <p className="text-xl font-medium text-center px-4">Seleccione una asignatura</p>
                     </div>
                 )}
             </main>
 
-            {/* MODAL  */}
+            {/* MODAL */}
             {showModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col h-[80vh]">

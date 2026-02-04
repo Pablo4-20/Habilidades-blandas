@@ -121,7 +121,6 @@ const Matriculacion = () => {
 
     // --- IMPORTACIÓN ---
     const downloadTemplate = () => {
-        // Plantilla General ahora incluye Paralelo
         const data = [{ 
             Cedula: "1234567890", 
             Carrera: carreraSeleccionada ? carreraSeleccionada.nombre : "Software", 
@@ -155,7 +154,6 @@ const Matriculacion = () => {
         
         try {
             let fileToSend = fileToUpload;
-            // Conversión Excel a CSV si es necesario
             if (fileToUpload.name.endsWith('.xlsx') || fileToUpload.name.endsWith('.xls')) {
                 const data = await fileToUpload.arrayBuffer();
                 const workbook = XLSX.read(data);
@@ -171,10 +169,8 @@ const Matriculacion = () => {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
 
-            // Determinar icono según si hubo procesados o puras advertencias
             const iconType = res.data.status === 'warning' ? 'warning' : 'success';
 
-            // Mostrar resultado detallado con formato (pre-line respeta los \n del backend)
             Swal.fire({
                 title: res.data.status === 'warning' ? 'Atención' : 'Proceso Terminado',
                 html: `<pre style="text-align: left; font-family: sans-serif; white-space: pre-wrap;">${res.data.message}</pre>`,
@@ -195,7 +191,7 @@ const Matriculacion = () => {
     return (
         <div className="space-y-6 animate-fade-in p-6 bg-gray-50 min-h-screen flex flex-col">
             
-            {/* 1. ENCABEZADO + PERIODO + BOTÓN CARGA GENERAL */}
+            {/* 1. ENCABEZADO */}
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                 <div>
                     <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
@@ -206,8 +202,7 @@ const Matriculacion = () => {
                     </p>
                 </div>
                 
-                <div className="flex gap-3">
-                    {/* Botón de Carga General (Movido Aquí) */}
+                <div className="flex flex-wrap gap-3">
                     <button 
                         onClick={() => { 
                             if(!periodoActivo) return Swal.fire('Alto', 'No hay periodo activo para cargar datos.', 'error');
@@ -244,7 +239,7 @@ const Matriculacion = () => {
             </div>
 
             {/* 2. SELECCIÓN DE CARRERA */}
-            <div className="bg-white p-2 rounded-xl shadow-sm border border-gray-100 flex gap-2 w-fit">
+            <div className="bg-white p-2 rounded-xl shadow-sm border border-gray-100 flex flex-wrap gap-2 w-full md:w-fit">
                 {listaCarreras.map(carrera => (
                     <button
                         key={carrera.id}
@@ -263,17 +258,20 @@ const Matriculacion = () => {
             </div>
 
             {/* 3. CUERPO PRINCIPAL */}
-            <div className="flex-1 flex gap-6 min-h-0 bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden">
+            <div className="flex-1 flex flex-col md:flex-row gap-6 min-h-0 bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden">
                 
-                {/* SIDEBAR CICLOS */}
-                <aside className="w-64 bg-gray-50 border-r border-gray-100 flex flex-col">
-                    <div className="p-5 border-b border-gray-100">
+                {/* SIDEBAR CICLOS 
+                   Móvil: h-auto (crece con el contenido), sin max-h, sin overflow.
+                   PC: w-64, h-full, con overflow para scroll si es necesario.
+                */}
+                <aside className="w-full md:w-64 bg-gray-50 border-b md:border-b-0 md:border-r border-gray-100 flex flex-col h-auto md:h-full shrink-0">
+                    <div className="p-5 border-b border-gray-100 sticky top-0 bg-gray-50 z-10">
                         <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
                             Ciclos - {carreraSeleccionada?.nombre}
                         </h3>
                     </div>
                     
-                    <div className="flex-1 overflow-y-auto p-3 space-y-1">
+                    <div className="md:flex-1 md:overflow-y-auto p-3 space-y-1">
                         {listaCiclos.map(ciclo => (
                             <button
                                 key={ciclo.id}
@@ -299,13 +297,13 @@ const Matriculacion = () => {
                 </aside>
 
                 {/* CONTENIDO DERECHO */}
-                <main className="flex-1 flex flex-col relative">
+                <main className="flex-1 flex flex-col relative min-h-[500px] md:min-h-0">
                     {cicloSeleccionado ? (
                         <>
-                            {/* TOOLBAR CONTEXTUAL */}
-                            <div className="px-8 py-6 border-b border-gray-100 flex justify-between items-center bg-white sticky top-0 z-10">
+                            {/* TOOLBAR */}
+                            <div className="px-6 py-4 md:px-8 md:py-6 border-b border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white sticky top-0 z-10">
                                 <div>
-                                    <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                                    <h1 className="text-lg md:text-xl font-bold text-gray-900 flex flex-wrap items-center gap-2">
                                         <span className="text-blue-600">{carreraSeleccionada.nombre}</span>
                                         <span className="text-gray-300">/</span>
                                         <span>Ciclo {cicloSeleccionado.nombre}</span>
@@ -315,13 +313,13 @@ const Matriculacion = () => {
                                     </p>
                                 </div>
                                 
-                                <div className="flex gap-3">
-                                    <div className="relative">
+                                <div className="w-full md:w-auto">
+                                    <div className="relative w-full">
                                         <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400"/>
                                         <input 
                                             type="text" 
                                             placeholder="Buscar estudiante..." 
-                                            className="pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-100 text-sm w-64 transition"
+                                            className="pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-100 text-sm w-full md:w-64 transition"
                                             value={busqueda}
                                             onChange={(e) => setBusqueda(e.target.value)}
                                         />
@@ -329,8 +327,8 @@ const Matriculacion = () => {
                                 </div>
                             </div>
 
-                            {/* TABLA DE ESTUDIANTES */}
-                            <div className="flex-1 overflow-auto p-6">
+                            {/* TABLA */}
+                            <div className="flex-1 overflow-auto p-4 md:p-6">
                                 <table className="w-full text-left border-collapse">
                                     <thead>
                                         <tr className="border-b border-gray-100 text-xs font-bold text-gray-400 uppercase tracking-wider">
@@ -351,21 +349,20 @@ const Matriculacion = () => {
                                         ) : (
                                             currentItems.map(m => (
                                                 <tr key={m.id} className="hover:bg-blue-50/30 transition group">
-                                                    <td className="px-4 py-4 text-sm font-mono text-gray-600">
+                                                    <td className="px-4 py-4 text-sm font-mono text-gray-600 align-top">
                                                         {m.cedula}
                                                     </td>
-                                                    <td className="px-4 py-4">
-                                                        <div className="font-bold text-gray-900">{m.nombres}</div>
-                                                        <div className="text-xs text-gray-500">{m.email}</div>
+                                                    <td className="px-4 py-4 align-top">
+                                                        <div className="font-bold text-gray-900 text-sm md:text-base">{m.nombres}</div>
+                                                        <div className="text-xs text-gray-500 break-all">{m.email}</div>
                                                     </td>
-                                                    {/* NUEVA COLUMNA PARALELO */}
-                                                    <td className="px-4 py-4 text-center">
+                                                    <td className="px-4 py-4 text-center align-top">
                                                         <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-lg font-bold text-xs flex items-center justify-center gap-1 w-fit mx-auto">
                                                             <UserGroupIcon className="h-3 w-3"/>
                                                             {m.paralelo || 'A'}
                                                         </span>
                                                     </td>
-                                                    <td className="px-4 py-4 text-center">
+                                                    <td className="px-4 py-4 text-center align-top">
                                                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${m.estado === 'Activo' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
                                                             {m.estado}
                                                         </span>
@@ -377,10 +374,10 @@ const Matriculacion = () => {
                                 </table>
                             </div>
 
-                             {/* --- PAGINACIÓN --- */}
-                             <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
-                                <span className="text-sm text-gray-500">
-                                    Mostrando del <span className="font-bold text-gray-800">{currentItems.length > 0 ? indexOfFirstItem + 1 : 0}</span> al <span className="font-bold text-gray-800">{Math.min(indexOfLastItem, processedData.length)}</span> de <span className="font-bold text-gray-800">{processedData.length}</span> estudiantes
+                             {/* PAGINACIÓN */}
+                             <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex flex-col sm:flex-row items-center justify-between gap-4">
+                                <span className="text-sm text-gray-500 text-center sm:text-left">
+                                    Mostrando <span className="font-bold text-gray-800">{currentItems.length > 0 ? indexOfFirstItem + 1 : 0}</span> - <span className="font-bold text-gray-800">{Math.min(indexOfLastItem, processedData.length)}</span> de <span className="font-bold text-gray-800">{processedData.length}</span>
                                 </span>
                                 
                                 <div className="flex items-center gap-2">
@@ -393,7 +390,7 @@ const Matriculacion = () => {
                                     </button>
                                     
                                     <span className="text-sm font-medium text-gray-600 px-2">
-                                        Página {currentPage} de {totalPages || 1}
+                                        {currentPage} / {totalPages || 1}
                                     </span>
 
                                     <button 
@@ -408,7 +405,7 @@ const Matriculacion = () => {
 
                         </>
                     ) : (
-                        <div className="flex-1 flex flex-col items-center justify-center text-gray-300">
+                        <div className="flex-1 flex flex-col items-center justify-center text-gray-300 min-h-[300px]">
                             <FolderIcon className="h-20 w-20 mb-4 opacity-20"/>
                             <p className="text-lg font-medium text-gray-400">Selecciona un ciclo para ver el listado</p>
                         </div>
@@ -416,7 +413,7 @@ const Matriculacion = () => {
                 </main>
             </div>
 
-            {/* MODAL CARGA MASIVA */}
+            {/* MODAL */}
             {showModalCarga && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
