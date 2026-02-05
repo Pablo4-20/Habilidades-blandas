@@ -22,9 +22,9 @@ class UsuarioSeeder extends Seeder
         ['email' => 'admin@ueb.edu.ec'],
         [
             'cedula' => '0000000001',
-            'nombres' => 'Admin', // Separado
-            'apellidos' => 'sistema',     // Separado
-            'password' => Hash::make('password'),
+            'nombres' => 'Administrador', 
+            'apellidos' => 'sistema',     
+            'password' => Hash::make('0000000001'),
             'rol' => 'admin',
             'carrera_id' => null,
             'email_verified_at' => now(),

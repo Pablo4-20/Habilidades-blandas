@@ -16,18 +16,22 @@ const FichaResumenCoordinador = () => {
     const [periodos, setPeriodos] = useState([]);
     const [loading, setLoading] = useState(false);
     
-    
     const [filtroPeriodo, setFiltroPeriodo] = useState('');
 
     useEffect(() => {
         const fetchPeriodos = async () => {
             try {
-                
-                const res = await api.get('/periodos/activos');
+                // Traemos TODOS los periodos para el historial
+                const res = await api.get('/periodos'); 
                 const lista = Array.isArray(res.data) ? res.data : [];
+                
+                // Ordenar: Más recientes primero
+                lista.sort((a, b) => b.id - a.id);
+
                 setPeriodos(lista);
                 
-                const activo = lista.find(p => p.activo);
+                // Seleccionar activo o el más reciente
+                const activo = lista.find(p => p.activo === 1 || p.activo === true);
                 if (activo) {
                     setFiltroPeriodo(activo.nombre);
                 } else if (lista.length > 0) {
@@ -45,7 +49,6 @@ const FichaResumenCoordinador = () => {
     const fetchDatos = async () => {
         setLoading(true);
         try {
-            
             const res = await api.post(`/reportes/pdf-data-general`, {
                 periodo: filtroPeriodo,
                 es_coordinador: true 
@@ -261,7 +264,13 @@ const FichaResumenCoordinador = () => {
 
                 {/* Selector de Periodo */}
                 <div className="w-full md:w-1/2">
-                    <CustomSelect label="Periodo" icon={CalendarDaysIcon} options={periodos.map(p => ({value: p.nombre, label: p.nombre}))} value={filtroPeriodo} onChange={setFiltroPeriodo} />
+                    <CustomSelect 
+                        label="Periodo" 
+                        icon={CalendarDaysIcon} 
+                        options={periodos.map(p => ({value: p.nombre, label: p.nombre}))} 
+                        value={filtroPeriodo} 
+                        onChange={setFiltroPeriodo} 
+                    />
                 </div>
             </div>
 
@@ -324,28 +333,27 @@ const FichaResumenCoordinador = () => {
                         </div>
                     ))}
 
-                    {/* Tabla Resumen */}
+                    {/* --- TABLA RESUMEN DE CARRERA (CORREGIDA RESPONSIVA) --- */}
                     <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
                         <div className="bg-gray-800 text-white px-6 py-3 font-bold text-lg flex items-center gap-2">
                             <ChartBarIcon className="h-6 w-6"/> RESUMEN DE CARRERA
                         </div>
                         <div className="p-6">
-                            <table className="w-full text-center">
-                                <thead className="bg-gray-100 text-gray-600 uppercase text-sm">
-                                    <tr>
-                                        <th className="px-6 py-4 border-r border-gray-200">Total Ciclos</th>
-                                        <th className="px-6 py-4 border-r border-gray-200">Total Asignaturas</th>
-                                        <th className="px-6 py-4 text-blue-800">Cumplimiento General Carrera</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="text-gray-800 text-xl font-bold">
-                                    <tr>
-                                        <td className="px-6 py-4 border-r border-gray-200">{datosProcesados.totalCiclos}</td>
-                                        <td className="px-6 py-4 border-r border-gray-200">{datosProcesados.totalAsignaturas}</td>
-                                        <td className="px-6 py-4 text-3xl text-blue-700">{datosProcesados.promedioGeneral}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                            {/* CAMBIO: Grid Responsivo (1 col en móvil, 3 en PC) en lugar de tabla */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-gray-200">
+                                <div className="p-4 text-center">
+                                    <p className="text-gray-500 uppercase text-xs font-bold mb-1">Total Ciclos</p>
+                                    <p className="text-3xl font-bold text-gray-800">{datosProcesados.totalCiclos}</p>
+                                </div>
+                                <div className="p-4 text-center">
+                                    <p className="text-gray-500 uppercase text-xs font-bold mb-1">Total Asignaturas</p>
+                                    <p className="text-3xl font-bold text-gray-800">{datosProcesados.totalAsignaturas}</p>
+                                </div>
+                                <div className="p-4 text-center">
+                                    <p className="text-blue-800 uppercase text-xs font-bold mb-1">Cumplimiento General</p>
+                                    <p className="text-4xl font-bold text-blue-700">{datosProcesados.promedioGeneral}</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
