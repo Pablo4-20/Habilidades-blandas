@@ -8,7 +8,7 @@ import {
     ArrowPathIcon, InformationCircleIcon,
     ClockIcon, ListBulletIcon, StarIcon, CalendarDaysIcon, LockClosedIcon, CheckCircleIcon,
     ChevronLeftIcon, ChevronRightIcon, BookOpenIcon,
-    ExclamationTriangleIcon // [NUEVO] Icono agregado
+    ExclamationTriangleIcon 
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 
@@ -523,10 +523,20 @@ const EvaluacionDocente = () => {
                                     : currentItems.map((est, index) => (
                                         <div key={est.estudiante_id} className={`grid grid-cols-12 gap-4 p-3 border-b border-gray-50 items-center transition ${est.nivel ? 'bg-blue-50/10' : 'hover:bg-gray-50'}`}>
                                             <div className="col-span-1 text-center font-bold text-gray-400 text-xs">{indexOfFirstItem + index + 1}</div>
-                                            <div className="col-span-3 font-medium text-sm text-gray-800 truncate pl-2 flex flex-col">
-                                                <span title={est.nombres}>{est.nombres}</span>
+                                            
+                                            {/* --- NOMBRE ESTUDIANTE AJUSTADO --- */}
+                                            {/* Móvil: Scroll | PC: Wrap normal (salto de línea) */}
+                                            <div className="col-span-3 pl-2 flex flex-col overflow-hidden">
+                                                <span 
+                                                    className="font-medium text-sm text-gray-800 overflow-x-auto whitespace-nowrap scrollbar-hide md:whitespace-normal" 
+                                                    title={est.nombres}
+                                                >
+                                                    {est.nombres}
+                                                </span>
                                                 {est.nivel && <span className="text-[10px] text-green-600 font-bold">Calificado (Nivel {est.nivel})</span>}
                                             </div>
+                                            {/* ------------------------------------ */}
+
                                             <div className="col-span-8 grid grid-cols-5 items-center">
                                                 {[1, 2, 3, 4, 5].map((nivel) => {
                                                     const notaP1 = est.nivel_p1 ? parseInt(est.nivel_p1) : null;
@@ -544,32 +554,32 @@ const EvaluacionDocente = () => {
                                     ))}
                                 </div>
 
-                                <div className="p-4 bg-gray-50 border-t border-gray-200 flex justify-between items-center sticky bottom-0 z-20">
-                                    <div className="flex items-center gap-3 text-sm text-gray-600">
+                                {/* --- FOOTER RESPONSIVO --- */}
+                                <div className="p-4 bg-gray-50 border-t border-gray-200 flex flex-col md:flex-row justify-between items-center gap-4 sticky bottom-0 z-20 shadow-inner">
+                                    <div className="flex items-center justify-center gap-3 text-sm text-gray-600 w-full md:w-auto order-2 md:order-1">
                                         <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-1.5 rounded-lg border border-gray-300 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition"><ChevronLeftIcon className="h-4 w-4"/></button>
                                         <span className="font-medium">Página {currentPage} de {totalPages || 1}</span>
                                         <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || totalPages === 0} className="p-1.5 rounded-lg border border-gray-300 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition"><ChevronRightIcon className="h-4 w-4"/></button>
                                     </div>
                                     
-                                    {/* --- SECCIÓN DE ALERTAS MODIFICADA --- */}
-                                    <div className="flex items-center gap-4">
+                                    <div className="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto order-1 md:order-2">
                                         {estudiantesFaltantes.length > 0 ? (
-                                            <div className="flex flex-col items-end animate-pulse">
-                                                <span className="text-xs font-bold text-amber-700 bg-amber-100 px-3 py-0.5 rounded-full flex items-center gap-1 border border-amber-200">
-                                                    <ExclamationTriangleIcon className="h-3 w-3"/> Faltan {estudiantesFaltantes.length}
-                                                </span>
-                                                <span className="text-[10px] text-amber-600 font-bold mt-0.5 max-w-[200px] truncate text-right" title={`Faltan los números: ${estudiantesFaltantes.join(', ')}`}>
-                                                    N°: {estudiantesFaltantes.join(', ')}
-                                                </span>
+                                            <div className="flex items-center justify-center gap-2 w-full md:w-auto bg-amber-50 px-3 py-2 rounded-lg border border-amber-100 animate-pulse">
+                                                <ExclamationTriangleIcon className="h-4 w-4 text-amber-600 shrink-0"/>
+                                                <div className="flex flex-col items-start leading-none">
+                                                    <span className="text-xs font-bold text-amber-700">Faltan {estudiantesFaltantes.length}</span>
+                                                    <span className="text-[10px] text-amber-600 max-w-[150px] truncate">N°: {estudiantesFaltantes.join(', ')}</span>
+                                                </div>
                                             </div>
                                         ) : (
-                                            <span className="text-xs font-bold px-3 py-1 rounded-full bg-green-100 text-green-700 flex items-center gap-1 border border-green-200 shadow-sm">
-                                                <CheckCircleIcon className="h-4 w-4"/> ¡Todos calificados!
+                                            <span className="text-xs font-bold px-3 py-2 rounded-lg bg-green-100 text-green-700 flex items-center justify-center gap-1 border border-green-200 shadow-sm w-full md:w-auto">
+                                                <CheckCircleIcon className="h-4 w-4"/> ¡Completo!
                                             </span>
                                         )}
-                                        <button onClick={handleGuardar} className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-6 rounded-xl shadow-lg transition transform hover:scale-105 active:scale-95 text-sm"><CheckCircleIcon className="h-5 w-5"/> Guardar Notas</button>
+                                        <button onClick={handleGuardar} className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-6 rounded-xl shadow-lg transition transform active:scale-95 text-sm w-full md:w-auto">
+                                            <CheckCircleIcon className="h-5 w-5"/> Guardar Notas
+                                        </button>
                                     </div>
-                                    {/* -------------------------------------- */}
                                 </div>
                             </div>
                         </>
