@@ -40,7 +40,7 @@ class UsuarioSeeder extends Seeder
         [
             'cedula' => '0000000002',
             'nombres' => 'Coordinador-Software',
-            'apellidos' => 'Sofftware',
+            'apellidos' => 'Software',
             'password' => Hash::make('0000000002'),
             'rol' => 'coordinador',
             'carrera_id' => $idSoftware, 
@@ -55,7 +55,7 @@ class UsuarioSeeder extends Seeder
             [
                 'cedula' => '0000000003',
                 'nombres' => 'Coordinador-Tecnologías de la Información',
-                'apellidos' => 'Tecnologías de la Información',
+                'apellidos' => 'TICs',
                 'password' => Hash::make('0000000003'),
                 'rol' => 'coordinador',
                 'carrera_id' => $idTic, 
