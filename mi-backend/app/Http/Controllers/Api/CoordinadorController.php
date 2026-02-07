@@ -14,8 +14,8 @@ class CoordinadorController extends Controller
         try {
             $carreras = DB::table('carreras')->orderBy('nombre')->pluck('nombre');
             
-            // CAMBIO: Obtener periodos desde la tabla oficial, ordenados por fecha
-            // Esto evita que salgan periodos mal escritos que pudieran existir en asignaciones antiguas
+            //  Obtener periodos desde la tabla oficial, ordenados por fecha
+          
             $periodos = PeriodoAcademico::orderBy('id', 'desc')->pluck('nombre');
 
             return response()->json([
@@ -41,7 +41,7 @@ class CoordinadorController extends Controller
 
             if (!$periodo) return response()->json([]);
 
-            // 2. CONSULTA (Se mantiene igual porque Asignaciones usa el nombre del periodo)
+            // 2. CONSULTA 
             // Esta lógica es correcta porque la asignación de materias (Docente-Materia)
             // es independiente de la matrícula del estudiante.
             $query = DB::table('asignaciones')

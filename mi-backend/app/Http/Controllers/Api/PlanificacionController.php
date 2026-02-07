@@ -18,7 +18,7 @@ class PlanificacionController extends Controller
             $user = $request->user();
             $periodo = $request->query('periodo'); 
             $parcialSolicitado = $request->query('parcial'); 
-            // [NUEVO] Recibimos el paralelo
+            
             $paralelo = $request->query('paralelo'); 
 
             if (!$paralelo) {
@@ -29,7 +29,7 @@ class PlanificacionController extends Controller
             $asignacion = Asignacion::where('asignatura_id', $asignatura_id)
                 ->where('docente_id', $user->id)
                 ->where('periodo', $periodo)
-                ->where('paralelo', $paralelo) // Filtro clave
+                ->where('paralelo', $paralelo) 
                 ->first();
 
             if (!$asignacion) {
@@ -50,7 +50,7 @@ class PlanificacionController extends Controller
                 ->where('asignatura_id', $asignatura_id)
                 ->where('docente_id', $user->id)
                 ->where('periodo_academico', $asignacion->periodo)
-                ->where('paralelo', $paralelo) // <--- Filtro
+                ->where('paralelo', $paralelo) 
                 ->where('parcial', '1')
                 ->first();
 
@@ -58,7 +58,7 @@ class PlanificacionController extends Controller
                 ->where('asignatura_id', $asignatura_id)
                 ->where('docente_id', $user->id)
                 ->where('periodo_academico', $asignacion->periodo)
-                ->where('paralelo', $paralelo) // <--- Filtro
+                ->where('paralelo', $paralelo) 
                 ->where('parcial', '2')
                 ->first();
 
@@ -126,7 +126,7 @@ class PlanificacionController extends Controller
             'docente_id' => 'required',
             'parcial' => 'required',
             'periodo_academico' => 'required',
-            'paralelo' => 'required', // <--- Requerido
+            'paralelo' => 'required', 
             'detalles' => 'required|array', 
         ]);
 
@@ -142,7 +142,7 @@ class PlanificacionController extends Controller
                     'asignatura_id' => $request->asignatura_id,
                     'parcial' => $request->parcial,
                     'periodo_academico' => $request->periodo_academico,
-                    'paralelo' => $request->paralelo // <--- Clave única compuesta
+                    'paralelo' => $request->paralelo 
                 ],
                 [
                     'docente_id' => $request->docente_id,
@@ -172,7 +172,7 @@ class PlanificacionController extends Controller
             $planOtro = Planificacion::where('asignatura_id', $request->asignatura_id)
                 ->where('periodo_academico', $request->periodo_academico)
                 ->where('parcial', $otroParcial)
-                ->where('paralelo', $request->paralelo) // <--- Solo sincroniza con SU paralelo
+                ->where('paralelo', $request->paralelo) 
                 ->first();
 
             if ($planOtro) {

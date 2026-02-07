@@ -204,7 +204,7 @@ class ReporteController extends Controller
             $query->where('docente_id', $user->id);
         }
 
-        // --- FILTRO DE CARRERA (CRÍTICO PARA NO MEZCLAR) ---
+        // --- FILTRO DE CARRERA  ---
         $nombreCarreraReporte = 'General';
 
         // Caso A: Usuario tiene carrera fija (Coordinadores de carrera específica)
@@ -226,7 +226,7 @@ class ReporteController extends Controller
 
         $asignaciones = $query->get();
 
-        // Determinar nombre de carrera visual si es "General" pero hay datos
+        
         if ($nombreCarreraReporte === 'General' && $asignaciones->isNotEmpty()) {
             $primerAsig = $asignaciones->first();
             if ($primerAsig->asignatura && $primerAsig->asignatura->carrera) {

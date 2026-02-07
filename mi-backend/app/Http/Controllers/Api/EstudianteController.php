@@ -131,11 +131,11 @@ class EstudianteController extends Controller
             }
         }
 
-        // [CORRECCIÓN CLAVE] Devolver las variables por separado para el Frontend
+       
         return response()->json([
             'message' => "Proceso terminado.",
-            'creados' => $creados,       // <--- Variable que busca el Frontend
-            'actualizados' => 0,         // <--- Enviamos 0 para evitar 'undefined'
+            'creados' => $creados,      
+            'actualizados' => 0,         
             'errores' => $errores
         ]);
     }

@@ -41,7 +41,7 @@ class MatriculaController extends Controller
         return response()->json($matriculas);
     }
 
-    // --- CARGA MASIVA MEJORADA ---
+    // --- CARGA MASIVA  ---
     public function import(Request $request)
     {
         $request->validate(['file' => 'required|file']);
@@ -65,8 +65,8 @@ class MatriculaController extends Controller
         $procesados = 0;
         $actualizados = 0;
         $sinCambios = 0;
-        $erroresEstudiante = 0; // Estudiante no existe en BD
-        $erroresCiclo = 0;      // Ciclo no existe en BD
+        $erroresEstudiante = 0; 
+        $erroresCiclo = 0;      
         $filasTotales = 0;
 
         DB::beginTransaction();
@@ -91,14 +91,14 @@ class MatriculaController extends Controller
                 // 1. Validar existencia del ESTUDIANTE
                 $estudiante = Estudiante::where('cedula', $cedula)->first();
                 if (!$estudiante) {
-                    $erroresEstudiante++; // <--- Contamos el error
+                    $erroresEstudiante++; 
                     continue; 
                 }
 
                 // 2. Validar existencia del CICLO
                 $cicloNuevo = Ciclo::where('nombre', $cicloNombre)->first();
                 if (!$cicloNuevo) {
-                    $erroresCiclo++; // <--- Contamos el error
+                    $erroresCiclo++; 
                     continue;
                 }
 
@@ -143,12 +143,12 @@ class MatriculaController extends Controller
             
             DB::commit();
             
-            // CONSTRUIR MENSAJE DETALLADO
+            
             $mensaje = "Proceso finalizado sobre $filasTotales filas detectadas.\n\n";
             $mensaje .= "✅ Nuevos Matriculados: $procesados\n";
             $mensaje .= "🔄 Actualizados: $actualizados\n";
             
-            // Agregar advertencias si hay errores
+            
             if ($erroresEstudiante > 0) {
                 $mensaje .= "\n⚠️ $erroresEstudiante filas omitidas: Estudiantes no registrados en el sistema (Gestión Usuarios).";
             }

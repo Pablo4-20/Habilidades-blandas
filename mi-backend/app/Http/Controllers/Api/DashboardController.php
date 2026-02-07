@@ -120,7 +120,7 @@ class DashboardController extends Controller
 
                 // 3. Conteo de Reportes Finalizados (Aquellos al 100%)
                 // Esto es solo informativo, no afecta el % principal
-                $reportesFinalizados = 0; // Podrías calcularlo dentro del loop si lo necesitas exacto
+                $reportesFinalizados = 0; 
 
                 // 4. Alumnos Activos de la carrera
                 $queryAlumnos = Matricula::where('periodo_id', $idPeriodo)->where('estado', 'Activo');

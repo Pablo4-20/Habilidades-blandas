@@ -32,7 +32,7 @@ class AsignacionController extends Controller
         return $query->get();
     }
 
-    // [NUEVO] Método usado por el Frontend "AsignarMaterias.jsx"
+    
     public function byPeriodo(Request $request, $periodo)
     {
         $user = $request->user();
@@ -77,7 +77,7 @@ class AsignacionController extends Controller
             'docente_id' => 'required|exists:users,id',
             'asignatura_id' => 'required|exists:asignaturas,id',
             'periodo' => 'required|string',
-            'paralelo' => 'required|string|max:2' // Validacion activada
+            'paralelo' => 'required|string|max:2' 
         ]);
 
         // [SEGURIDAD] Verificar que la asignatura sea de mi carrera
@@ -92,7 +92,7 @@ class AsignacionController extends Controller
         $asignacionExistente = Asignacion::with('docente')
             ->where('asignatura_id', $request->asignatura_id)
             ->where('periodo', $request->periodo)
-            ->where('paralelo', $request->paralelo) // Filtro activado
+            ->where('paralelo', $request->paralelo) 
             ->first();
 
         if ($asignacionExistente) {
@@ -130,7 +130,7 @@ class AsignacionController extends Controller
         // Verificar conflicto de horario/duplicado
         $existeDuplicado = Asignacion::where('asignatura_id', $request->asignatura_id)
             ->where('periodo', $request->periodo)
-            ->where('paralelo', $request->paralelo) // Filtro activado
+            ->where('paralelo', $request->paralelo) 
             ->where('id', '!=', $id) 
             ->exists();
 

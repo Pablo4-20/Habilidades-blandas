@@ -24,7 +24,7 @@ class PeriodoAcademicoController extends Controller
    public function store(Request $request)
     {
         // 1. RESTRICCIÓN: Verificar si ya existe un periodo activo
-        // Buscamos si existe alguna fila donde la columna 'activo' sea true (1)
+        
         $existeActivo = PeriodoAcademico::where('activo', true)->exists();
 
         if ($existeActivo) {

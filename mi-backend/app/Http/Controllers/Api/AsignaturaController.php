@@ -151,14 +151,14 @@ class AsignaturaController extends Controller
             // 1. PROCESAMIENTO
             $nombre = $this->formatearTexto($row[0]);
             
-            // Obtenemos el nombre crudo de la carrera para buscar mejor
+           
             $carreraInputRaw = trim($row[1]);
             
             $cicloRaw = trim($row[2]);
             $cicloNombre = $this->convertirCicloARomano($cicloRaw); 
             $unidadRaw = trim($row[3]); 
 
-            // 2. OBTENER ID CARRERA (LÓGICA MEJORADA)
+            // 2. OBTENER ID CARRERA (USANDO BÚSQUEDA INTELIGENTE)
             $carreraIdFinal = null;
 
             if ($forcedCarreraId) {
@@ -181,7 +181,7 @@ class AsignaturaController extends Controller
                 }
 
                 if (!$carrera) {
-                    // Fallo definitivo: reportar error mostrando qué buscó
+                    
                     $errores[] = "Fila " . ($index + 1) . ": Carrera '$carreraInputRaw' no encontrada.";
                     continue;
                 }

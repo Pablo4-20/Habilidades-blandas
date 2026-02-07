@@ -255,7 +255,7 @@ class ReporteGeneralController extends Controller
             ->whereHas('matricula', fn($q) => 
                 $q->where('periodo_id', $periodoId)
                   ->where('estado', 'Activo')
-                  ->where('paralelo', $paralelo) // <--- FILTRO AGREGADO
+                  ->where('paralelo', $paralelo) 
             )
             ->with('matricula.estudiante')->get()
             ->map(fn($d) => optional($d->matricula)->estudiante)->filter();
@@ -270,7 +270,7 @@ class ReporteGeneralController extends Controller
         if ($asignatura->ciclo_id) {
             $automaticos = Matricula::where('periodo_id', $periodoId)
                 ->where('ciclo_id', $asignatura->ciclo_id)
-                ->where('paralelo', $paralelo) // <--- FILTRO AGREGADO
+                ->where('paralelo', $paralelo) 
                 ->where('estado', 'Activo')
                 ->whereNotIn('id', $excluirIds)
                 ->whereHas('estudiante', function($q) use ($asignatura) {

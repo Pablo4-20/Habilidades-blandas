@@ -148,7 +148,7 @@ class DocenteController extends Controller
     public function misHabilidades(Request $request, $asignaturaId)
     {
         $user = $request->user();
-        $paralelo = $request->query('paralelo'); // Recibimos paralelo
+        $paralelo = $request->query('paralelo'); 
         
         $periodo = PeriodoAcademico::where('activo', true)->first();
         if (!$periodo) return response()->json([]);
@@ -190,7 +190,7 @@ class DocenteController extends Controller
             'habilidad_blanda_id' => 'required', 
             'parcial' => 'required', 
             'periodo' => 'required',
-            'paralelo' => 'required' // [NUEVO] Obligatorio
+            'paralelo' => 'required' 
         ]);
 
         $periodo = PeriodoAcademico::where('nombre', $request->periodo)->first();
@@ -281,7 +281,7 @@ class DocenteController extends Controller
                     'periodo_academico' => $request->periodo, 
                     'parcial' => $request->parcial,
                     'docente_id' => $user->id,
-                    'paralelo' => $request->paralelo // [CLAVE] Diferencia A de B
+                    'paralelo' => $request->paralelo 
                 ]
             );
 
@@ -292,9 +292,7 @@ class DocenteController extends Controller
                             'planificacion_id' => $plan->id, 
                             'estudiante_id' => $nota['estudiante_id'], 
                             'habilidad_blanda_id' => $request->habilidad_blanda_id, 
-                            // parcial ya está en planificacion, pero por redundancia histórica se mantiene si la tabla lo pide
-                            // si tu tabla evaluaciones tiene columna 'parcial', se deja, sino se quita.
-                            // Asumiremos que la lógica de negocio la usa para búsquedas rápidas.
+                          
                             'parcial' => $request->parcial 
                         ], 
                         ['nivel' => $nota['nivel']]

@@ -6,8 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Carrera;
 use App\Models\Ciclo;
 use App\Models\UnidadCurricular;
-use Illuminate\Http\Request; // Importar Request
-
+use Illuminate\Http\Request; 
 class CatalogoController extends Controller
 {
     public function getCarreras(Request $request)
@@ -19,7 +18,7 @@ class CatalogoController extends Controller
             return Carrera::where('id', $user->carrera_id)->get();
         }
 
-        // CORRECCIÓN: Usar all() en lugar de filtrar por 'estado' que no existe
+        
         return Carrera::all(); 
     }
 

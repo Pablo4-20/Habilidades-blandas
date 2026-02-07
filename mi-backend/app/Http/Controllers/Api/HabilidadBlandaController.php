@@ -5,15 +5,15 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\HabilidadBlanda;
-use App\Models\ActividadHabilidad; // Importante: Importar el modelo
-use Illuminate\Support\Facades\DB; // Para transacciones
+use App\Models\ActividadHabilidad; 
+use Illuminate\Support\Facades\DB; 
 
 class HabilidadBlandaController extends Controller
 {
     // 1. LISTAR (Con Actividades)
     public function index()
     {
-        return HabilidadBlanda::with('actividades') // Trae la relación
+        return HabilidadBlanda::with('actividades') 
             ->orderBy('nombre', 'asc')
             ->get();
     }
