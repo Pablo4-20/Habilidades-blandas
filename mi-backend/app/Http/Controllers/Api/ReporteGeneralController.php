@@ -14,10 +14,9 @@ use App\Models\Evaluacion;
 use App\Models\Reporte;
 use App\Models\HabilidadBlanda;
 use App\Models\Carrera;
+use App\Models\DetallePlanificacion;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-
-
 
 class ReporteGeneralController extends Controller
 {
@@ -70,6 +69,7 @@ class ReporteGeneralController extends Controller
 
             $asignaciones = $asignacionesQuery->get();
 
+            // ... (resto de lógica de nombre carrera) ...
             if ($nombreCarreraReporte === 'General' && $asignaciones->isNotEmpty()) {
                 $nombresUnicos = $asignaciones->map(fn($a) => $a->asignatura->carrera->nombre ?? null)->filter()->unique();
                 if ($nombresUnicos->count() === 1) {
@@ -92,12 +92,10 @@ class ReporteGeneralController extends Controller
                 $nombreDocente = $asignacion->docente ? ($asignacion->docente->nombres . ' ' . $asignacion->docente->apellidos) : 'Sin Asignar';
                 $cicloNumerico = $this->_convertirCiclo($asignacion->asignatura->ciclo->nombre ?? '');
 
-                // --- CORRECCIÓN CLAVE: PASAR EL PARALELO PARA FILTRAR ESTUDIANTES ---
                 $estudiantes = $this->_getEstudiantes($asignacion->asignatura_id, $periodoObj->id, $asignacion->paralelo);
                 $totalEstudiantes = $estudiantes->count();
                 $idsEstudiantes = $estudiantes->pluck('id');
 
-                // 2. BUSCAR PLANIFICACIONES DEL PARCIAL 2
                 $planes = Planificacion::with(['detalles.habilidad'])
                     ->where('asignatura_id', $asignacion->asignatura_id)
                     ->where('docente_id', $asignacion->docente_id)
@@ -136,7 +134,6 @@ class ReporteGeneralController extends Controller
 
                     foreach ($plan->detalles as $detalle) {
                         $habilidadId = $detalle->habilidad_blanda_id;
-                        
                         $nombreHabilidad = 'No definida';
                         if ($detalle->habilidad) $nombreHabilidad = $detalle->habilidad->nombre;
                         elseif ($habilidadId) {
@@ -144,13 +141,10 @@ class ReporteGeneralController extends Controller
                             if ($hab) $nombreHabilidad = $hab->nombre;
                         }
 
-                        // --- CÁLCULO DE PROGRESO INDIVIDUAL POR HABILIDAD ---
                         $progreso = 0;
-                        
-                        // FASE 1: PLANIFICADO (25%)
-                        $progreso += 25;
+                        $progreso += 25; // FASE 1
 
-                        // FASE 2: PARCIAL 1 CALIFICADO (25%)
+                        // FASE 2
                         $p1Calificado = false;
                         if ($totalEstudiantes > 0 && $habilidadId) {
                             $planP1 = Planificacion::where('asignatura_id', $asignacion->asignatura_id)
@@ -169,40 +163,29 @@ class ReporteGeneralController extends Controller
                                     ->whereIn('estudiante_id', $idsEstudiantes)
                                     ->distinct('estudiante_id')
                                     ->count();
-                                
-                                if ($evaluadosP1 >= $totalEstudiantes) {
-                                    $p1Calificado = true;
-                                }
+                                if ($evaluadosP1 >= $totalEstudiantes) $p1Calificado = true;
                             }
                         }
                         if ($p1Calificado) $progreso += 25;
 
-                        // FASE 3: PARCIAL 2 CALIFICADO (25%)
+                        // FASE 3
                         $evaluacionesP2 = Evaluacion::where('planificacion_id', $plan->id)
                             ->whereIn('estudiante_id', $idsEstudiantes)
                             ->where('habilidad_blanda_id', $habilidadId)
                             ->get();
-
                         $evaluadosCountP2 = $evaluacionesP2->unique('estudiante_id')->count();
-                        
-                        if ($totalEstudiantes > 0 && $evaluadosCountP2 >= $totalEstudiantes) {
-                            $progreso += 25;
-                        }
+                        if ($totalEstudiantes > 0 && $evaluadosCountP2 >= $totalEstudiantes) $progreso += 25;
 
-                        // FASE 4: CONCLUSIÓN (25%)
+                        // FASE 4
                         $reporteDB = Reporte::where('planificacion_id', $plan->id)
                             ->where('habilidad_blanda_id', $habilidadId)
                             ->first();
-                        
-                        $tieneConclusion = $reporteDB && !empty($reporteDB->conclusion_progreso);
-                        if ($tieneConclusion) $progreso += 25;
+                        if ($reporteDB && !empty($reporteDB->conclusion_progreso)) $progreso += 25;
 
-                        // ESTADO TEXTO
                         if ($progreso == 25) $estado = 'Planificado';
                         elseif ($progreso == 100) $estado = 'Completado';
                         else $estado = 'En Proceso';
 
-                        // Cálculo promedio P2
                         $conteos = [1=>0, 2=>0, 3=>0, 4=>0, 5=>0];
                         $sumaNotas = 0; $countNotas = 0;
                         foreach ($evaluacionesP2 as $eval) {
@@ -245,13 +228,11 @@ class ReporteGeneralController extends Controller
         }
     }
 
-    // --- FUNCIÓN CORREGIDA: AHORA FILTRA POR PARALELO ---
     private function _getEstudiantes($asignaturaId, $periodoId, $paralelo)
     {
         $asignatura = Asignatura::with(['carrera', 'ciclo'])->find($asignaturaId);
         if (!$asignatura) return collect();
 
-        // 1. Manuales (DetalleMatricula): Filtramos por paralelo en la matrícula
         $manuales = DetalleMatricula::where('asignatura_id', $asignaturaId)
             ->where('estado_materia', '!=', 'Baja')
             ->whereHas('matricula', fn($q) => 
@@ -262,12 +243,10 @@ class ReporteGeneralController extends Controller
             ->with('matricula.estudiante')->get()
             ->map(fn($d) => optional($d->matricula)->estudiante)->filter();
 
-        // IDs a excluir de la carga automática
         $excluirIds = DetalleMatricula::where('asignatura_id', $asignaturaId)
             ->whereHas('matricula', fn($q) => $q->where('periodo_id', $periodoId))
             ->pluck('matricula_id');
 
-        // 2. Automáticos (Matricula): Filtramos por paralelo directamente
         $automaticos = collect();
         if ($asignatura->ciclo_id) {
             $automaticos = Matricula::where('periodo_id', $periodoId)
@@ -284,29 +263,35 @@ class ReporteGeneralController extends Controller
 
         return $manuales->concat($automaticos)->unique('id');
     }
-   
+
+    /**
+     * HABILIDADES EVALUADAS: FILTRADO POR CARRERA DEL COORDINADOR
+     */
     public function getEstadoHabilidades(Request $request)
     {
         $periodoNombre = $request->input('periodo');
+        $user = $request->user(); // Usuario logueado (Coordinador)
 
-        if (!$periodoNombre) {
-            return response()->json(['message' => 'El periodo es requerido'], 400);
+        if (!$periodoNombre) return response()->json(['message' => 'El periodo es requerido'], 400);
+
+        $todasLasHabilidades = HabilidadBlanda::all();
+
+        // Construir consulta base
+        $queryReportes = Reporte::whereHas('planificacion', function ($query) use ($periodoNombre) {
+            $query->where('periodo_academico', $periodoNombre); 
+        });
+
+        // FILTRO POR CARRERA: Si el usuario tiene carrera asignada, filtrar por ella
+        if ($user->carrera_id) {
+            $queryReportes->whereHas('planificacion.asignatura', function($q) use ($user) {
+                $q->where('carrera_id', $user->carrera_id);
+            });
         }
 
-        // 1. Obtener TODAS las habilidades (sin filtrar por activo)
-        $todasLasHabilidades = \App\Models\HabilidadBlanda::all();
+        $idsEvaluados = $queryReportes->distinct()
+            ->pluck('habilidad_blanda_id')
+            ->toArray();
 
-        // 2. Obtener los IDs de las habilidades reportadas en ese periodo
-        // CORRECCIÓN: Usamos el NOMBRE del periodo ($periodoNombre) en lugar del ID.
-        // Esto asume que en la tabla 'planificaciones', la columna 'periodo_academico' guarda el texto (ej: "Nov 2025").
-        $idsEvaluados = \App\Models\Reporte::whereHas('planificacion', function ($query) use ($periodoNombre) {
-            $query->where('periodo_academico', $periodoNombre); 
-        })
-        ->distinct()
-        ->pluck('habilidad_blanda_id')
-        ->toArray();
-
-        // 3. Separar en dos colecciones
         $evaluadas = $todasLasHabilidades->whereIn('id', $idsEvaluados)->values();
         $noEvaluadas = $todasLasHabilidades->whereNotIn('id', $idsEvaluados)->values();
 
@@ -316,29 +301,42 @@ class ReporteGeneralController extends Controller
         ]);
     }
     
+    /**
+     * PROMEDIO POR HABILIDAD: FILTRADO POR CARRERA DEL COORDINADOR
+     */
     public function getPromedioPorHabilidad(Request $request)
     {
         $periodoNombre = $request->input('periodo');
+        $user = $request->user(); 
 
-        if (!$periodoNombre) {
-            return response()->json(['message' => 'El periodo es requerido'], 400);
+        if (!$periodoNombre) return response()->json(['message' => 'El periodo es requerido'], 400);
+
+        // --- OBTENER NOMBRE CARRERA ---
+        $nombreCarrera = 'Carrera General';
+        if ($user->carrera_id) {
+            $carreraObj = \App\Models\Carrera::find($user->carrera_id);
+            if ($carreraObj) $nombreCarrera = $carreraObj->nombre;
         }
+        // ------------------------------
 
-        // 1. Obtener reportes filtrados por periodo (usando el nombre como string en planificaciones)
-        $reportes = \App\Models\Reporte::with([
-            'planificacion.asignatura',
-            'planificacion.ciclo',
-            'planificacion.habilidad', // Asegúrate de que esta relación exista en Planificacion
-            // 'planificacion.evaluaciones' // Para contar estudiantes si tienes la relación
+        $queryReportes = Reporte::with([
+            'planificacion.asignatura.ciclo',
+            'habilidad',
         ])
         ->whereHas('planificacion', function ($q) use ($periodoNombre) {
             $q->where('periodo_academico', $periodoNombre);
-        })
-        ->get();
+        });
 
-        // 2. Agrupar por Habilidad
+        if ($user->carrera_id) {
+            $queryReportes->whereHas('planificacion.asignatura', function($q) use ($user) {
+                $q->where('carrera_id', $user->carrera_id);
+            });
+        }
+
+        $reportes = $queryReportes->get();
+
         $agrupado = $reportes->groupBy(function($item) {
-            return $item->planificacion->habilidad->nombre ?? 'Sin Habilidad';
+            return $item->habilidad->nombre ?? 'Sin Habilidad';
         });
 
         $resultado = [];
@@ -349,30 +347,44 @@ class ReporteGeneralController extends Controller
             $conteoMaterias = 0;
 
             foreach ($items as $rep) {
-                // Obtenemos el cumplimiento individual (ej: 85.50)
-                $cumplimiento = floatval($rep->cumplimiento);
+                // Cálculo Promedio
+                $evals = Evaluacion::where('planificacion_id', $rep->planificacion_id)
+                            ->where('habilidad_blanda_id', $rep->habilidad_blanda_id)
+                            ->get();
+
+                $n1 = $evals->where('nivel', 1)->count();
+                $n2 = $evals->where('nivel', 2)->count();
+                $n3 = $evals->where('nivel', 3)->count();
+                $n4 = $evals->where('nivel', 4)->count();
+                $n5 = $evals->where('nivel', 5)->count();
+
+                $totalEstudiantes = $n1 + $n2 + $n3 + $n4 + $n5;
+
+                if ($totalEstudiantes > 0) {
+                    $sumaPonderada = ($n1 * 20) + ($n2 * 40) + ($n3 * 60) + ($n4 * 80) + ($n5 * 100);
+                    $promedioIndividual = $sumaPonderada / $totalEstudiantes;
+                } else {
+                    $promedioIndividual = 0;
+                }
+
+                $detallePlan = DetallePlanificacion::where('planificacion_id', $rep->planificacion_id)
+                                ->where('habilidad_blanda_id', $rep->habilidad_blanda_id)
+                                ->first();
                 
-                // Contar estudiantes calificados (Consulta directa para asegurar precisión)
-                // Asume que tienes un modelo Evaluacion vinculado a la planificación
-                $estudiantesCount = \App\Models\Evaluacion::where('planificacion_id', $rep->planificacion_id)
-                                    ->distinct('estudiante_id')
-                                    ->count();
+                $nombreActividad = $detallePlan ? $detallePlan->actividades : 'Sin actividad';
 
                 $detalles[] = [
-                    'ciclo' => $rep->planificacion->ciclo->nombre ?? 'N/A',
+                    'ciclo' => $rep->planificacion->asignatura->ciclo->nombre ?? 'N/A',
                     'asignatura' => $rep->planificacion->asignatura->nombre ?? 'N/A',
-                    // Asumimos que la actividad está en la planificación, si no, pon un texto genérico
-                    'actividad' => $rep->planificacion->actividad_aprendizaje ?? 'Evaluación Continua', 
-                    'estudiantes' => $estudiantesCount,
-                    'promedio' => number_format($cumplimiento, 2)
+                    'actividad' => $nombreActividad,
+                    'estudiantes' => $totalEstudiantes,
+                    'promedio' => number_format($promedioIndividual, 2)
                 ];
 
-                $sumaPromedios += $cumplimiento;
+                $sumaPromedios += $promedioIndividual;
                 $conteoMaterias++;
             }
 
-            // 3. Cálculo del Promedio General para esta habilidad
-            // (Suma de promedios individuales / Numero de materias)
             $promedioGeneral = $conteoMaterias > 0 ? ($sumaPromedios / $conteoMaterias) : 0;
 
             $resultado[] = [
@@ -382,6 +394,10 @@ class ReporteGeneralController extends Controller
             ];
         }
 
-        return response()->json($resultado);
+        // DEVOLVEMOS ESTRUCTURA COMPLETA
+        return response()->json([
+            'carrera' => $nombreCarrera,
+            'data' => $resultado
+        ]);
     }
 }
