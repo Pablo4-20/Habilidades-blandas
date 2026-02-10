@@ -17,7 +17,8 @@ import FichaResumen from './components/FichaResumen';
 import Matriculacion from './components/Matriculacion'; 
 import MisCursos from './components/MisCursos'; 
 import FichaResumenCoordinador from './components/FichaResumenCoordinador';
-
+import HabilidadesEvaluadas from './components/HabilidadesEvaluadas';
+import PromedioHabilidad from './components/PromedioHabilidad';
 import RecuperarPassword from './components/RecuperarPassword';
 import RestablecerPassword from './components/RestablecerPassword';
 
@@ -74,6 +75,8 @@ function App() {
                 <Route path="reportes" element={<ReportesCoordinador />} />
                 <Route path="matriculacion" element={<Matriculacion />} />
                 <Route path="ficha-resumen-coordinador" element={<FichaResumenCoordinador />} />
+                <Route path="habilidades-evaluadas" element={<HabilidadesEvaluadas />} />
+                <Route path="promedio-habilidad" element={<PromedioHabilidad />} />
             </Route>
 
         </Route>

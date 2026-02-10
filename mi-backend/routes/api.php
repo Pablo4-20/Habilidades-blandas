@@ -115,4 +115,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/reportes/pdf-data-general', [ReporteController::class, 'pdfDataGeneral']);
     Route::post('/reportes/guardar-todo', [ReporteController::class, 'guardarConclusionesMasivas']);
     Route::post('/fichas/datos', [ReporteController::class, 'obtenerFichaResumen']);
+    Route::post('/reportes/promedio-habilidad', [ReporteGeneralController::class, 'getPromedioPorHabilidad']);
+    Route::post('/reportes/estado-habilidades', [ReporteGeneralController::class, 'getEstadoHabilidades']);
 });

@@ -17,6 +17,8 @@ use App\Models\Carrera;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
+
+
 class ReporteGeneralController extends Controller
 {
     private function _convertirCiclo($nombreCiclo)
@@ -281,5 +283,105 @@ class ReporteGeneralController extends Controller
         }
 
         return $manuales->concat($automaticos)->unique('id');
+    }
+   
+    public function getEstadoHabilidades(Request $request)
+    {
+        $periodoNombre = $request->input('periodo');
+
+        if (!$periodoNombre) {
+            return response()->json(['message' => 'El periodo es requerido'], 400);
+        }
+
+        // 1. Obtener TODAS las habilidades (sin filtrar por activo)
+        $todasLasHabilidades = \App\Models\HabilidadBlanda::all();
+
+        // 2. Obtener los IDs de las habilidades reportadas en ese periodo
+        // CORRECCIÓN: Usamos el NOMBRE del periodo ($periodoNombre) en lugar del ID.
+        // Esto asume que en la tabla 'planificaciones', la columna 'periodo_academico' guarda el texto (ej: "Nov 2025").
+        $idsEvaluados = \App\Models\Reporte::whereHas('planificacion', function ($query) use ($periodoNombre) {
+            $query->where('periodo_academico', $periodoNombre); 
+        })
+        ->distinct()
+        ->pluck('habilidad_blanda_id')
+        ->toArray();
+
+        // 3. Separar en dos colecciones
+        $evaluadas = $todasLasHabilidades->whereIn('id', $idsEvaluados)->values();
+        $noEvaluadas = $todasLasHabilidades->whereNotIn('id', $idsEvaluados)->values();
+
+        return response()->json([
+            'evaluadas' => $evaluadas,
+            'noEvaluadas' => $noEvaluadas
+        ]);
+    }
+    
+    public function getPromedioPorHabilidad(Request $request)
+    {
+        $periodoNombre = $request->input('periodo');
+
+        if (!$periodoNombre) {
+            return response()->json(['message' => 'El periodo es requerido'], 400);
+        }
+
+        // 1. Obtener reportes filtrados por periodo (usando el nombre como string en planificaciones)
+        $reportes = \App\Models\Reporte::with([
+            'planificacion.asignatura',
+            'planificacion.ciclo',
+            'planificacion.habilidad', // Asegúrate de que esta relación exista en Planificacion
+            // 'planificacion.evaluaciones' // Para contar estudiantes si tienes la relación
+        ])
+        ->whereHas('planificacion', function ($q) use ($periodoNombre) {
+            $q->where('periodo_academico', $periodoNombre);
+        })
+        ->get();
+
+        // 2. Agrupar por Habilidad
+        $agrupado = $reportes->groupBy(function($item) {
+            return $item->planificacion->habilidad->nombre ?? 'Sin Habilidad';
+        });
+
+        $resultado = [];
+
+        foreach ($agrupado as $nombreHabilidad => $items) {
+            $detalles = [];
+            $sumaPromedios = 0;
+            $conteoMaterias = 0;
+
+            foreach ($items as $rep) {
+                // Obtenemos el cumplimiento individual (ej: 85.50)
+                $cumplimiento = floatval($rep->cumplimiento);
+                
+                // Contar estudiantes calificados (Consulta directa para asegurar precisión)
+                // Asume que tienes un modelo Evaluacion vinculado a la planificación
+                $estudiantesCount = \App\Models\Evaluacion::where('planificacion_id', $rep->planificacion_id)
+                                    ->distinct('estudiante_id')
+                                    ->count();
+
+                $detalles[] = [
+                    'ciclo' => $rep->planificacion->ciclo->nombre ?? 'N/A',
+                    'asignatura' => $rep->planificacion->asignatura->nombre ?? 'N/A',
+                    // Asumimos que la actividad está en la planificación, si no, pon un texto genérico
+                    'actividad' => $rep->planificacion->actividad_aprendizaje ?? 'Evaluación Continua', 
+                    'estudiantes' => $estudiantesCount,
+                    'promedio' => number_format($cumplimiento, 2)
+                ];
+
+                $sumaPromedios += $cumplimiento;
+                $conteoMaterias++;
+            }
+
+            // 3. Cálculo del Promedio General para esta habilidad
+            // (Suma de promedios individuales / Numero de materias)
+            $promedioGeneral = $conteoMaterias > 0 ? ($sumaPromedios / $conteoMaterias) : 0;
+
+            $resultado[] = [
+                'habilidad' => $nombreHabilidad,
+                'promedio_general' => number_format($promedioGeneral, 2),
+                'materias' => $detalles
+            ];
+        }
+
+        return response()->json($resultado);
     }
 }

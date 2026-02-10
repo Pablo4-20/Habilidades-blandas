@@ -16,6 +16,7 @@ import {
     ClipboardDocumentListIcon 
 } from '@heroicons/react/24/outline';
 import { UserPlusIcon } from '@heroicons/react/24/outline';
+import { CalculatorIcon } from '@heroicons/react/24/outline';
 
 const Sidebar = ({ isOpen, toggleSidebar }) => {
     const userStored = localStorage.getItem('user');
@@ -61,8 +62,10 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
             
             // --- NUEVO TÍTULO DE SECCIÓN ---
             { type: 'title', name: 'Reportes Generales' },
-            
+            { name: 'Habilidades Evaluadas', path: '/dashboard/habilidades-evaluadas', icon: ClipboardDocumentCheckIcon },
             { name: 'Ficha Resumen', path: '/dashboard/ficha-resumen-coordinador', icon: ClipboardDocumentListIcon },
+            { name: 'Promedio Habilidad', path: '/dashboard/promedio-habilidad', icon: CalculatorIcon },
+        
         ],
         docente: [
             { name: 'Inicio', path: '/dashboard', icon: HomeIcon },

@@ -116,7 +116,7 @@ const FichaResumenCoordinador = () => {
     }, [reporteData]);
 
     // ===============================================
-    // GENERAR PDF (Solo Lectura)
+    // GENERAR PDF (MODIFICADO: Sin cumplimiento)
     // ===============================================
     const generarFichaPDF = () => {
         if (!datosProcesados) return;
@@ -152,32 +152,45 @@ const FichaResumenCoordinador = () => {
             doc.text(`CICLO: ${cicloKey}`, 16, finalY + 5);
             finalY += 7;
 
+            // --- CAMBIO 1: Eliminamos 'cumplimiento' de la fila ---
             const bodyTable = filasCiclo.map(r => [
-                r.asignatura, r.habilidad, r.n1, r.n2, r.n3, r.n4, r.n5, 
-                r.conclusion || 'Sin observación',
-                r.cumplimiento
+                r.asignatura, 
+                r.habilidad, 
+                r.n1, r.n2, r.n3, r.n4, r.n5, 
+                r.conclusion || 'Sin observación'
+                // r.cumplimiento <--- ELIMINADO PARA EL PDF
             ]);
             
+            // --- CAMBIO 2: Eliminamos la fila de Promedio Cumplimiento Ciclo ---
+            /* BLOQUE COMENTADO/ELIMINADO:
             bodyTable.push([
                 { content: 'PROMEDIO CUMPLIMIENTO CICLO:', colSpan: 8, styles: { halign: 'right', fontStyle: 'bold', fillColor: [230, 230, 230] } },
                 { content: totalesPorCiclo[cicloKey].cumplimiento, styles: { halign: 'center', fontStyle: 'bold', fillColor: [230, 230, 230], textColor: [0, 100, 0] } }
-            ]);
+            ]); 
+            */
 
             autoTable(doc, {
                 startY: finalY,
-                head: [['Asignatura', 'Habilidad', 'N1', 'N2', 'N3', 'N4', 'N5', 'Observaciones Docente', 'Cumpl.']],
+                // --- CAMBIO 3: Eliminamos el encabezado 'Cumpl.' ---
+                head: [['Asignatura', 'Habilidad', 'N1', 'N2', 'N3', 'N4', 'N5', 'Observaciones Docente']],
                 body: bodyTable,
                 theme: 'grid',
                 styles: { fontSize: 8, cellPadding: 2, valign: 'middle' },
                 headStyles: { fillColor: [245, 245, 245], textColor: 0, fontStyle: 'bold', halign: 'center' },
-                columnStyles: { 0: { cellWidth: 50 }, 1: { cellWidth: 50 }, 7: { cellWidth: 'auto' }, 8: { cellWidth: 20, halign: 'center' } },
+                // --- CAMBIO 4: Ajustamos columnas (la columna de obs ahora es la última, índice 7) ---
+                columnStyles: { 
+                    0: { cellWidth: 50 }, 
+                    1: { cellWidth: 50 }, 
+                    7: { cellWidth: 'auto' } 
+                },
                 margin: { left: 14, right: 14 },
                 didDrawPage: (data) => { if (data.pageNumber > 1 && data.cursor.y === data.settings.startY) dibujarEncabezado(); }
             });
             finalY = doc.lastAutoTable.finalY;
         });
 
-        // --- PÁGINA FINAL DE RESUMEN ---
+        // --- PÁGINA FINAL DE RESUMEN (OPCIONAL: Si también quieres quitarlo de aquí, avísame) ---
+        // Se mantiene el resumen general de carrera según lo solicitado (solo pediste quitar el de ciclo)
         doc.addPage();
         dibujarEncabezado();
         doc.setFontSize(12); doc.setTextColor(0); doc.setFont("helvetica", "bold");
@@ -339,7 +352,7 @@ const FichaResumenCoordinador = () => {
                             <ChartBarIcon className="h-6 w-6"/> RESUMEN DE CARRERA
                         </div>
                         <div className="p-6">
-                            {/* CAMBIO: Grid Responsivo (1 col en móvil, 3 en PC) en lugar de tabla */}
+                            {/* Grid Responsivo (1 col en móvil, 3 en PC) */}
                             <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-gray-200">
                                 <div className="p-4 text-center">
                                     <p className="text-gray-500 uppercase text-xs font-bold mb-1">Total Ciclos</p>
