@@ -5,7 +5,9 @@ import {
     CheckCircleIcon, 
     XCircleIcon, 
     CalendarDaysIcon,
-    ClipboardDocumentListIcon
+    ClipboardDocumentListIcon,
+    ChevronDownIcon, // Importamos icono para indicar desplegable
+    ChevronUpIcon
 } from '@heroicons/react/24/outline';
 
 const HabilidadesEvaluadas = () => {
@@ -15,6 +17,9 @@ const HabilidadesEvaluadas = () => {
     const [evaluadas, setEvaluadas] = useState([]);
     const [noEvaluadas, setNoEvaluadas] = useState([]);
     const [loading, setLoading] = useState(false);
+
+    // Estado para controlar qué habilidad está expandida
+    const [expandedId, setExpandedId] = useState(null);
 
     // 1. Cargar Periodos
     useEffect(() => {
@@ -40,6 +45,7 @@ const HabilidadesEvaluadas = () => {
 
     const fetchHabilidadesStatus = async () => {
         setLoading(true);
+        setExpandedId(null); // Resetear expansión al cambiar datos
         try {
             const res = await api.post('/reportes/estado-habilidades', {
                 periodo: filtroPeriodo
@@ -51,6 +57,10 @@ const HabilidadesEvaluadas = () => {
         } finally {
             setLoading(false);
         }
+    };
+
+    const toggleExpand = (id) => {
+        setExpandedId(expandedId === id ? null : id);
     };
 
     return (
@@ -84,7 +94,7 @@ const HabilidadesEvaluadas = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     
                     {/* Columna 1: Evaluadas */}
-                    <div className="bg-white rounded-xl shadow-md border border-green-100 overflow-hidden">
+                    <div className="bg-white rounded-xl shadow-md border border-green-100 overflow-hidden h-fit">
                         <div className="bg-green-50 px-4 py-3 border-b border-green-200 flex justify-between items-center">
                             <h3 className="font-bold text-green-800 flex items-center gap-2">
                                 <CheckCircleIcon className="h-5 w-5"/>
@@ -94,12 +104,51 @@ const HabilidadesEvaluadas = () => {
                                 {evaluadas.length}
                             </span>
                         </div>
-                        <div className="p-4 max-h-[500px] overflow-y-auto">
+                        <div className="p-4 max-h-[600px] overflow-y-auto custom-scrollbar">
                             {evaluadas.length > 0 ? (
                                 <ul className="space-y-2">
                                     {evaluadas.map(h => (
-                                        <li key={h.id} className="p-3 bg-gray-50 rounded-lg border border-gray-100 text-gray-700 text-sm hover:bg-green-50 transition-colors">
-                                            {h.nombre}
+                                        <li key={h.id} className="bg-gray-50 rounded-lg border border-gray-100 overflow-hidden transition-all duration-200">
+                                            {/* Cabecera del item (Clickable) */}
+                                            <div 
+                                                onClick={() => toggleExpand(h.id)}
+                                                className={`p-3 flex justify-between items-center cursor-pointer hover:bg-green-50 transition-colors ${expandedId === h.id ? 'bg-green-50' : ''}`}
+                                            >
+                                                <span className="text-gray-700 text-sm font-medium">{h.nombre}</span>
+                                                {expandedId === h.id ? (
+                                                    <ChevronUpIcon className="h-4 w-4 text-green-600"/>
+                                                ) : (
+                                                    <ChevronDownIcon className="h-4 w-4 text-gray-400"/>
+                                                )}
+                                            </div>
+
+                                            {/* Detalle Desplegable */}
+                                            {expandedId === h.id && (
+                                                <div className="bg-white px-4 py-3 border-t border-gray-100 text-xs animate-fade-in">
+                                                    <p className="text-gray-500 font-semibold mb-2 uppercase tracking-wider text-[10px]">
+                                                        Impartida en:
+                                                    </p>
+                                                    {h.detalle_asignaturas && h.detalle_asignaturas.length > 0 ? (
+                                                        <ul className="space-y-2">
+                                                            {h.detalle_asignaturas.map((asig, idx) => (
+                                                                <li key={idx} className="flex flex-col pb-2 border-b border-gray-50 last:border-0 last:pb-0">
+                                                                    <span className="font-bold text-gray-700">
+                                                                        {asig.materia}
+                                                                    </span>
+                                                                    <div className="flex justify-between mt-1 text-gray-500">
+                                                                        <span>{asig.ciclo} - Paralelo {asig.paralelo}</span>
+                                                                    </div>
+                                                                    <span className="text-gray-400 italic mt-0.5">
+                                                                        Doc: {asig.docente}
+                                                                    </span>
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    ) : (
+                                                        <p className="text-gray-400 italic">Sin detalles disponibles.</p>
+                                                    )}
+                                                </div>
+                                            )}
                                         </li>
                                     ))}
                                 </ul>
@@ -109,8 +158,8 @@ const HabilidadesEvaluadas = () => {
                         </div>
                     </div>
 
-                    {/* Columna 2: No Evaluadas */}
-                    <div className="bg-white rounded-xl shadow-md border border-red-100 overflow-hidden">
+                    {/* Columna 2: No Evaluadas (Sin cambios mayores, solo estilo para igualar altura) */}
+                    <div className="bg-white rounded-xl shadow-md border border-red-100 overflow-hidden h-fit">
                         <div className="bg-red-50 px-4 py-3 border-b border-red-200 flex justify-between items-center">
                             <h3 className="font-bold text-red-800 flex items-center gap-2">
                                 <XCircleIcon className="h-5 w-5"/>
@@ -120,7 +169,7 @@ const HabilidadesEvaluadas = () => {
                                 {noEvaluadas.length}
                             </span>
                         </div>
-                        <div className="p-4 max-h-[500px] overflow-y-auto">
+                        <div className="p-4 max-h-[600px] overflow-y-auto custom-scrollbar">
                             {noEvaluadas.length > 0 ? (
                                 <ul className="space-y-2">
                                     {noEvaluadas.map(h => (

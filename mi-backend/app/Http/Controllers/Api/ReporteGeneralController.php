@@ -276,12 +276,12 @@ class ReporteGeneralController extends Controller
 
         $todasLasHabilidades = HabilidadBlanda::all();
 
-        // Construir consulta base
+        // 1. Obtener IDs de habilidades evaluadas en el periodo
         $queryReportes = Reporte::whereHas('planificacion', function ($query) use ($periodoNombre) {
             $query->where('periodo_academico', $periodoNombre); 
         });
 
-        // FILTRO POR CARRERA: Si el usuario tiene carrera asignada, filtrar por ella
+        // Filtro por carrera del coordinador
         if ($user->carrera_id) {
             $queryReportes->whereHas('planificacion.asignatura', function($q) use ($user) {
                 $q->where('carrera_id', $user->carrera_id);
@@ -292,7 +292,43 @@ class ReporteGeneralController extends Controller
             ->pluck('habilidad_blanda_id')
             ->toArray();
 
-        $evaluadas = $todasLasHabilidades->whereIn('id', $idsEvaluados)->values();
+        // 2. Procesar Evaluadas para adjuntar asignaturas
+        $evaluadas = $todasLasHabilidades->whereIn('id', $idsEvaluados)->map(function($habilidad) use ($periodoNombre, $user) {
+            
+            // Consultar dónde se evaluó esta habilidad específica
+            $qry = Reporte::where('habilidad_blanda_id', $habilidad->id)
+                ->whereHas('planificacion', function($q) use ($periodoNombre) {
+                    $q->where('periodo_academico', $periodoNombre);
+                })
+                ->with(['planificacion.asignatura.ciclo', 'planificacion.docente']);
+
+            if ($user->carrera_id) {
+                $qry->whereHas('planificacion.asignatura', function($q) use ($user) {
+                    $q->where('carrera_id', $user->carrera_id);
+                });
+            }
+
+            $reportes = $qry->get();
+
+            // Formatear detalles
+            $detalles = $reportes->map(function($rep) {
+                return [
+                    'materia' => $rep->planificacion->asignatura->nombre ?? 'Desconocida',
+                    'ciclo'   => $rep->planificacion->asignatura->ciclo->nombre ?? '',
+                    'paralelo'=> $rep->planificacion->paralelo,
+                    'docente' => $rep->planificacion->docente ? ($rep->planificacion->docente->nombres . ' ' . $rep->planificacion->docente->apellidos) : ''
+                ];
+            });
+
+            // Eliminar duplicados (por si hay varios reportes en la misma materia/paralelo) y adjuntar
+            $habilidad->detalle_asignaturas = $detalles->unique(function ($item) {
+                return $item['materia'].$item['paralelo'];
+            })->values();
+
+            return $habilidad;
+        })->values();
+
+        // 3. Procesar No Evaluadas
         $noEvaluadas = $todasLasHabilidades->whereNotIn('id', $idsEvaluados)->values();
 
         return response()->json([
@@ -311,20 +347,21 @@ class ReporteGeneralController extends Controller
 
         if (!$periodoNombre) return response()->json(['message' => 'El periodo es requerido'], 400);
 
-        // --- OBTENER NOMBRE CARRERA ---
+        // --- 1. Obtener Nombre Carrera ---
         $nombreCarrera = 'Carrera General';
         if ($user->carrera_id) {
-            $carreraObj = \App\Models\Carrera::find($user->carrera_id);
+            $carreraObj = Carrera::find($user->carrera_id);
             if ($carreraObj) $nombreCarrera = $carreraObj->nombre;
         }
-        // ------------------------------
 
+        // --- 2. Consultar Reportes ---
         $queryReportes = Reporte::with([
             'planificacion.asignatura.ciclo',
             'habilidad',
         ])
         ->whereHas('planificacion', function ($q) use ($periodoNombre) {
-            $q->where('periodo_academico', $periodoNombre);
+            $q->where('periodo_academico', $periodoNombre)
+              ->where('parcial', '2'); // Solo segundo parcial
         });
 
         if ($user->carrera_id) {
@@ -335,69 +372,90 @@ class ReporteGeneralController extends Controller
 
         $reportes = $queryReportes->get();
 
-        $agrupado = $reportes->groupBy(function($item) {
-            return $item->habilidad->nombre ?? 'Sin Habilidad';
+        // --- 3. Agrupar por Ciclo ---
+        $porCiclo = $reportes->groupBy(function($item) {
+            return $item->planificacion->asignatura->ciclo->nombre ?? 'Sin Ciclo';
         });
 
-        $resultado = [];
+        $resultadoCiclos = [];
 
-        foreach ($agrupado as $nombreHabilidad => $items) {
-            $detalles = [];
-            $sumaPromedios = 0;
-            $conteoMaterias = 0;
+        foreach ($porCiclo as $nombreCiclo => $reportesCiclo) {
+            
+            // Dentro del ciclo, agrupar por Habilidad
+            $porHabilidad = $reportesCiclo->groupBy(function($item) {
+                return $item->habilidad->nombre ?? 'Sin Habilidad';
+            });
 
-            foreach ($items as $rep) {
-                // Cálculo Promedio
-                $evals = Evaluacion::where('planificacion_id', $rep->planificacion_id)
-                            ->where('habilidad_blanda_id', $rep->habilidad_blanda_id)
-                            ->get();
+            $habilidadesData = [];
 
-                $n1 = $evals->where('nivel', 1)->count();
-                $n2 = $evals->where('nivel', 2)->count();
-                $n3 = $evals->where('nivel', 3)->count();
-                $n4 = $evals->where('nivel', 4)->count();
-                $n5 = $evals->where('nivel', 5)->count();
+            foreach ($porHabilidad as $nombreHabilidad => $items) {
+                $detalles = [];
+                $sumaPromedios = 0;
+                $conteoMaterias = 0;
 
-                $totalEstudiantes = $n1 + $n2 + $n3 + $n4 + $n5;
+                foreach ($items as $rep) {
+                    // Cálculo Promedio Individual (Escala 1-5)
+                    $evals = Evaluacion::where('planificacion_id', $rep->planificacion_id)
+                                ->where('habilidad_blanda_id', $rep->habilidad_blanda_id)
+                                ->get();
 
-                if ($totalEstudiantes > 0) {
-                    $sumaPonderada = ($n1 * 20) + ($n2 * 40) + ($n3 * 60) + ($n4 * 80) + ($n5 * 100);
-                    $promedioIndividual = $sumaPonderada / $totalEstudiantes;
-                } else {
-                    $promedioIndividual = 0;
+                    $n1 = $evals->where('nivel', 1)->count();
+                    $n2 = $evals->where('nivel', 2)->count();
+                    $n3 = $evals->where('nivel', 3)->count();
+                    $n4 = $evals->where('nivel', 4)->count();
+                    $n5 = $evals->where('nivel', 5)->count();
+
+                    $totalEstudiantes = $n1 + $n2 + $n3 + $n4 + $n5;
+
+                    if ($totalEstudiantes > 0) {
+                        $sumaPonderada = ($n1 * 1) + ($n2 * 2) + ($n3 * 3) + ($n4 * 4) + ($n5 * 5);
+                        $promedioIndividual = $sumaPonderada / $totalEstudiantes;
+                    } else {
+                        $promedioIndividual = 0;
+                    }
+
+                    $detallePlan = DetallePlanificacion::where('planificacion_id', $rep->planificacion_id)
+                                    ->where('habilidad_blanda_id', $rep->habilidad_blanda_id)
+                                    ->first();
+                    
+                    $nombreActividad = $detallePlan ? $detallePlan->actividades : 'Sin actividad';
+
+                    $detalles[] = [
+                        'asignatura' => $rep->planificacion->asignatura->nombre ?? 'N/A',
+                        'paralelo' => $rep->planificacion->paralelo,
+                        'actividad' => $nombreActividad,
+                        'estudiantes' => $totalEstudiantes,
+                        'promedio' => number_format($promedioIndividual, 2)
+                    ];
+
+                    $sumaPromedios += $promedioIndividual;
+                    $conteoMaterias++;
                 }
 
-                $detallePlan = DetallePlanificacion::where('planificacion_id', $rep->planificacion_id)
-                                ->where('habilidad_blanda_id', $rep->habilidad_blanda_id)
-                                ->first();
-                
-                $nombreActividad = $detallePlan ? $detallePlan->actividades : 'Sin actividad';
+                $promedioGeneralHabilidad = $conteoMaterias > 0 ? ($sumaPromedios / $conteoMaterias) : 0;
 
-                $detalles[] = [
-                    'ciclo' => $rep->planificacion->asignatura->ciclo->nombre ?? 'N/A',
-                    'asignatura' => $rep->planificacion->asignatura->nombre ?? 'N/A',
-                    'actividad' => $nombreActividad,
-                    'estudiantes' => $totalEstudiantes,
-                    'promedio' => number_format($promedioIndividual, 2)
+                $habilidadesData[] = [
+                    'habilidad' => $nombreHabilidad,
+                    'promedio_ciclo' => number_format($promedioGeneralHabilidad, 2),
+                    'materias' => $detalles
                 ];
-
-                $sumaPromedios += $promedioIndividual;
-                $conteoMaterias++;
             }
 
-            $promedioGeneral = $conteoMaterias > 0 ? ($sumaPromedios / $conteoMaterias) : 0;
-
-            $resultado[] = [
-                'habilidad' => $nombreHabilidad,
-                'promedio_general' => number_format($promedioGeneral, 2),
-                'materias' => $detalles
+            $resultadoCiclos[] = [
+                'ciclo' => $nombreCiclo,
+                'order' => $this->_convertirCiclo($nombreCiclo),
+                'habilidades' => $habilidadesData
             ];
         }
 
-        // DEVOLVEMOS ESTRUCTURA COMPLETA
+        // --- 4. Ordenar Ciclos (I, II, III...) ---
+        usort($resultadoCiclos, function($a, $b) {
+            return $a['order'] <=> $b['order'];
+        });
+
         return response()->json([
             'carrera' => $nombreCarrera,
-            'data' => $resultado
+            'data' => $resultadoCiclos // Estructura: [ {ciclo, habilidades: []}, ... ]
         ]);
     }
 }

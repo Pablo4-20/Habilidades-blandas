@@ -3,14 +3,15 @@ import api from '../services/api';
 import CustomSelect from './ui/CustomSelect';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx'; // [NUEVO] Importamos la librería para Excel
+import * as XLSX from 'xlsx';
 import { 
     CalculatorIcon, 
     CalendarDaysIcon,
     ChartBarIcon,
     UserGroupIcon,
     PrinterIcon,
-    TableCellsIcon // [NUEVO] Icono para el botón de Excel
+    TableCellsIcon,
+    AcademicCapIcon
 } from '@heroicons/react/24/outline';
 
 import logoIzq from '../assets/facultad.png'; 
@@ -20,7 +21,7 @@ import logoTecnologias from '../assets/tecnologias.png';
 const PromedioHabilidad = () => {
     const [periodos, setPeriodos] = useState([]);
     const [filtroPeriodo, setFiltroPeriodo] = useState('');
-    const [data, setData] = useState([]);
+    const [dataCiclos, setDataCiclos] = useState([]); // Ahora guardamos ciclos
     const [nombreCarrera, setNombreCarrera] = useState(''); 
     const [loading, setLoading] = useState(false);
 
@@ -52,86 +53,74 @@ const PromedioHabilidad = () => {
             const res = await api.post('/reportes/promedio-habilidad', {
                 periodo: filtroPeriodo
             });
-            setData(res.data.data || []);
+            setDataCiclos(res.data.data || []);
             setNombreCarrera(res.data.carrera || 'Carrera');
         } catch (error) {
             console.error("Error:", error);
-            setData([]);
+            setDataCiclos([]);
         } finally {
             setLoading(false);
         }
     };
 
     // ==========================================
-    // [NUEVO] GENERAR EXCEL
+    // GENERAR EXCEL
     // ==========================================
     const generarExcel = () => {
-        if (data.length === 0) return;
+        if (dataCiclos.length === 0) return;
 
-        // 1. Aplanar la data: Convertir la estructura jerárquica a filas planas para Excel
         const filasExcel = [];
 
-        data.forEach(item => {
-            // Si la habilidad no tiene materias, igual agregamos una fila con el promedio general
-            if (!item.materias || item.materias.length === 0) {
-                filasExcel.push({
-                    "Periodo": filtroPeriodo,
-                    "Carrera": nombreCarrera,
-                    "Habilidad": item.habilidad,
-                    "Promedio Gral. Habilidad": `${item.promedio_general}%`,
-                    "Ciclo": "N/A",
-                    "Asignatura": "Sin asignaturas",
-                    "Actividad": "-",
-                    "Estudiantes Evaluados": 0,
-                    "Promedio Asignatura": "-"
-                });
-            } else {
-                // Si tiene materias, creamos una fila por cada materia/actividad
-                item.materias.forEach(materia => {
+        dataCiclos.forEach(ciclo => {
+            ciclo.habilidades.forEach(hab => {
+                if (!hab.materias || hab.materias.length === 0) {
                     filasExcel.push({
                         "Periodo": filtroPeriodo,
                         "Carrera": nombreCarrera,
-                        "Habilidad": item.habilidad,
-                        "Promedio Gral. Habilidad": `${item.promedio_general}%`, // Repetimos el dato para permitir filtros en Excel
-                        "Ciclo": materia.ciclo,
-                        "Asignatura": materia.asignatura,
-                        "Actividad": materia.actividad,
-                        "Estudiantes Evaluados": materia.estudiantes,
-                        "Promedio Asignatura": `${materia.promedio}%`
+                        "Ciclo": ciclo.ciclo,
+                        "Habilidad": hab.habilidad,
+                        "Promedio Habilidad (Ciclo)": hab.promedio_ciclo,
+                        "Asignatura": "Sin asignaturas",
+                        "Actividad": "-",
+                        "Estudiantes": 0,
+                        "Promedio Asignatura": "-"
                     });
-                });
-            }
+                } else {
+                    hab.materias.forEach(materia => {
+                        filasExcel.push({
+                            "Periodo": filtroPeriodo,
+                            "Carrera": nombreCarrera,
+                            "Ciclo": ciclo.ciclo,
+                            "Habilidad": hab.habilidad,
+                            "Promedio Habilidad (Ciclo)": hab.promedio_ciclo,
+                            "Asignatura": materia.asignatura,
+                            "Actividad": materia.actividad,
+                            "Estudiantes": materia.estudiantes,
+                            "Promedio Asignatura": materia.promedio
+                        });
+                    });
+                }
+            });
         });
 
-        // 2. Crear hoja de trabajo y libro
         const worksheet = XLSX.utils.json_to_sheet(filasExcel);
-        
-        // Ajustar ancho de columnas automáticamente (opcional pero recomendado)
+        // Ajuste ancho columnas
         const wscols = [
-            { wch: 15 }, // Periodo
-            { wch: 30 }, // Carrera
-            { wch: 25 }, // Habilidad
-            { wch: 20 }, // Promedio Gral
-            { wch: 10 }, // Ciclo
-            { wch: 30 }, // Asignatura
-            { wch: 25 }, // Actividad
-            { wch: 15 }, // Estudiantes
-            { wch: 15 }  // Promedio Ind
+            { wch: 15 }, { wch: 25 }, { wch: 10 }, { wch: 25 },
+            { wch: 20 }, { wch: 30 }, { wch: 25 }, { wch: 10 }, { wch: 15 }
         ];
         worksheet['!cols'] = wscols;
 
         const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte Habilidades");
-
-        // 3. Descargar archivo
-        XLSX.writeFile(workbook, `Reporte_Habilidades_${filtroPeriodo}.xlsx`);
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Por Ciclo");
+        XLSX.writeFile(workbook, `Reporte_Ciclos_${filtroPeriodo}.xlsx`);
     };
 
     // ==========================================
     // GENERAR PDF
     // ==========================================
     const generarPDF = () => {
-        if (data.length === 0) return;
+        if (dataCiclos.length === 0) return;
 
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
@@ -148,7 +137,7 @@ const PromedioHabilidad = () => {
             doc.text("UNIVERSIDAD ESTATAL DE BOLIVAR", pageWidth / 2, 12, { align: "center" });
             
             doc.setFontSize(11); doc.setFont("helvetica", "normal");
-            doc.text("REPORTE DE PROMEDIOS POR HABILIDAD", pageWidth / 2, 18, { align: "center" });
+            doc.text("REPORTE DE HABILIDADES POR CICLO", pageWidth / 2, 18, { align: "center" });
             
             doc.setFontSize(10); doc.setTextColor(80);
             doc.text(`${nombreCarrera} | Periodo: ${filtroPeriodo}`, pageWidth / 2, 24, { align: "center" });
@@ -158,57 +147,74 @@ const PromedioHabilidad = () => {
 
         let finalY = dibujarEncabezado();
 
-        data.forEach((item, index) => {
+        dataCiclos.forEach((ciclo) => {
+            // Verificar espacio para el título del ciclo
             if (finalY > pageHeight - 40) { 
                 doc.addPage(); 
                 finalY = dibujarEncabezado(); 
             }
 
-            doc.setFillColor(240, 240, 240);
+            // --- TÍTULO CICLO ---
+            doc.setFillColor(30, 58, 138); // Azul oscuro
             doc.rect(14, finalY, pageWidth - 28, 8, 'F');
-            
-            doc.setFontSize(10);
-            doc.setTextColor(30, 58, 138); 
+            doc.setFontSize(11);
+            doc.setTextColor(255, 255, 255);
             doc.setFont("helvetica", "bold");
-            doc.text(`Habilidad: ${item.habilidad}`, 16, finalY + 5);
+            doc.text(`${ciclo.ciclo}`, pageWidth / 2, finalY + 5.5, { align: "center" });
             
-            doc.setTextColor(0, 100, 0); 
-            doc.text(`Promedio General: ${item.promedio_general}%`, pageWidth - 16, finalY + 5, { align: "right" });
+            finalY += 12;
 
-            finalY += 10;
-
-            const bodyTable = item.materias.map(m => [
-                m.ciclo,          
-                m.estudiantes,    
-                m.promedio + '%'  
-            ]);
-
-            autoTable(doc, {
-                startY: finalY,
-                head: [['Ciclo', 'Estudiantes Evaluados', 'Promedio Individual']], 
-                body: bodyTable,
-                theme: 'grid',
-                styles: { fontSize: 9, cellPadding: 2, halign: 'center' },
-                headStyles: { fillColor: [55, 65, 81], textColor: 255, fontStyle: 'bold' },
-                columnStyles: {
-                    0: { cellWidth: 40 }, 
-                    1: { cellWidth: 50 }, 
-                    2: { cellWidth: 'auto' } 
-                },
-                margin: { left: 14, right: 14 },
-                didDrawPage: (data) => {
-                    if (data.pageNumber > 1 && data.cursor.y === data.settings.startY) {
-                        dibujarEncabezado();
-                    }
+            ciclo.habilidades.forEach(hab => {
+                if (finalY > pageHeight - 40) {
+                    doc.addPage();
+                    finalY = dibujarEncabezado();
                 }
+
+                // Subtítulo Habilidad
+                doc.setFontSize(10);
+                doc.setTextColor(0);
+                doc.setFont("helvetica", "bold");
+                doc.text(`Habilidad: ${hab.habilidad}`, 14, finalY);
+                
+                doc.setFont("helvetica", "normal");
+                doc.text(`Promedio Ciclo: ${hab.promedio_ciclo} / 5`, pageWidth - 14, finalY, { align: "right" });
+                
+                finalY += 2;
+
+                // Tabla de Materias
+                const bodyTable = hab.materias.map(m => [
+                    m.asignatura,          
+                    m.actividad,
+                    m.estudiantes,    
+                    m.promedio 
+                ]);
+
+                autoTable(doc, {
+                    startY: finalY,
+                    head: [['Asignatura', 'Actividad', 'Est.', 'Prom.']], 
+                    body: bodyTable,
+                    theme: 'grid',
+                    styles: { fontSize: 8, cellPadding: 1.5, halign: 'center' },
+                    headStyles: { fillColor: [240, 240, 240], textColor: 50, fontStyle: 'bold', lineColor: 200 },
+                    columnStyles: { 0: { cellWidth: 60, halign:'left' }, 1: { cellWidth: 'auto' }, 2: { cellWidth: 15 }, 3: { cellWidth: 15 } },
+                    margin: { left: 14, right: 14 },
+                    didDrawPage: (data) => {
+                        if (data.pageNumber > 1 && data.cursor.y === data.settings.startY) {
+                            dibujarEncabezado();
+                        }
+                    }
+                });
+
+                finalY = doc.lastAutoTable.finalY + 8;
             });
 
-            finalY = doc.lastAutoTable.finalY + 10;
+            finalY += 5; // Espacio extra entre ciclos
         });
 
-        if (finalY + 40 > pageHeight) {
+        // Firma Pie de Página
+        if (finalY + 30 > pageHeight) {
             doc.addPage();
-            finalY = dibujarEncabezado() + 20; 
+            finalY = 40; 
         } else {
             finalY += 20; 
         }
@@ -219,18 +225,9 @@ const PromedioHabilidad = () => {
 
         doc.setFontSize(11);
         doc.setTextColor(0);
-        doc.setFont("helvetica", "normal");
         doc.text("Firma Coordinador(a)", pageWidth / 2, finalY + 5, { align: "center" });
 
-        const fechaActual = new Date().toLocaleDateString('es-ES', { 
-            year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' 
-        });
-        
-        doc.setFontSize(8);
-        doc.setTextColor(150);
-        doc.text(`Generado el: ${fechaActual}`, pageWidth - 14, pageHeight - 10, { align: 'right' });
-
-        doc.save(`Promedio_Habilidades_${filtroPeriodo}.pdf`);
+        doc.save(`Reporte_Ciclos_${filtroPeriodo}.pdf`);
     };
 
     return (
@@ -239,18 +236,17 @@ const PromedioHabilidad = () => {
                 <div>
                     <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                         <CalculatorIcon className="h-7 w-7 text-blue-700"/>
-                        Promedio por Habilidad
+                        Promedio por Ciclo
                     </h2>
                     <p className="text-sm text-gray-500 mt-1">
-                        Análisis comparativo - {nombreCarrera || 'Cargando...'}
+                        Desglose de habilidades evaluadas en cada nivel - {nombreCarrera || 'Cargando...'}
                     </p>
                 </div>
                 
-                {/* [NUEVO] Agrupamos botones de exportación */}
                 <div className="flex flex-wrap gap-2">
                     <button 
                         onClick={generarExcel}
-                        disabled={data.length === 0 || loading}
+                        disabled={dataCiclos.length === 0 || loading}
                         className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg shadow flex items-center gap-2 text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <TableCellsIcon className="h-5 w-5"/>
@@ -259,7 +255,7 @@ const PromedioHabilidad = () => {
 
                     <button 
                         onClick={generarPDF}
-                        disabled={data.length === 0 || loading}
+                        disabled={dataCiclos.length === 0 || loading}
                         className="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg shadow flex items-center gap-2 text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <PrinterIcon className="h-5 w-5"/>
@@ -279,66 +275,75 @@ const PromedioHabilidad = () => {
             </div>
 
             {loading ? (
-                <div className="text-center py-10 text-blue-600">Calculando promedios...</div>
-            ) : data.length === 0 ? (
+                <div className="text-center py-10 text-blue-600">Calculando promedios por ciclo...</div>
+            ) : dataCiclos.length === 0 ? (
                 <div className="text-center py-10 text-gray-400 italic bg-white rounded border border-dashed">
                     No hay datos registrados para este periodo.
                 </div>
             ) : (
-                <div className="grid grid-cols-1 gap-8">
-                    {data.map((item, index) => (
-                        <div key={index} className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
-                            <div className="bg-slate-50 px-6 py-4 border-b border-gray-200 flex flex-col md:flex-row justify-between items-center gap-4">
-                                <div>
-                                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                                        <ChartBarIcon className="h-5 w-5 text-blue-600"/>
-                                        {item.habilidad}
-                                    </h3>
-                                    <p className="text-xs text-gray-500 mt-0.5">
-                                        Datos consolidados del periodo
-                                    </p>
-                                </div>
-                                <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-lg border border-gray-200 shadow-sm">
-                                    <span className="text-sm font-semibold text-gray-600 uppercase tracking-wide">Promedio General:</span>
-                                    <span className={`text-xl font-bold ${parseFloat(item.promedio_general) >= 70 ? 'text-green-600' : 'text-orange-500'}`}>
-                                        {item.promedio_general}%
-                                    </span>
-                                </div>
+                <div className="space-y-10">
+                    {dataCiclos.map((ciclo, index) => (
+                        <div key={index} className="bg-white rounded-xl shadow-lg border border-blue-100 overflow-hidden">
+                            {/* Cabecera del Ciclo */}
+                            <div className="bg-blue-600 px-6 py-4 flex justify-between items-center">
+                                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                                    <AcademicCapIcon className="h-6 w-6 text-white"/>
+                                    {ciclo.ciclo}
+                                </h3>
+                                <span className="bg-blue-500 text-white text-xs px-3 py-1 rounded-full font-medium border border-blue-400">
+                                    {ciclo.habilidades.length} Habilidades Evaluadas
+                                </span>
                             </div>
 
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm text-left text-gray-600">
-                                    <thead className="text-xs text-gray-700 uppercase bg-gray-50">
-                                        <tr>
-                                            <th className="px-6 py-3">Ciclo</th>
-                                            <th className="px-6 py-3">Asignatura</th>
-                                            <th className="px-6 py-3">Actividad</th>
-                                            <th className="px-6 py-3 text-center">
-                                                <div className="flex items-center justify-center gap-1">
-                                                    <UserGroupIcon className="h-4 w-4"/> Est. Calif.
-                                                </div>
-                                            </th>
-                                            <th className="px-6 py-3 text-center">Promedio Ind.</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {item.materias.map((materia, idx) => (
-                                            <tr key={idx} className="bg-white border-b hover:bg-gray-50 transition-colors">
-                                                <td className="px-6 py-4 font-medium">{materia.ciclo}</td>
-                                                <td className="px-6 py-4 font-medium text-gray-900">{materia.asignatura}</td>
-                                                <td className="px-6 py-4">{materia.actividad}</td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
-                                                        {materia.estudiantes}
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-4 text-center font-bold text-gray-800">
-                                                    {materia.promedio}%
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                            <div className="p-6 grid grid-cols-1 gap-6">
+                                {ciclo.habilidades.map((hab, idx) => (
+                                    <div key={idx} className="border border-gray-200 rounded-lg bg-gray-50 overflow-hidden">
+                                        
+                                        {/* Cabecera de la Habilidad */}
+                                        <div className="px-4 py-3 bg-white border-b border-gray-200 flex justify-between items-center">
+                                            <div className="flex items-center gap-2">
+                                                <ChartBarIcon className="h-5 w-5 text-blue-600"/>
+                                                <h4 className="font-bold text-gray-800">{hab.habilidad}</h4>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs text-gray-500 uppercase">Promedio Ciclo:</span>
+                                                <span className={`text-lg font-bold ${parseFloat(hab.promedio_ciclo) >= 3.5 ? 'text-green-600' : 'text-orange-500'}`}>
+                                                    {hab.promedio_ciclo} <span className="text-xs text-gray-400">/5</span>
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {/* Tabla de Materias */}
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-sm text-left text-gray-600">
+                                                <thead className="text-xs text-gray-500 uppercase bg-gray-100 border-b border-gray-200">
+                                                    <tr>
+                                                        <th className="px-4 py-2 font-medium">Asignatura</th>
+                                                        <th className="px-4 py-2 font-medium">Actividad</th>
+                                                        <th className="px-4 py-2 font-medium text-center">Estudiantes</th>
+                                                        <th className="px-4 py-2 font-medium text-center">Promedio</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-200">
+                                                    {hab.materias.map((mat, i) => (
+                                                        <tr key={i} className="hover:bg-white transition-colors">
+                                                            <td className="px-4 py-2 font-medium text-gray-800">{mat.asignatura}</td>
+                                                            <td className="px-4 py-2 text-xs">{mat.actividad}</td>
+                                                            <td className="px-4 py-2 text-center">
+                                                                <span className="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-full">
+                                                                    {mat.estudiantes}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-4 py-2 text-center font-bold text-gray-700">
+                                                                {mat.promedio}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     ))}
