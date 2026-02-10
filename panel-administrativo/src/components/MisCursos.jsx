@@ -74,10 +74,13 @@ const MisCursos = () => {
         setSelectedCedulas([]);
         try {
             const res = await api.get('/estudiantes');
-            const estudiantesSoftware = res.data.filter(e => 
-                e.carrera && e.carrera.toLowerCase().includes('software')
+            // Filtramos estudiantes que coincidan parcialmente con la carrera si es necesario, 
+            // o traemos todos. Aquí se mantiene la lógica de "software" que tenías, 
+            // pero podrías ajustarlo para usar materiaSeleccionada.carrera si quisieras filtrar por la carrera actual.
+            const estudiantesFiltrados = res.data.filter(e => 
+                e.carrera && e.carrera.toLowerCase().includes('software') // OJO: Tal vez quieras generalizar esto
             );
-            setListaGlobalEstudiantes(estudiantesSoftware);
+            setListaGlobalEstudiantes(estudiantesFiltrados);
         } catch (e) {
             console.error(e);
             Swal.fire('Error', 'No se pudo cargar el listado global', 'error');
@@ -181,17 +184,9 @@ const MisCursos = () => {
     }, [busqueda]);
 
     return (
-        /* CAMBIO 1: 
-           - 'h-auto': Altura automática en móvil para que crezca y use el scroll de la página.
-           - 'md:h-[calc(100vh...)]': Altura fija en PC para mantener el diseño de panel.
-        */
         <div className="flex flex-col md:flex-row h-auto md:h-[calc(100vh-theme(spacing.24))] -m-6 animate-fade-in bg-gray-50 relative">
             
-            {/* CAMBIO 2 - SIDEBAR:
-               - Eliminado 'max-h-48' en móvil.
-               - Ahora usa 'md:overflow-y-auto' y 'md:h-full' solo en escritorio.
-               - En móvil es un bloque normal que empuja el contenido hacia abajo.
-            */}
+            {/* SIDEBAR */}
             <aside className="w-full md:w-72 bg-white border-b md:border-b-0 md:border-r border-gray-200 shrink-0 md:overflow-y-auto md:h-full">
                 <div className="p-4 md:p-6 border-b sticky top-0 bg-white z-10">
                     <h2 className="font-bold flex items-center gap-2 text-gray-800">
@@ -226,10 +221,21 @@ const MisCursos = () => {
                                             }`}
                                         >
                                             <div className="text-xs font-bold truncate">{m.nombre}</div>
-                                            <div className={`text-[10px] ${
-                                                 (materiaSeleccionada?.asignatura_id === m.asignatura_id && materiaSeleccionada?.paralelo === m.paralelo)
-                                                 ? 'text-blue-100' : 'text-gray-400'
-                                            }`}>Paralelo {m.paralelo}</div>
+                                            <div className="flex justify-between items-center mt-1">
+                                                <span className={`text-[10px] ${
+                                                     (materiaSeleccionada?.asignatura_id === m.asignatura_id && materiaSeleccionada?.paralelo === m.paralelo)
+                                                     ? 'text-blue-100' : 'text-gray-400'
+                                                }`}>Paralelo {m.paralelo}</span>
+                                                
+                                                {/* CAMBIO: Mostrar Carrera en el Sidebar */}
+                                                <span className={`text-[9px] px-1.5 py-0.5 rounded-full uppercase font-medium max-w-[80px] truncate ${
+                                                    (materiaSeleccionada?.asignatura_id === m.asignatura_id && materiaSeleccionada?.paralelo === m.paralelo)
+                                                    ? 'bg-blue-500 text-white' 
+                                                    : 'bg-gray-100 text-gray-500'
+                                                }`} title={m.carrera}>
+                                                    {m.carrera}
+                                                </span>
+                                            </div>
                                         </button>
                                     ))}
                                 </div>
@@ -248,7 +254,13 @@ const MisCursos = () => {
                             <div>
                                 <h1 className="text-lg md:text-xl font-bold text-gray-900 flex flex-wrap items-center gap-2">
                                     {materiaSeleccionada.nombre}
-                                    <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-md whitespace-nowrap">Paralelo {materiaSeleccionada.paralelo}</span>
+                                    <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-md whitespace-nowrap">
+                                        Paralelo {materiaSeleccionada.paralelo}
+                                    </span>
+                                    {/* CAMBIO: Mostrar Carrera en el Header */}
+                                    <span className="bg-indigo-100 text-indigo-700 text-xs px-2 py-0.5 rounded-md whitespace-nowrap">
+                                        {materiaSeleccionada.carrera}
+                                    </span>
                                 </h1>
                                 <p className="text-sm text-gray-500 mt-1">Oficial: {estudiantes.length} alumnos</p>
                             </div>
