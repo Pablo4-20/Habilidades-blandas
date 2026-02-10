@@ -57,7 +57,11 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
             { name: 'Inicio', path: '/dashboard', icon: HomeIcon },
             { name: 'Asignar Materias', path: '/dashboard/asignaciones', icon: AcademicCapIcon },
             { name: 'Matriculación', path: '/dashboard/matriculacion', icon: UserPlusIcon },      
-            { name: 'Reportes Generales', path: '/dashboard/reportes', icon: DocumentChartBarIcon },
+            { name: 'Monitoreo de Cumplimiento', path: '/dashboard/reportes', icon: DocumentChartBarIcon },
+            
+            // --- NUEVO TÍTULO DE SECCIÓN ---
+            { type: 'title', name: 'Reportes Generales' },
+            
             { name: 'Ficha Resumen', path: '/dashboard/ficha-resumen-coordinador', icon: ClipboardDocumentListIcon },
         ],
         docente: [
@@ -86,17 +90,11 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                 className={`
                     fixed top-0 left-0 bg-white border-r border-gray-200 
                     flex flex-col z-50 transition-all duration-300 ease-in-out
-                    
-                    /* CORRECCIÓN 1: Altura dinámica para móviles (evita que la barra del navegador tape el logout) */
                     h-[100dvh] 
-                    
-                    /* MÓVIL: */
-                    w-64 
+                    w-72 
                     ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-                    
-                    /* PC: */
                     md:translate-x-0 
-                    ${isOpen ? 'md:w-64' : 'md:w-20'}
+                    ${isOpen ? 'md:w-72' : 'md:w-20'}
                 `}
             >
                 {/* HEADER */}
@@ -115,7 +113,23 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
 
                 {/* NAVEGACIÓN */}
                 <nav className="flex-1 px-3 py-4 space-y-2 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-200">
-                    {currentMenu.map((item) => {
+                    {currentMenu.map((item, index) => {
+                        // LÓGICA PARA TÍTULOS DE SECCIÓN
+                        if (item.type === 'title') {
+                            return (
+                                <div 
+                                    key={`title-${index}`} 
+                                    className={`
+                                        px-3 mt-4 mb-2 text-xs font-bold text-gray-400 uppercase tracking-wider transition-all duration-300
+                                        ${isOpen ? 'opacity-100 block' : 'opacity-0 hidden'}
+                                    `}
+                                >
+                                    {item.name}
+                                </div>
+                            );
+                        }
+
+                        // LÓGICA NORMAL PARA ENLACES
                         const isActive = location.pathname === item.path;
                         return (
                             <Link
@@ -141,14 +155,13 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                 </nav>
 
                 {/* USUARIO Y LOGOUT */}
-                {/* CORRECCIÓN 2: 'shrink-0' asegura que esta sección nunca se encoja ni se oculte */}
                 <div className="p-4 border-t border-gray-200 shrink-0 bg-white">
                     <div className={`flex items-center ${!isOpen ? 'md:justify-center' : ''}`}>
                         <div className="flex-shrink-0 h-9 w-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold border border-blue-200">
                             {user?.nombres ? user.nombres.charAt(0).toUpperCase() : '?'}
                         </div>
                         
-                        <div className={`ml-3 overflow-hidden transition-all duration-300 ${isOpen ? 'w-32 opacity-100' : 'md:w-0 md:opacity-0 hidden'}`}>
+                        <div className={`ml-3 overflow-hidden transition-all duration-300 ${isOpen ? 'w-40 opacity-100' : 'md:w-0 md:opacity-0 hidden'}`}>
                             <p className="text-sm font-medium text-gray-700 truncate">
                                 {user?.nombres?.split(' ')[0]} {user?.apellidos?.split(' ')[0]}
                             </p>
