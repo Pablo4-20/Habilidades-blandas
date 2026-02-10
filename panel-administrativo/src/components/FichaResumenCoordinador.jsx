@@ -3,12 +3,16 @@ import api from '../services/api';
 import CustomSelect from './ui/CustomSelect';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 import { 
     PrinterIcon, FunnelIcon, CalendarDaysIcon, 
     TableCellsIcon, ChartBarIcon, DocumentTextIcon
 } from '@heroicons/react/24/outline';
+
 import logoIzq from '../assets/facultad.png'; 
-import logoDer from '../assets/software.png';
+// [CORRECCIÓN] Importamos ambos logos para la lógica dinámica
+import logoSoftware from '../assets/software.png';
+import logoTecnologias from '../assets/tecnologias.png';
 
 const FichaResumenCoordinador = () => {
     const [reporteData, setReporteData] = useState([]);
@@ -21,16 +25,11 @@ const FichaResumenCoordinador = () => {
     useEffect(() => {
         const fetchPeriodos = async () => {
             try {
-                // Traemos TODOS los periodos para el historial
                 const res = await api.get('/periodos'); 
                 const lista = Array.isArray(res.data) ? res.data : [];
-                
-                // Ordenar: Más recientes primero
                 lista.sort((a, b) => b.id - a.id);
-
                 setPeriodos(lista);
                 
-                // Seleccionar activo o el más reciente
                 const activo = lista.find(p => p.activo === 1 || p.activo === true);
                 if (activo) {
                     setFiltroPeriodo(activo.nombre);
@@ -94,7 +93,6 @@ const FichaResumenCoordinador = () => {
             totalesPorCiclo[c] = { cumplimiento: promedioCumplimiento + '%' };
         });
 
-        // Resumen Carrera
         const totalCiclos = ciclosOrdenados.length;
         const totalAsignaturas = reporteData.length;
         
@@ -116,20 +114,73 @@ const FichaResumenCoordinador = () => {
     }, [reporteData]);
 
     // ===============================================
-    // GENERAR PDF (MODIFICADO: Sin cumplimiento)
+    // GENERAR EXCEL (CON RESUMEN AL FINAL)
+    // ===============================================
+    const generarExcel = () => {
+        if (reporteData.length === 0 || !datosProcesados) return;
+
+        const datosOrdenados = [...reporteData].sort((a, b) => 
+            (parseInt(a.ciclo) || 0) - (parseInt(b.ciclo) || 0)
+        );
+
+        const filasExcel = datosOrdenados.map(item => ({
+            "Periodo": filtroPeriodo,
+            "Carrera": reporteInfo?.carrera || '',
+            "Ciclo": item.ciclo,
+            "Asignatura": item.asignatura,
+            "Habilidad": item.habilidad,
+            "N1": item.n1,
+            "N2": item.n2,
+            "N3": item.n3,
+            "N4": item.n4,
+            "N5": item.n5,
+            "Observaciones Docente": item.conclusion || 'Sin observación',
+            "Cumplimiento": item.cumplimiento ? `${item.cumplimiento}%` : '0%'
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(filasExcel);
+
+        // Agregamos la tabla resumen al final del Excel
+        XLSX.utils.sheet_add_aoa(worksheet, [
+            [""], 
+            ["RESUMEN DE CARRERA"], 
+            ["Total Ciclos", "Total Asignaturas", "Cumplimiento General"], 
+            [datosProcesados.totalCiclos, datosProcesados.totalAsignaturas, datosProcesados.promedioGeneral] 
+        ], { origin: -1 });
+
+        const wscols = [
+            { wch: 15 }, { wch: 30 }, { wch: 10 }, { wch: 30 }, { wch: 30 },
+            { wch: 5 }, { wch: 5 }, { wch: 5 }, { wch: 5 }, { wch: 5 },
+            { wch: 40 }, { wch: 15 }
+        ];
+        worksheet['!cols'] = wscols;
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Ficha Coordinador");
+        XLSX.writeFile(workbook, `Ficha_Resumen_Coordinador_${filtroPeriodo}.xlsx`);
+    };
+
+    // ===============================================
+    // GENERAR PDF (CON LOGOS DINÁMICOS)
     // ===============================================
     const generarFichaPDF = () => {
         if (!datosProcesados) return;
-        const { porCiclo, ciclosOrdenados, totalesPorCiclo, totalCiclos, totalAsignaturas, promedioGeneral } = datosProcesados;
+        const { porCiclo, ciclosOrdenados, totalCiclos, totalAsignaturas, promedioGeneral } = datosProcesados;
 
         const doc = new jsPDF('l', 'mm', 'a4');
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight(); 
         const nombreCarrera = reporteInfo?.carrera || 'Carrera Desconocida';
 
+        // [CORRECCIÓN] Lógica para elegir logo derecho
+        const esTecnologia = nombreCarrera.toLowerCase().includes('tecnolog');
+        const logoDerecho = esTecnologia ? logoTecnologias : logoSoftware;
+
         const dibujarEncabezado = () => {
             try { doc.addImage(logoIzq, 'PNG', 15, 5, 20, 20); } catch (e) {}
-            try { doc.addImage(logoDer, 'PNG', pageWidth - 35, 5, 20, 20); } catch (e) {}
+            // Usamos la variable logoDerecho
+            try { doc.addImage(logoDerecho, 'PNG', pageWidth - 35, 5, 20, 20); } catch (e) {}
+            
             doc.setFontSize(14); doc.setTextColor(0); doc.setFont("helvetica", "bold");
             doc.text("UNIVERSIDAD ESTATAL DE BOLIVAR", pageWidth / 2, 12, { align: "center" });
             doc.setFontSize(11); doc.setFont("helvetica", "normal");
@@ -152,32 +203,20 @@ const FichaResumenCoordinador = () => {
             doc.text(`CICLO: ${cicloKey}`, 16, finalY + 5);
             finalY += 7;
 
-            // --- CAMBIO 1: Eliminamos 'cumplimiento' de la fila ---
             const bodyTable = filasCiclo.map(r => [
                 r.asignatura, 
                 r.habilidad, 
                 r.n1, r.n2, r.n3, r.n4, r.n5, 
                 r.conclusion || 'Sin observación'
-                // r.cumplimiento <--- ELIMINADO PARA EL PDF
             ]);
             
-            // --- CAMBIO 2: Eliminamos la fila de Promedio Cumplimiento Ciclo ---
-            /* BLOQUE COMENTADO/ELIMINADO:
-            bodyTable.push([
-                { content: 'PROMEDIO CUMPLIMIENTO CICLO:', colSpan: 8, styles: { halign: 'right', fontStyle: 'bold', fillColor: [230, 230, 230] } },
-                { content: totalesPorCiclo[cicloKey].cumplimiento, styles: { halign: 'center', fontStyle: 'bold', fillColor: [230, 230, 230], textColor: [0, 100, 0] } }
-            ]); 
-            */
-
             autoTable(doc, {
                 startY: finalY,
-                // --- CAMBIO 3: Eliminamos el encabezado 'Cumpl.' ---
                 head: [['Asignatura', 'Habilidad', 'N1', 'N2', 'N3', 'N4', 'N5', 'Observaciones Docente']],
                 body: bodyTable,
                 theme: 'grid',
                 styles: { fontSize: 8, cellPadding: 2, valign: 'middle' },
                 headStyles: { fillColor: [245, 245, 245], textColor: 0, fontStyle: 'bold', halign: 'center' },
-                // --- CAMBIO 4: Ajustamos columnas (la columna de obs ahora es la última, índice 7) ---
                 columnStyles: { 
                     0: { cellWidth: 50 }, 
                     1: { cellWidth: 50 }, 
@@ -189,8 +228,6 @@ const FichaResumenCoordinador = () => {
             finalY = doc.lastAutoTable.finalY;
         });
 
-        // --- PÁGINA FINAL DE RESUMEN (OPCIONAL: Si también quieres quitarlo de aquí, avísame) ---
-        // Se mantiene el resumen general de carrera según lo solicitado (solo pediste quitar el de ciclo)
         doc.addPage();
         dibujarEncabezado();
         doc.setFontSize(12); doc.setTextColor(0); doc.setFont("helvetica", "bold");
@@ -207,9 +244,6 @@ const FichaResumenCoordinador = () => {
             margin: { left: 14, right: 14 }
         });
 
-        // ===============================================
-        // SECCIÓN DE FIRMA Y FECHA
-        // ===============================================
         const fechaActual = new Date().toLocaleDateString('es-ES', { 
             year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' 
         });
@@ -238,7 +272,6 @@ const FichaResumenCoordinador = () => {
 
     return (
         <div className="space-y-6 p-6 animate-fade-in pb-20">
-            {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-end border-b border-gray-200 pb-4 gap-4">
                 <div>
                     <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
@@ -249,17 +282,27 @@ const FichaResumenCoordinador = () => {
                         Vista consolidada de los reportes y observaciones de los docentes.
                     </p>
                 </div>
-                <div className="flex gap-3">
-                    <button onClick={generarFichaPDF} disabled={reporteData.length === 0 || loading} className="bg-gray-800 hover:bg-gray-900 text-white px-5 py-2 rounded-lg shadow flex items-center gap-2 text-sm font-semibold transition-all disabled:opacity-50">
+                
+                <div className="flex flex-wrap gap-2">
+                    <button 
+                        onClick={generarExcel} 
+                        disabled={reporteData.length === 0 || loading} 
+                        className="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-lg shadow flex items-center gap-2 text-sm font-semibold transition-all disabled:opacity-50"
+                    >
+                        <TableCellsIcon className="h-5 w-5"/> Excel
+                    </button>
+
+                    <button 
+                        onClick={generarFichaPDF} 
+                        disabled={reporteData.length === 0 || loading} 
+                        className="bg-gray-800 hover:bg-gray-900 text-white px-5 py-2 rounded-lg shadow flex items-center gap-2 text-sm font-semibold transition-all disabled:opacity-50"
+                    >
                         <PrinterIcon className="h-5 w-5"/> Descargar PDF
                     </button>
                 </div>
             </div>
 
-            {/* FILTROS */}
             <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4">
-                
-                {/* Visualizador de Carrera */}
                 <div className="w-full md:w-1/2">
                     <label className="block text-sm font-medium text-gray-700 mb-1">Carrera</label>
                     <div className="relative">
@@ -275,7 +318,6 @@ const FichaResumenCoordinador = () => {
                     </div>
                 </div>
 
-                {/* Selector de Periodo */}
                 <div className="w-full md:w-1/2">
                     <CustomSelect 
                         label="Periodo" 
@@ -287,12 +329,10 @@ const FichaResumenCoordinador = () => {
                 </div>
             </div>
 
-            {/* Tablas Visuales */}
             {loading ? (
                 <div className="text-center py-10 bg-blue-50 rounded text-blue-600">Cargando datos...</div>
             ) : datosProcesados ? (
                 <div className="space-y-8">
-                    {/* Tablas por Ciclo */}
                     {datosProcesados.ciclosOrdenados.map((ciclo) => (
                         <div key={ciclo} className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
                             <div className="bg-blue-900 text-white px-4 py-2 font-bold flex items-center gap-2">
@@ -346,13 +386,11 @@ const FichaResumenCoordinador = () => {
                         </div>
                     ))}
 
-                    {/* --- TABLA RESUMEN DE CARRERA (CORREGIDA RESPONSIVA) --- */}
                     <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
                         <div className="bg-gray-800 text-white px-6 py-3 font-bold text-lg flex items-center gap-2">
                             <ChartBarIcon className="h-6 w-6"/> RESUMEN DE CARRERA
                         </div>
                         <div className="p-6">
-                            {/* Grid Responsivo (1 col en móvil, 3 en PC) */}
                             <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-gray-200">
                                 <div className="p-4 text-center">
                                     <p className="text-gray-500 uppercase text-xs font-bold mb-1">Total Ciclos</p>

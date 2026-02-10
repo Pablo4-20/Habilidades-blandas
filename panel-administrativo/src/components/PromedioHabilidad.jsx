@@ -3,16 +3,17 @@ import api from '../services/api';
 import CustomSelect from './ui/CustomSelect';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx'; // [NUEVO] Importamos la librería para Excel
 import { 
     CalculatorIcon, 
     CalendarDaysIcon,
     ChartBarIcon,
     UserGroupIcon,
-    PrinterIcon 
+    PrinterIcon,
+    TableCellsIcon // [NUEVO] Icono para el botón de Excel
 } from '@heroicons/react/24/outline';
 
 import logoIzq from '../assets/facultad.png'; 
-// IMPORTAMOS LOS DOS LOGOS
 import logoSoftware from '../assets/software.png';
 import logoTecnologias from '../assets/tecnologias.png';
 
@@ -20,7 +21,7 @@ const PromedioHabilidad = () => {
     const [periodos, setPeriodos] = useState([]);
     const [filtroPeriodo, setFiltroPeriodo] = useState('');
     const [data, setData] = useState([]);
-    const [nombreCarrera, setNombreCarrera] = useState(''); // Estado para nombre carrera
+    const [nombreCarrera, setNombreCarrera] = useState(''); 
     const [loading, setLoading] = useState(false);
 
     // Cargar Periodos
@@ -51,7 +52,6 @@ const PromedioHabilidad = () => {
             const res = await api.post('/reportes/promedio-habilidad', {
                 periodo: filtroPeriodo
             });
-            // Ajustamos para recibir la nueva estructura { carrera: ..., data: ... }
             setData(res.data.data || []);
             setNombreCarrera(res.data.carrera || 'Carrera');
         } catch (error) {
@@ -63,7 +63,72 @@ const PromedioHabilidad = () => {
     };
 
     // ==========================================
-    // GENERAR PDF CON LOGO DINÁMICO
+    // [NUEVO] GENERAR EXCEL
+    // ==========================================
+    const generarExcel = () => {
+        if (data.length === 0) return;
+
+        // 1. Aplanar la data: Convertir la estructura jerárquica a filas planas para Excel
+        const filasExcel = [];
+
+        data.forEach(item => {
+            // Si la habilidad no tiene materias, igual agregamos una fila con el promedio general
+            if (!item.materias || item.materias.length === 0) {
+                filasExcel.push({
+                    "Periodo": filtroPeriodo,
+                    "Carrera": nombreCarrera,
+                    "Habilidad": item.habilidad,
+                    "Promedio Gral. Habilidad": `${item.promedio_general}%`,
+                    "Ciclo": "N/A",
+                    "Asignatura": "Sin asignaturas",
+                    "Actividad": "-",
+                    "Estudiantes Evaluados": 0,
+                    "Promedio Asignatura": "-"
+                });
+            } else {
+                // Si tiene materias, creamos una fila por cada materia/actividad
+                item.materias.forEach(materia => {
+                    filasExcel.push({
+                        "Periodo": filtroPeriodo,
+                        "Carrera": nombreCarrera,
+                        "Habilidad": item.habilidad,
+                        "Promedio Gral. Habilidad": `${item.promedio_general}%`, // Repetimos el dato para permitir filtros en Excel
+                        "Ciclo": materia.ciclo,
+                        "Asignatura": materia.asignatura,
+                        "Actividad": materia.actividad,
+                        "Estudiantes Evaluados": materia.estudiantes,
+                        "Promedio Asignatura": `${materia.promedio}%`
+                    });
+                });
+            }
+        });
+
+        // 2. Crear hoja de trabajo y libro
+        const worksheet = XLSX.utils.json_to_sheet(filasExcel);
+        
+        // Ajustar ancho de columnas automáticamente (opcional pero recomendado)
+        const wscols = [
+            { wch: 15 }, // Periodo
+            { wch: 30 }, // Carrera
+            { wch: 25 }, // Habilidad
+            { wch: 20 }, // Promedio Gral
+            { wch: 10 }, // Ciclo
+            { wch: 30 }, // Asignatura
+            { wch: 25 }, // Actividad
+            { wch: 15 }, // Estudiantes
+            { wch: 15 }  // Promedio Ind
+        ];
+        worksheet['!cols'] = wscols;
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte Habilidades");
+
+        // 3. Descargar archivo
+        XLSX.writeFile(workbook, `Reporte_Habilidades_${filtroPeriodo}.xlsx`);
+    };
+
+    // ==========================================
+    // GENERAR PDF
     // ==========================================
     const generarPDF = () => {
         if (data.length === 0) return;
@@ -72,15 +137,11 @@ const PromedioHabilidad = () => {
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
 
-        // 1. ELEGIR LOGO SEGÚN LA CARRERA
-        // Si el nombre contiene "Tecnolog", usa logoTecnologias, si no, logoSoftware
         const esTecnologia = nombreCarrera.toLowerCase().includes('tecnolog');
         const logoDerecho = esTecnologia ? logoTecnologias : logoSoftware;
 
-        // --- ENCABEZADO ---
         const dibujarEncabezado = () => {
             try { doc.addImage(logoIzq, 'PNG', 15, 5, 20, 20); } catch (e) {}
-            // Usamos el logo dinámico aquí
             try { doc.addImage(logoDerecho, 'PNG', pageWidth - 35, 5, 20, 20); } catch (e) {}
             
             doc.setFontSize(14); doc.setTextColor(0); doc.setFont("helvetica", "bold");
@@ -90,7 +151,6 @@ const PromedioHabilidad = () => {
             doc.text("REPORTE DE PROMEDIOS POR HABILIDAD", pageWidth / 2, 18, { align: "center" });
             
             doc.setFontSize(10); doc.setTextColor(80);
-            // Mostrar nombre de carrera y periodo
             doc.text(`${nombreCarrera} | Periodo: ${filtroPeriodo}`, pageWidth / 2, 24, { align: "center" });
             
             return 35; 
@@ -98,7 +158,6 @@ const PromedioHabilidad = () => {
 
         let finalY = dibujarEncabezado();
 
-        // --- DATOS ---
         data.forEach((item, index) => {
             if (finalY > pageHeight - 40) { 
                 doc.addPage(); 
@@ -147,7 +206,6 @@ const PromedioHabilidad = () => {
             finalY = doc.lastAutoTable.finalY + 10;
         });
 
-        // --- FIRMA Y FECHA ---
         if (finalY + 40 > pageHeight) {
             doc.addPage();
             finalY = dibujarEncabezado() + 20; 
@@ -188,14 +246,26 @@ const PromedioHabilidad = () => {
                     </p>
                 </div>
                 
-                <button 
-                    onClick={generarPDF}
-                    disabled={data.length === 0 || loading}
-                    className="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg shadow flex items-center gap-2 text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    <PrinterIcon className="h-5 w-5"/>
-                    Descargar Reporte PDF
-                </button>
+                {/* [NUEVO] Agrupamos botones de exportación */}
+                <div className="flex flex-wrap gap-2">
+                    <button 
+                        onClick={generarExcel}
+                        disabled={data.length === 0 || loading}
+                        className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg shadow flex items-center gap-2 text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <TableCellsIcon className="h-5 w-5"/>
+                        Excel
+                    </button>
+
+                    <button 
+                        onClick={generarPDF}
+                        disabled={data.length === 0 || loading}
+                        className="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg shadow flex items-center gap-2 text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <PrinterIcon className="h-5 w-5"/>
+                        PDF
+                    </button>
+                </div>
             </div>
 
             <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 max-w-md">
