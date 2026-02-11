@@ -14,8 +14,12 @@ class EstudianteController extends Controller
 {
     public function index()
     {
+        // CORRECCIÓN: Ordenar por Apellidos A-Z en lugar de ID descendente.
+        // Esto permite que en el listado aparezcan mezclados Software y Tecnología
+        // ordenados alfabéticamente, facilitando la búsqueda visual.
         return Estudiante::with('ultimaMatricula.periodo', 'ultimaMatricula.ciclo')
-            ->orderBy('id', 'desc')
+            ->orderBy('apellidos', 'asc')
+            ->orderBy('nombres', 'asc')
             ->get();
     }
 
@@ -81,7 +85,7 @@ class EstudianteController extends Controller
         return response()->json(['message' => 'Eliminado']);
     }
 
-    // --- 3. IMPORTACIÓN MASIVA CORREGIDA ---
+    // --- 3. IMPORTACIÓN MASIVA ---
     public function import(Request $request)
     {
         $request->validate(['file' => 'required|file']);
@@ -131,7 +135,6 @@ class EstudianteController extends Controller
             }
         }
 
-       
         return response()->json([
             'message' => "Proceso terminado.",
             'creados' => $creados,      
@@ -154,6 +157,7 @@ class EstudianteController extends Controller
                   ->orWhere('apellidos', 'LIKE', "%{$search}%")
                   ->orWhere('cedula', 'LIKE', "%{$search}%");
             })
+            ->orderBy('apellidos', 'asc') // También ordenamos aquí por consistencia
             ->limit(10)
             ->get();
 

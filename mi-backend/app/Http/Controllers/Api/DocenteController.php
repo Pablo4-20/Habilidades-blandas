@@ -25,18 +25,28 @@ class DocenteController extends Controller
         if (!$asignatura) return collect();
 
         // 1. Estudiantes Manuales (Excluyendo 'Baja')
+        // Aquí buscamos inscripciones específicas en esta materia (DetalleMatricula)
         $estudiantesDirectos = DetalleMatricula::where('asignatura_id', $asignaturaId)
             ->where('estado_materia', '!=', 'Baja')
-            ->whereHas('matricula', function($q) use ($periodoId, $paralelo) {
+            ->whereHas('matricula', function($q) use ($periodoId) {
                 $q->where('periodo_id', $periodoId)->where('estado', 'Activo');
-                if ($paralelo) $q->where('paralelo', $paralelo);
             })
-            ->with(['matricula.estudiante'])
             ->get()
+            ->filter(function($detalle) use ($paralelo) {
+                // FILTRO CLAVE:
+                // Si la inscripción manual tiene un paralelo específico asignado, 
+                // solo la mostramos si coincide con el paralelo que estamos consultando.
+                if ($paralelo && !empty($detalle->paralelo)) {
+                    return $detalle->paralelo === $paralelo;
+                }
+                return true; 
+            })
             ->map(fn($d) => optional($d->matricula)->estudiante)
             ->filter();
 
         // 2. Estudiantes Automáticos (Por Ciclo/Carrera)
+        // Estos son los que el sistema sugiere porque están en ese ciclo.
+        // Excluimos los que ya tienen registro manual para no duplicar.
         $idsConRegistro = DetalleMatricula::where('asignatura_id', $asignaturaId)
             ->whereHas('matricula', fn($q) => $q->where('periodo_id', $periodoId))
             ->pluck('matricula_id');
@@ -48,6 +58,7 @@ class DocenteController extends Controller
                 ->where('estado', 'Activo')
                 ->whereNotIn('id', $idsConRegistro);
 
+            // Aquí sí filtramos estrictamente por la matrícula base del estudiante
             if ($paralelo) $queryAutomaticos->where('paralelo', $paralelo);
 
             $estudiantesCiclo = $queryAutomaticos->whereHas('estudiante', function($q) use ($asignatura) {
@@ -180,7 +191,7 @@ class DocenteController extends Controller
     }
 
     // ==========================================
-    // 6. RÚBRICA Y CALIFICACIÓN (MODIFICADO)
+    // 6. RÚBRICA Y CALIFICACIÓN
     // ==========================================
     public function rubrica(Request $request) 
     {
@@ -196,16 +207,14 @@ class DocenteController extends Controller
         $periodo = PeriodoAcademico::where('nombre', $request->periodo)->first();
         if (!$periodo) return response()->json(['message' => 'Periodo no encontrado'], 404);
 
-        // 1. Obtener estudiantes del paralelo correcto
         $todosLosEstudiantes = $this->_getEstudiantes($request->asignatura_id, $periodo->id, $request->paralelo)
             ->sortBy(fn($e) => $e->apellidos . ' ' . $e->nombres);
         
-        // 2. Buscar Planificación del paralelo correcto
         $planificacion = Planificacion::where('asignatura_id', $request->asignatura_id)
             ->where('docente_id', $user->id)
             ->where('periodo_academico', $request->periodo)
             ->where('parcial', $request->parcial)
-            ->where('paralelo', $request->paralelo) // [FILTRO]
+            ->where('paralelo', $request->paralelo)
             ->first();
 
         $evaluaciones = collect();
@@ -215,14 +224,14 @@ class DocenteController extends Controller
                 ->get();
         }
 
-        // 3. Notas Parcial 1 (Referencia)
+        // Notas Parcial 1 (Referencia)
         $evaluacionesP1 = collect();
         if ($request->parcial == '2') {
              $planP1 = Planificacion::where('asignatura_id', $request->asignatura_id)
                 ->where('docente_id', $user->id)
                 ->where('periodo_academico', $request->periodo)
                 ->where('parcial', '1')
-                ->where('paralelo', $request->paralelo) // [FILTRO]
+                ->where('paralelo', $request->paralelo)
                 ->first();
              if ($planP1) {
                  $evaluacionesP1 = Evaluacion::where('planificacion_id', $planP1->id)
@@ -231,7 +240,6 @@ class DocenteController extends Controller
              }
         }
 
-        // 4. Obtener Actividades
         $actividades = [];
         if ($planificacion) {
              $detalle = $planificacion->detalles()
@@ -242,7 +250,6 @@ class DocenteController extends Controller
              }
         }
 
-        // 5. Armar respuesta
         $listaFinal = $todosLosEstudiantes->map(function($est) use ($evaluaciones, $evaluacionesP1) {
             $nota = $evaluaciones->where('estudiante_id', $est->id)->first();
             $notaP1 = $evaluacionesP1->where('estudiante_id', $est->id)->first();
@@ -263,18 +270,17 @@ class DocenteController extends Controller
     }
 
     // ==========================================
-    // 7. GUARDAR NOTAS (MODIFICADO)
+    // 7. GUARDAR NOTAS
     // ==========================================
     public function guardarNotas(Request $request) 
     {
         $user = $request->user();
         
         $request->validate([
-            'paralelo' => 'required' // [NUEVO] Obligatorio
+            'paralelo' => 'required' 
         ]);
 
         DB::transaction(function () use ($request, $user) {
-            // Buscamos o creamos el plan ESPECÍFICO para este paralelo
             $plan = Planificacion::firstOrCreate(
                 [
                     'asignatura_id' => $request->asignatura_id, 
@@ -292,7 +298,6 @@ class DocenteController extends Controller
                             'planificacion_id' => $plan->id, 
                             'estudiante_id' => $nota['estudiante_id'], 
                             'habilidad_blanda_id' => $request->habilidad_blanda_id, 
-                          
                             'parcial' => $request->parcial 
                         ], 
                         ['nivel' => $nota['nivel']]
@@ -304,7 +309,7 @@ class DocenteController extends Controller
     }
 
     // ==========================================
-    // 8. VERIFICAR PROGRESO (Estrellas)
+    // 8. VERIFICAR PROGRESO
     // ==========================================
     public function verificarProgreso(Request $request)
     {
@@ -366,7 +371,7 @@ class DocenteController extends Controller
     }
 
     // ==========================================
-    // 9. GESTIÓN MANUAL DE ESTUDIANTES
+    // 9. GESTIÓN MANUAL DE ESTUDIANTES (MODIFICADO)
     // ==========================================
     public function agregarEstudianteManual(Request $request) 
     {
@@ -379,23 +384,30 @@ class DocenteController extends Controller
             if (!$estudiante) return response()->json(['message' => 'Estudiante no encontrado.'], 404);
             
             $asignatura = Asignatura::find($request->asignatura_id);
-            $paralelo = $request->input('paralelo', 'A');
+            // El paralelo aquí es el del curso donde lo estamos inscribiendo
+            $paraleloDestino = $request->input('paralelo', 'A');
 
+            // Obtenemos la matrícula base del estudiante (sin cambiarle su paralelo original si ya tiene)
             $matricula = Matricula::firstOrCreate(
                 ['estudiante_id' => $estudiante->id, 'periodo_id' => $periodo->id], 
                 [
                     'ciclo_id' => $asignatura->ciclo_id ?? 1, 
                     'fecha_matricula' => now(), 
                     'estado' => 'Activo',
-                    'paralelo' => $paralelo
+                    'paralelo' => $paraleloDestino // Solo aplica si es una matrícula 100% nueva
                 ]
             );
             
+            // GUARDAMOS EL PARALELO EN EL DETALLE
+            // Esto permite diferenciar una inscripción en el A de una en el B para el mismo estudiante
             DetalleMatricula::updateOrCreate(
                 ['matricula_id' => $matricula->id, 'asignatura_id' => $request->asignatura_id], 
-                ['estado_materia' => 'Cursando']
+                [
+                    'estado_materia' => 'Cursando',
+                    'paralelo' => $paraleloDestino // <--- DATO NUEVO
+                ]
             );
-            return response()->json(['message' => 'Estudiante inscrito correctamente.']);
+            return response()->json(['message' => 'Estudiante inscrito correctamente en Paralelo ' . $paraleloDestino]);
         } catch (\Exception $e) { return response()->json(['message' => 'Error: ' . $e->getMessage()], 500); }
     }
 
@@ -412,11 +424,29 @@ class DocenteController extends Controller
                 
             if (!$matricula) return response()->json(['message' => 'Estudiante no matriculado.'], 404);
             
-            DetalleMatricula::updateOrCreate(
-                ['matricula_id' => $matricula->id, 'asignatura_id' => $request->asignatura_id], 
-                ['estado_materia' => 'Baja']
-            );
-            return response()->json(['message' => 'Estudiante dado de baja.']);
+            // Recibimos el paralelo desde donde se está ejecutando la acción
+            $paraleloContexto = $request->input('paralelo');
+
+            // LÓGICA DE ELIMINACIÓN INTELIGENTE:
+            // 1. Si el estudiante "pertenece" naturalmente a otro paralelo (ej. es del B pero está en clase del A),
+            //    y estamos en el A, entonces BORRAMOS el registro para que deje de ser "invitado".
+            if ($paraleloContexto && $matricula->paralelo !== $paraleloContexto) {
+                
+                DetalleMatricula::where('matricula_id', $matricula->id)
+                    ->where('asignatura_id', $request->asignatura_id)
+                    ->delete();
+                
+                return response()->json(['message' => 'Estudiante removido de este paralelo (regresa a su original).']);
+
+            } else {
+                // 2. Si el estudiante pertenece a este paralelo (es nativo), solo le damos de baja.
+                DetalleMatricula::updateOrCreate(
+                    ['matricula_id' => $matricula->id, 'asignatura_id' => $request->asignatura_id], 
+                    ['estado_materia' => 'Baja']
+                );
+                return response()->json(['message' => 'Estudiante dado de baja correctamente.']);
+            }
+
         } catch (\Exception $e) { return response()->json(['message' => 'Error: ' . $e->getMessage()], 500); }
     }
 }

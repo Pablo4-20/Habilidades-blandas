@@ -5,7 +5,7 @@ import {
     BookOpenIcon, FolderIcon, 
     ChevronRightIcon, MagnifyingGlassIcon, ClipboardDocumentListIcon, UserPlusIcon,
     TrashIcon, XMarkIcon, IdentificationIcon, CheckCircleIcon,
-    ChevronLeftIcon 
+    ChevronLeftIcon, FunnelIcon 
 } from '@heroicons/react/24/outline';
 import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid';
 
@@ -29,6 +29,9 @@ const MisCursos = () => {
     const [busquedaModal, setBusquedaModal] = useState('');
     const [loadingModal, setLoadingModal] = useState(false);
     const [selectedCedulas, setSelectedCedulas] = useState([]);
+    
+    // NUEVO ESTADO: Controla si el filtro de carrera está activo
+    const [filtrarPorCarrera, setFiltrarPorCarrera] = useState(true);
 
     useEffect(() => {
         cargarMenu();
@@ -72,15 +75,10 @@ const MisCursos = () => {
         setLoadingModal(true);
         setBusquedaModal('');
         setSelectedCedulas([]);
+        setFiltrarPorCarrera(true); // Reiniciamos el filtro a activado cada vez que abrimos
         try {
             const res = await api.get('/estudiantes');
-            // Filtramos estudiantes que coincidan parcialmente con la carrera si es necesario, 
-            // o traemos todos. Aquí se mantiene la lógica de "software" que tenías, 
-            // pero podrías ajustarlo para usar materiaSeleccionada.carrera si quisieras filtrar por la carrera actual.
-            const estudiantesFiltrados = res.data.filter(e => 
-                e.carrera && e.carrera.toLowerCase().includes('software') // OJO: Tal vez quieras generalizar esto
-            );
-            setListaGlobalEstudiantes(estudiantesFiltrados);
+            setListaGlobalEstudiantes(res.data);
         } catch (e) {
             console.error(e);
             Swal.fire('Error', 'No se pudo cargar el listado global', 'error');
@@ -91,17 +89,46 @@ const MisCursos = () => {
 
     const estudiantesFiltradosModal = (() => {
         const termino = busquedaModal.toLowerCase();
+        
+        // Obtenemos las carreras normalizadas para comparar
+        const carreraMateria = materiaSeleccionada?.carrera?.toLowerCase() || '';
+
+        // 1. Identificar seleccionados (siempre visibles)
         const seleccionados = listaGlobalEstudiantes.filter(e => 
             selectedCedulas.includes(e.cedula) && 
             !estudiantes.some(inscrito => inscrito.cedula === e.cedula)
         );
+
+        // 2. Filtrar el resto
         const resto = listaGlobalEstudiantes.filter(e => {
+            // Excluir si ya está inscrito
             if (estudiantes.some(inscrito => inscrito.cedula === e.cedula)) return false;
+            // Excluir si ya está seleccionado
             if (selectedCedulas.includes(e.cedula)) return false;
-            return (e.nombres + ' ' + e.apellidos).toLowerCase().includes(termino) || 
-                   e.cedula.includes(termino);
+
+            // --- LÓGICA DE FILTRO POR CARRERA ---
+            if (filtrarPorCarrera && carreraMateria) {
+                const carreraEst = (e.carrera || '').toLowerCase();
+                // Verificamos si una contiene a la otra para ser flexibles (ej: "Software" match "Ingeniería de Software")
+                const coincideCarrera = carreraEst.includes(carreraMateria) || carreraMateria.includes(carreraEst);
+                
+                if (!coincideCarrera) return false;
+            }
+            // ------------------------------------
+            
+            // Filtro de búsqueda textual
+            if (termino) {
+                const nombreCompleto = (e.apellidos + ' ' + e.nombres).toLowerCase();
+                return nombreCompleto.includes(termino) || e.cedula.includes(termino);
+            }
+            return true;
         });
-        return [...seleccionados, ...resto].slice(0, 20);
+
+        if (termino) {
+            return [...resto, ...seleccionados];
+        } else {
+            return [...seleccionados, ...resto];
+        }
     })();
 
     const toggleSeleccion = (cedula) => {
@@ -109,32 +136,37 @@ const MisCursos = () => {
             setSelectedCedulas(prev => prev.filter(c => c !== cedula));
         } else {
             setSelectedCedulas(prev => [...prev, cedula]);
-            setBusquedaModal(''); 
+             setBusquedaModal(''); 
         }
     };
 
     const inscribirMasivo = async () => {
         if (selectedCedulas.length === 0) return;
+        
+        const paraleloDestino = materiaSeleccionada.paralelo || 'A';
+
         Swal.fire({
             title: 'Inscribiendo...',
-            text: `Procesando ${selectedCedulas.length} estudiantes`,
+            text: `Inscribiendo ${selectedCedulas.length} estudiantes al Paralelo ${paraleloDestino}`,
             allowOutsideClick: false,
             didOpen: () => Swal.showLoading()
         });
+
         let exitos = 0; let errores = 0;
         await Promise.all(selectedCedulas.map(async (cedula) => {
             try {
                 await api.post('/docente/agregar-estudiante', {
                     cedula: cedula,
                     asignatura_id: materiaSeleccionada.asignatura_id,
-                    paralelo: materiaSeleccionada.paralelo 
+                    paralelo: paraleloDestino 
                 });
                 exitos++;
             } catch (e) { errores++; }
         }));
+
         Swal.fire({
             title: errores === 0 ? '¡Éxito Total!' : 'Proceso Finalizado',
-            text: `Se inscribieron ${exitos} estudiantes correctamente.${errores > 0 ? ` Fallaron ${errores}.` : ''}`,
+            text: `Se inscribieron ${exitos} estudiantes correctamente en el paralelo ${paraleloDestino}.${errores > 0 ? ` Fallaron ${errores}.` : ''}`,
             icon: errores === 0 ? 'success' : 'warning'
         });
         handleSeleccionarMateria(materiaSeleccionada);
@@ -156,9 +188,10 @@ const MisCursos = () => {
                 try {
                     await api.post('/docente/eliminar-estudiante', {
                         estudiante_id: estudianteId,
-                        asignatura_id: materiaSeleccionada.asignatura_id
+                        asignatura_id: materiaSeleccionada.asignatura_id,
+                        paralelo: materiaSeleccionada.paralelo 
                     });
-                    Swal.fire('Eliminado', 'El estudiante ha sido dado de baja.', 'success');
+                    Swal.fire('Eliminado', 'El estudiante ha sido procesado.', 'success');
                     handleSeleccionarMateria(materiaSeleccionada); 
                 } catch (e) {
                     Swal.fire('Error', e.response?.data?.message || 'No se pudo dar de baja.', 'error');
@@ -227,7 +260,6 @@ const MisCursos = () => {
                                                      ? 'text-blue-100' : 'text-gray-400'
                                                 }`}>Paralelo {m.paralelo}</span>
                                                 
-                                                {/* CAMBIO: Mostrar Carrera en el Sidebar */}
                                                 <span className={`text-[9px] px-1.5 py-0.5 rounded-full uppercase font-medium max-w-[80px] truncate ${
                                                     (materiaSeleccionada?.asignatura_id === m.asignatura_id && materiaSeleccionada?.paralelo === m.paralelo)
                                                     ? 'bg-blue-500 text-white' 
@@ -255,9 +287,8 @@ const MisCursos = () => {
                                 <h1 className="text-lg md:text-xl font-bold text-gray-900 flex flex-wrap items-center gap-2">
                                     {materiaSeleccionada.nombre}
                                     <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-md whitespace-nowrap">
-                                        Paralelo {materiaSeleccionada.paralelo}
+                                        Paralelo {materiaSeleccionada.paralelo || 'A'}
                                     </span>
-                                    {/* CAMBIO: Mostrar Carrera en el Header */}
                                     <span className="bg-indigo-100 text-indigo-700 text-xs px-2 py-0.5 rounded-md whitespace-nowrap">
                                         {materiaSeleccionada.carrera}
                                     </span>
@@ -276,7 +307,7 @@ const MisCursos = () => {
                                     <MagnifyingGlassIcon className="absolute left-3 top-2.5 h-5 w-5 text-gray-400"/>
                                     <input 
                                         type="text" 
-                                        placeholder="Buscar..." 
+                                        placeholder="Buscar en esta clase..." 
                                         className="pl-10 pr-4 py-2 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-56"
                                         onChange={e => setBusqueda(e.target.value)}
                                         value={busqueda}
@@ -368,13 +399,33 @@ const MisCursos = () => {
                         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0">
                             <div>
                                 <h3 className="text-lg font-bold text-gray-900">Inscribir Estudiantes</h3>
-                                <p className="text-xs text-gray-500">Filtrando: <span className="font-bold text-blue-600">Software</span></p>
+                                <p className="text-xs text-gray-500">
+                                    Mostrando: <span className="font-bold text-blue-600">
+                                        {filtrarPorCarrera ? `Solo ${materiaSeleccionada?.carrera}` : 'Todos los estudiantes'}
+                                    </span>
+                                </p>
                             </div>
                             <button onClick={() => setShowModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition text-gray-500">
                                 <XMarkIcon className="h-6 w-6"/>
                             </button>
                         </div>
-                        <div className="p-6 border-b border-gray-100 shrink-0">
+                        
+                        <div className="p-6 border-b border-gray-100 shrink-0 space-y-3">
+                            {/* Switch de Filtro */}
+                            <div className="flex items-center gap-2">
+                                <button 
+                                    onClick={() => setFiltrarPorCarrera(!filtrarPorCarrera)}
+                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition border ${
+                                        filtrarPorCarrera 
+                                        ? 'bg-blue-100 text-blue-700 border-blue-200' 
+                                        : 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    <FunnelIcon className="h-4 w-4"/>
+                                    {filtrarPorCarrera ? 'Filtro Carrera: ACTIVO' : 'Filtro Carrera: INACTIVO'}
+                                </button>
+                            </div>
+
                             <div className="relative">
                                 <MagnifyingGlassIcon className="absolute left-4 top-3.5 h-5 w-5 text-gray-400"/>
                                 <input 
@@ -398,8 +449,8 @@ const MisCursos = () => {
                             ) : estudiantesFiltradosModal.length === 0 ? (
                                 <div className="py-10 text-center text-gray-400 flex flex-col items-center">
                                     <div className="bg-gray-100 p-4 rounded-full mb-3"><UserPlusIcon className="h-8 w-8 text-gray-300"/></div>
-                                    <p>No se encontraron resultados disponibles.</p>
-                                    <p className="text-xs mt-1">Verifique que no estén ya inscritos.</p>
+                                    <p>No se encontraron resultados.</p>
+                                    {filtrarPorCarrera && <p className="text-xs mt-1 text-blue-500 cursor-pointer hover:underline" onClick={() => setFiltrarPorCarrera(false)}>Intente desactivando el filtro de carrera.</p>}
                                 </div>
                             ) : (
                                 <div className="space-y-2">
@@ -416,12 +467,13 @@ const MisCursos = () => {
                                                         {isSelected ? <CheckCircleSolid className="h-6 w-6"/> : <CheckCircleIcon className="h-6 w-6"/>}
                                                     </div>
                                                     <div className="h-10 w-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm shrink-0">
-                                                        {est.nombres.charAt(0)}
+                                                        {est.apellidos.charAt(0)}
                                                     </div>
                                                     <div>
-                                                        <p className={`font-bold text-sm ${isSelected ? 'text-blue-800' : 'text-gray-800'}`}>{est.nombres} {est.apellidos}</p>
+                                                        <p className={`font-bold text-sm ${isSelected ? 'text-blue-800' : 'text-gray-800'}`}>{est.apellidos} {est.nombres}</p>
                                                         <div className="flex items-center gap-2 text-xs text-gray-500">
                                                             <IdentificationIcon className="h-3 w-3"/> <span className="font-mono">{est.cedula}</span>
+                                                            {est.carrera && <span className="bg-gray-100 px-1 rounded text-[10px] uppercase">{est.carrera}</span>}
                                                         </div>
                                                     </div>
                                                 </div>

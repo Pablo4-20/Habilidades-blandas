@@ -41,7 +41,7 @@ class MatriculaController extends Controller
         return response()->json($matriculas);
     }
 
-    // --- CARGA MASIVA  ---
+    // --- CARGA MASIVA (CORREGIDA) ---
     public function import(Request $request)
     {
         $request->validate(['file' => 'required|file']);
@@ -55,13 +55,9 @@ class MatriculaController extends Controller
         $file = $request->file('file');
         $contenido = file_get_contents($file->getRealPath());
         
-        // Normalizar saltos de línea
         $lines = preg_split("/\r\n|\n|\r/", $contenido);
-        
-        // Detectar separador automáticamente (si hay ; usa ; si no ,)
         $separador = str_contains($lines[0] ?? '', ';') ? ';' : ',';
 
-        // CONTADORES PARA EL REPORTE
         $procesados = 0;
         $actualizados = 0;
         $sinCambios = 0;
@@ -76,7 +72,6 @@ class MatriculaController extends Controller
                 
                 $row = str_getcsv($linea, $separador);
                 
-                // Validación básica de estructura
                 if (count($row) < 3 || strtolower(trim($row[0])) === 'cedula' || strtolower(trim($row[0])) === 'identificacion') continue;
 
                 $filasTotales++;
@@ -84,44 +79,45 @@ class MatriculaController extends Controller
                 $carreraFinal = $carreraForzada ? $carreraForzada : trim($row[1]);
                 $cicloNombre = $this->normalizarCiclo(trim($row[2]));
                 
-                // Lógica Paralelo
                 $rawParalelo = isset($row[3]) ? trim($row[3]) : '';
                 $paralelo = ($rawParalelo !== '') ? strtoupper($rawParalelo) : 'A';
 
-                // 1. Validar existencia del ESTUDIANTE
+                // 1. Validar ESTUDIANTE
                 $estudiante = Estudiante::where('cedula', $cedula)->first();
                 if (!$estudiante) {
                     $erroresEstudiante++; 
                     continue; 
                 }
 
-                // 2. Validar existencia del CICLO
+                // 2. Validar CICLO
                 $cicloNuevo = Ciclo::where('nombre', $cicloNombre)->first();
                 if (!$cicloNuevo) {
                     $erroresCiclo++; 
                     continue;
                 }
 
-                // Actualizar carrera si es necesario
                 if ($estudiante->carrera !== $carreraFinal) {
                     $estudiante->update(['carrera' => $carreraFinal]);
                 }
 
-                // 3. MATRICULAR
-                $matriculaExistente = Matricula::where('estudiante_id', $estudiante->id)
+                // 3. MATRICULAR (Lógica Anti-Duplicados)
+                
+                // Paso A: Buscamos si YA existe una matrícula exacta en ese paralelo
+                // Esto evita el error "Unique violation" si intentamos actualizar otra a este paralelo y ya existe.
+                $matriculaExacta = Matricula::where('estudiante_id', $estudiante->id)
                     ->where('periodo_id', $periodoActivo->id)
+                    ->where('paralelo', $paralelo)
                     ->with('ciclo')
                     ->first();
 
-                if ($matriculaExistente) {
-                    $pesoActual = $this->getPesoCiclo($matriculaExistente->ciclo->nombre);
+                if ($matriculaExacta) {
+                    // Ya existe en el paralelo correcto. Solo verificamos si hay que subir el ciclo.
+                    $pesoActual = $this->getPesoCiclo($matriculaExacta->ciclo->nombre);
                     $pesoNuevo = $this->getPesoCiclo($cicloNuevo->nombre);
 
-                    // Actualizar si sube de ciclo O cambia de paralelo
-                    if ($pesoNuevo > $pesoActual || ($pesoNuevo == $pesoActual && $matriculaExistente->paralelo !== $paralelo)) {
-                        $matriculaExistente->update([
+                    if ($pesoNuevo > $pesoActual) {
+                        $matriculaExacta->update([
                             'ciclo_id' => $cicloNuevo->id,
-                            'paralelo' => $paralelo,
                             'updated_at' => now()
                         ]);
                         $actualizados++;
@@ -129,35 +125,46 @@ class MatriculaController extends Controller
                         $sinCambios++;
                     }
                 } else {
-                    Matricula::create([
-                        'estudiante_id' => $estudiante->id,
-                        'periodo_id'    => $periodoActivo->id,
-                        'ciclo_id'      => $cicloNuevo->id,
-                        'paralelo'      => $paralelo,
-                        'fecha_matricula' => now(),
-                        'estado'        => 'Activo'
-                    ]);
-                    $procesados++;
+                    // Paso B: No existe en ese paralelo.
+                    // Buscamos si existe en OTRO paralelo para moverla (Actualizar la A a B)
+                    // Como ya sabemos que la exacta (B) no existe (paso A), es seguro hacer el update.
+                    $matriculaOtra = Matricula::where('estudiante_id', $estudiante->id)
+                        ->where('periodo_id', $periodoActivo->id)
+                        ->with('ciclo')
+                        ->first();
+
+                    if ($matriculaOtra) {
+                        // Existe en otro paralelo, la movemos al nuevo
+                        $matriculaOtra->update([
+                            'ciclo_id' => $cicloNuevo->id,
+                            'paralelo' => $paralelo,
+                            'updated_at' => now()
+                        ]);
+                        $actualizados++;
+                    } else {
+                        // Paso C: No existe ninguna, creamos nueva
+                        Matricula::create([
+                            'estudiante_id' => $estudiante->id,
+                            'periodo_id'    => $periodoActivo->id,
+                            'ciclo_id'      => $cicloNuevo->id,
+                            'paralelo'      => $paralelo,
+                            'fecha_matricula' => now(),
+                            'estado'        => 'Activo'
+                        ]);
+                        $procesados++;
+                    }
                 }
             }
             
             DB::commit();
             
-            
             $mensaje = "Proceso finalizado sobre $filasTotales filas detectadas.\n\n";
             $mensaje .= "✅ Nuevos Matriculados: $procesados\n";
-            $mensaje .= "🔄 Actualizados: $actualizados\n";
+            $mensaje .= "🔄 Actualizados/Movidos: $actualizados\n";
             
-            
-            if ($erroresEstudiante > 0) {
-                $mensaje .= "\n⚠️ $erroresEstudiante filas omitidas: Estudiantes no registrados en el sistema (Gestión Usuarios).";
-            }
-            if ($erroresCiclo > 0) {
-                $mensaje .= "\n⚠️ $erroresCiclo filas omitidas: Ciclo no válido.";
-            }
-            if ($sinCambios > 0) {
-                $mensaje .= "\nℹ️ $sinCambios filas sin cambios (ya estaban matriculados correctamente).";
-            }
+            if ($erroresEstudiante > 0) $mensaje .= "\n⚠️ $erroresEstudiante filas omitidas: Estudiantes no registrados.";
+            if ($erroresCiclo > 0) $mensaje .= "\n⚠️ $erroresCiclo filas omitidas: Ciclo no válido.";
+            if ($sinCambios > 0) $mensaje .= "\nℹ️ $sinCambios filas sin cambios.";
 
             return response()->json([
                 'message' => $mensaje,

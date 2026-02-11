@@ -28,7 +28,6 @@ class DashboardController extends Controller
             // 1. Obtener Periodo Activo
             $periodoActivo = PeriodoAcademico::where('activo', true)->first();
             if (!$periodoActivo) {
-                // Si no hay activo, tomamos el último creado para que no se rompa
                 $periodoActivo = PeriodoAcademico::latest()->first();
             }
             
@@ -60,31 +59,28 @@ class DashboardController extends Controller
                 $asignaciones = $queryAsignaciones->get();
                 $totalCargas = $asignaciones->count();
                 
-                // 2. CÁLCULO DE CUMPLIMIENTO EXACTO (Igual a ReporteGeneral)
+                // 2. CÁLCULO DE CUMPLIMIENTO EXACTO
                 $totalItemsAvance = 0; 
                 $sumaPorcentajes = 0;  
                 
                 foreach ($asignaciones as $asig) {
-                    // Obtener estudiantes de esta materia para validar el 100%
-                    $estudiantes = $this->_getEstudiantes($asig->asignatura_id, $idPeriodo);
+                    // Usamos el helper corregido que respeta paralelos si es necesario
+                    $estudiantes = $this->_getEstudiantes($asig->asignatura_id, $idPeriodo, $asig->paralelo);
                     $totalEstudiantes = $estudiantes->count();
                     $idsEstudiantes = $estudiantes->pluck('id');
 
-                    // Buscar planes
                     $planes = Planificacion::with('detalles')
                         ->where('asignatura_id', $asig->asignatura_id)
                         ->where('docente_id', $asig->docente_id)
                         ->where('periodo_academico', $nombrePeriodo)
                         ->get();
 
-                    // CASO 1: Sin planificación -> 0%
                     if ($planes->isEmpty()) {
                         $totalItemsAvance++;
                         $sumaPorcentajes += 0;
                         continue;
                     }
 
-                    // CASO 2: Con planificación -> Analizar cada habilidad
                     foreach ($planes as $plan) {
                         if ($plan->detalles->isEmpty()) continue;
 
@@ -100,7 +96,6 @@ class DashboardController extends Controller
                             
                             $tieneConclusion = $reporteDB && !empty($reporteDB->conclusion_progreso);
 
-                            // Lógica de porcentaje (25, 50, 100)
                             $progresoItem = 25; 
                             if ($evaluacionesCount > 0) $progresoItem = 50; 
                             if ($totalEstudiantes > 0 && $evaluacionesCount >= $totalEstudiantes && $tieneConclusion) {
@@ -113,20 +108,14 @@ class DashboardController extends Controller
                     }
                 }
 
-                // PROMEDIO FINAL EXACTO
                 $cumplimiento = ($totalItemsAvance > 0) 
                     ? round($sumaPorcentajes / $totalItemsAvance, 1) 
                     : 0;
 
-                // 3. Conteo de Reportes Finalizados (Aquellos al 100%)
-                // Esto es solo informativo, no afecta el % principal
                 $reportesFinalizados = 0; 
 
-                // 4. Alumnos Activos de la carrera
                 $queryAlumnos = Matricula::where('periodo_id', $idPeriodo)->where('estado', 'Activo');
-                // Intentamos filtrar por carrera si el usuario tiene una
                 if (!empty($user->carrera_id)) {
-                    // Buscamos el nombre de la carrera primero
                     $carreraNombre = \App\Models\Carrera::where('id', $user->carrera_id)->value('nombre');
                     if ($carreraNombre) {
                         $queryAlumnos->whereHas('estudiante', fn($q) => $q->where('carrera', $carreraNombre));
@@ -136,7 +125,7 @@ class DashboardController extends Controller
                 
                 $stats = [
                     'asignaciones' => $totalCargas, 
-                    'planificaciones' => $totalItemsAvance, // Items evaluados
+                    'planificaciones' => $totalItemsAvance, 
                     'cumplimiento' => $cumplimiento, 
                     'reportes' => $reportesFinalizados, 
                     'alumnos_activos' => $totalAlumnos
@@ -144,7 +133,7 @@ class DashboardController extends Controller
             }
 
             // ==========================================
-            // VISTA DOCENTE
+            // VISTA DOCENTE (CORREGIDO)
             // ==========================================
             elseif ($user->rol === 'docente') {
                 
@@ -155,15 +144,18 @@ class DashboardController extends Controller
                 $misPlanes = Planificacion::where('docente_id', $user->id)
                     ->where('periodo_academico', $nombrePeriodo)->count();
 
-                // Contar alumnos únicos
-                $misAsignaturasIds = $misAsignaciones->pluck('asignatura_id')->toArray();
-                $misEstudiantes = 0;
-                if (!empty($misAsignaturasIds)) {
-                    $misEstudiantes = DetalleMatricula::whereIn('asignatura_id', $misAsignaturasIds)
-                        ->where('estado_materia', '!=', 'Baja')
-                        ->distinct('matricula_id')
-                        ->count('matricula_id');
+                // CÁLCULO REAL DE ALUMNOS (Manuales + Automáticos)
+                $estudiantesUnicos = collect();
+                
+                foreach ($misAsignaciones as $asig) {
+                    // Obtenemos los estudiantes de cada materia asignada, respetando su paralelo
+                    $listaClase = $this->_getEstudiantes($asig->asignatura_id, $idPeriodo, $asig->paralelo);
+                    // Los agregamos a la colección general
+                    $estudiantesUnicos = $estudiantesUnicos->concat($listaClase);
                 }
+
+                // Contamos solo los IDs únicos (si un alumno está en 2 materias, cuenta como 1 persona)
+                $misEstudiantes = $estudiantesUnicos->unique('id')->count();
 
                 $stats = [
                     'mis_materias' => $misMateriasCount,
@@ -193,35 +185,62 @@ class DashboardController extends Controller
         }
     }
 
-    // Helper privado (Copiado de ReporteController para consistencia)
-    private function _getEstudiantes($asignaturaId, $periodoId)
+    // ==========================================
+    // HELPER CORREGIDO: Lógica híbrida Manual + Automático
+    // ==========================================
+    private function _getEstudiantes($asignaturaId, $periodoId, $paralelo = null)
     {
         $asignatura = Asignatura::with(['carrera', 'ciclo'])->find($asignaturaId);
         if (!$asignatura) return collect();
 
-        $manuales = DetalleMatricula::where('asignatura_id', $asignaturaId)
+        // 1. Estudiantes Manuales (DetalleMatricula)
+        // Filtramos por paralelo SOLO si el registro manual tiene ese dato guardado.
+        $estudiantesDirectos = DetalleMatricula::where('asignatura_id', $asignaturaId)
             ->where('estado_materia', '!=', 'Baja')
-            ->whereHas('matricula', fn($q) => $q->where('periodo_id', $periodoId)->where('estado', 'Activo'))
-            ->with('matricula.estudiante')->get()
-            ->map(fn($d) => optional($d->matricula)->estudiante)->filter();
+            ->whereHas('matricula', function($q) use ($periodoId) {
+                $q->where('periodo_id', $periodoId)->where('estado', 'Activo');
+            })
+            ->get()
+            ->filter(function($detalle) use ($paralelo) {
+                // Si el detalle tiene paralelo específico, debe coincidir.
+                // Si no tiene (null), asumimos que es válido para compatibilidad.
+                if ($paralelo && !empty($detalle->paralelo)) {
+                    return $detalle->paralelo === $paralelo;
+                }
+                return true;
+            })
+            ->map(fn($d) => optional($d->matricula)->estudiante)
+            ->filter();
 
-        $excluirIds = DetalleMatricula::where('asignatura_id', $asignaturaId)
+        // 2. Estudiantes Automáticos (Por Ciclo/Carrera)
+        // Excluimos los que ya tienen registro manual para no duplicar
+        $idsConRegistro = DetalleMatricula::where('asignatura_id', $asignaturaId)
             ->whereHas('matricula', fn($q) => $q->where('periodo_id', $periodoId))
             ->pluck('matricula_id');
 
-        $automaticos = collect();
+        $estudiantesCiclo = collect();
         if ($asignatura->ciclo_id) {
-            $automaticos = Matricula::where('periodo_id', $periodoId)
+            $query = Matricula::where('periodo_id', $periodoId)
                 ->where('ciclo_id', $asignatura->ciclo_id)
                 ->where('estado', 'Activo')
-                ->whereNotIn('id', $excluirIds)
-                ->whereHas('estudiante', function($q) use ($asignatura) {
-                    if ($asignatura->carrera) $q->where('carrera', $asignatura->carrera->nombre);
+                ->whereNotIn('id', $idsConRegistro);
+            
+            // Aquí sí aplicamos el filtro estricto de paralelo de la materia
+            if ($paralelo) {
+                $query->where('paralelo', $paralelo);
+            }
+
+            $estudiantesCiclo = $query->whereHas('estudiante', function($q) use ($asignatura) {
+                    if ($asignatura->carrera) {
+                        $q->where('carrera', $asignatura->carrera->nombre);
+                    }
                 })
-                ->with('estudiante')->get()
-                ->map(fn($m) => $m->estudiante)->filter();
+                ->with('estudiante')
+                ->get()
+                ->map(fn($m) => $m->estudiante)
+                ->filter();
         }
 
-        return $manuales->concat($automaticos)->unique('id');
+        return $estudiantesDirectos->concat($estudiantesCiclo)->unique('id');
     }
 }

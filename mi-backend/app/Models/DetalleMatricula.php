@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class DetalleMatricula extends Model
 {
-    protected $fillable = ['matricula_id', 'asignatura_id', 'estado_materia', 'nota_final'];
+    protected $fillable = ['matricula_id', 'asignatura_id', 'estado_materia', 'nota_final', 'paralelo'];
 
     // Relación con la asignatura
     public function asignatura() 
