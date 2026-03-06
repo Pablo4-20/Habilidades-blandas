@@ -94,6 +94,7 @@ class PlanificacionController extends Controller
                 'habilidades_seleccionadas' => [], 
                 'actividades_guardadas' => [],
                 'resultados_guardados' => [], 
+                'metodologias_guardadas' => [], // <--- AÑADIDO: Arreglo de metodologías
                 'habilidades_p1' => $idsP1, 
                 'debug_sincronizados' => $sincronizados,
                 'debug_p1_completo' => $p1Completo,
@@ -109,6 +110,9 @@ class PlanificacionController extends Controller
                     $actividadesRaw = explode("\n", $detalle->actividades);
                     $datosRespuesta['actividades_guardadas'][$detalle->habilidad_blanda_id] = array_values(array_filter($actividadesRaw, fn($v) => trim($v) !== ''));
                     $datosRespuesta['resultados_guardados'][$detalle->habilidad_blanda_id] = $detalle->resultado_aprendizaje;
+                    
+                    // <--- AÑADIDO: Enviamos la metodología al Frontend
+                    $datosRespuesta['metodologias_guardadas'][$detalle->habilidad_blanda_id] = $detalle->metodologia; 
                 }
             }
 
@@ -161,6 +165,7 @@ class PlanificacionController extends Controller
                 if (empty($detalle['habilidad_blanda_id'])) continue;
                 $planificacion->detalles()->create([
                     'habilidad_blanda_id' => $detalle['habilidad_blanda_id'],
+                    'metodologia' => $detalle['metodologia'] ?? null, // <--- AÑADIDO: Guardamos la metodología en la BD
                     'actividades' => is_array($detalle['actividades']) ? implode("\n", $detalle['actividades']) : $detalle['actividades'],
                     'resultado_aprendizaje' => $detalle['resultado_aprendizaje'] ?? null 
                 ]);

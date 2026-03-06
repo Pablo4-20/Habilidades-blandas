@@ -120,4 +120,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/fichas/datos', [ReporteController::class, 'obtenerFichaResumen']);
     Route::post('/reportes/promedio-habilidad', [ReporteGeneralController::class, 'getPromedioPorHabilidad']);
     Route::post('/reportes/estado-habilidades', [ReporteGeneralController::class, 'getEstadoHabilidades']);
+
+   
+});
+
+ Route::get('/archivo-publico', function (\Illuminate\Http\Request $request) {
+    // Decodificamos la URL por si React envía %2F en lugar de /
+    $path = trim(urldecode($request->query('path')));
+    
+    // Usamos el motor nativo de Storage de Laravel que no falla con las rutas
+    if ($path && \Illuminate\Support\Facades\Storage::disk('public')->exists($path)) {
+        return \Illuminate\Support\Facades\Storage::disk('public')->response($path);
+    }
+    
+    return response()->json(['error' => 'Archivo fisico no encontrado: ' . $path], 404);
 });

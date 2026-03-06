@@ -9,7 +9,33 @@ import {
     ExclamationTriangleIcon, ChevronLeftIcon, ChevronRightIcon
 } from '@heroicons/react/24/outline';
 import logoIzq from '../assets/facultad.png'; 
-import logoDer from '../assets/software.png';
+import logoSoftware from '../assets/software.png';
+import logoTecnologias from '../assets/tecnologias.png';
+
+// --- FUNCIÓN HÍBRIDA (RUTA SEGURA CORS) ---
+const obtenerLogoCarrera = async (nombreCarrera, logoPath) => {
+    if (logoPath) {
+        try {
+            const res = await api.get('/archivo-publico', { 
+                params: { path: logoPath }, 
+                responseType: 'blob' 
+            });
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.readAsDataURL(res.data);
+            });
+        } catch (e) {
+            console.error("Error al cargar logo DB. Usando locales.", e);
+        }
+    }
+
+    const nombre = (nombreCarrera || '').toLowerCase();
+    if (nombre.includes('software')) return logoSoftware;
+    if (nombre.includes('tecnolog') || nombre.includes('ti')) return logoTecnologias;
+
+    return logoIzq;
+};
 
 const ReportesCoordinador = () => {
     // --- ESTADOS ---
@@ -92,11 +118,14 @@ const ReportesCoordinador = () => {
     const currentItems = processedData.slice(indexOfFirstItem, indexOfLastItem);
 
     // --- PDF ---
-    const descargarPDF = () => {
+    const descargarPDF = async () => {
         const doc = new jsPDF('l'); 
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight(); 
         const nombreCarrera = reporteInfo?.carrera || 'Carrera Desconocida';
+
+        // CARGAR LOGO DINÁMICO DESDE LA BASE DE DATOS
+        const logoDerechoBase64 = await obtenerLogoCarrera(nombreCarrera, reporteInfo?.logo);
 
         const gruposPorCiclo = reporteData.reduce((acc, curr) => {
             const ciclo = curr.ciclo || 'Sin Ciclo';
@@ -113,7 +142,7 @@ const ReportesCoordinador = () => {
         const dibujarEncabezado = () => {
             const imgW = 25; const imgH = 25; 
             try { doc.addImage(logoIzq, 'PNG', 15, 5, imgW, imgH); } catch (e) {}
-            try { doc.addImage(logoDer, 'PNG', pageWidth - 40, 5, imgW, imgH); } catch (e) {}
+            try { doc.addImage(logoDerechoBase64, 'PNG', pageWidth - 40, 5, imgW, imgH); } catch (e) {}
 
             doc.setFontSize(14); doc.setTextColor(40, 53, 147);
             doc.text("UNIVERSIDAD ESTATAL DE BOLIVAR", pageWidth / 2, 15, { align: "center" });

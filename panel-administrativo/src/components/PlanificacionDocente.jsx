@@ -6,11 +6,26 @@ import {
     BookOpenIcon, SparklesIcon, 
     CheckBadgeIcon, CalendarDaysIcon, ClockIcon, 
     CheckCircleIcon, TrashIcon, ListBulletIcon, LockClosedIcon,
-    PencilSquareIcon,
+    PencilSquareIcon, RectangleGroupIcon,
     ChevronLeftIcon, ChevronRightIcon,
     ChevronUpIcon, ChevronDownIcon, 
     CheckIcon, ExclamationCircleIcon, ExclamationTriangleIcon 
 } from '@heroicons/react/24/outline';
+
+// --- LISTA FIJA DE METODOLOGÍAS ---
+const OPCIONES_METODOLOGIAS = [
+    { value: 'Aprender a pensar', label: '1. Aprender a pensar' },
+    { value: 'Aprendizaje basado en juegos', label: '2. Aprendizaje basado en juegos' },
+    { value: 'Aprendizaje basado en problemas', label: '3. Aprendizaje basado en problemas' },
+    { value: 'Aprendizaje basado en proyectos', label: '4. Aprendizaje basado en proyectos' },
+    { value: 'Aprendizaje basado en retos', label: '5. Aprendizaje basado en retos' },
+    { value: 'Aprendizaje Cooperativo', label: '6. Aprendizaje Cooperativo' },
+    { value: 'Aula Invertida (Flipped-Classroom)', label: '7. Aula Invertida (Flipped-Classroom)' },
+    { value: 'Pensamiento de Diseño (Design-Thinking)', label: '8. Pensamiento de Diseño (Design-Thinking)' },
+    { value: 'Gamificación', label: '9. Gamificación' },
+    { value: 'Pensamiento Computacional', label: '10. Pensamiento Computacional' },
+    { value: 'Técnicas Cooperativo Dinámicas', label: '11. Técnicas Cooperativo Dinámicas' }
+];
 
 const PlanificacionDocente = () => {
     // Estados principales
@@ -30,6 +45,7 @@ const PlanificacionDocente = () => {
     const [habilidadesSeleccionadas, setHabilidadesSeleccionadas] = useState([]); 
     const [actividadesPorHabilidad, setActividadesPorHabilidad] = useState({}); 
     const [resultadosAprendizaje, setResultadosAprendizaje] = useState({}); 
+    const [metodologiasSeleccionadas, setMetodologiasSeleccionadas] = useState({}); // <--- NUEVO ESTADO PARA METODOLOGÍAS
 
     // Estado para tarjetas minimizadas
     const [cardsMinimizadas, setCardsMinimizadas] = useState([]);
@@ -100,6 +116,20 @@ const PlanificacionDocente = () => {
             });
             return cambios ? nuevas : prev;
         });
+
+        // Limpiar metodologías si se desmarca la habilidad
+        setMetodologiasSeleccionadas(prev => {
+            const nuevas = { ...prev };
+            let cambios = false;
+            Object.keys(nuevas).forEach(key => {
+                const idNum = Number(key);
+                if (!habilidadesSeleccionadas.includes(idNum)) {
+                    delete nuevas[key];
+                    cambios = true;
+                }
+            });
+            return cambios ? nuevas : prev;
+        });
         
         setCardsMinimizadas(prev => prev.filter(id => habilidadesSeleccionadas.includes(id)));
 
@@ -107,14 +137,10 @@ const PlanificacionDocente = () => {
 
     // HANDLERS
     const handleCambioMateria = (val) => {
-        // Val viene en formato "ID-PARALELO" (ej: "15-A")
         const [id, paralelo] = val.split('-');
         
         const materia = misAsignaturas.find(m => String(m.id) === String(id) && m.paralelo === paralelo && m.periodo === form.periodo_academico);
         let nuevoParcial = '1';
-        
-        // Verificación básica de si ya tiene planes (aunque esto depende de la lógica del backend, aquí es visual)
-        // Nota: misAsignaturas trae info general, no detallada de P1/P2 por paralelo, así que mejor dejar en 1 por defecto.
         
         setForm(prev => ({ 
             ...prev, 
@@ -130,10 +156,10 @@ const PlanificacionDocente = () => {
         setHabilidadesSeleccionadas([]);
         setActividadesPorHabilidad({});
         setResultadosAprendizaje({});
+        setMetodologiasSeleccionadas({}); // Limpiamos metodologías anteriores
         setCardsMinimizadas([]); 
 
         try {
-            // Enviamos el paralelo también
             const res = await api.get(`/planificaciones/verificar/${form.asignatura_id}`, {
                 params: { 
                     parcial: form.parcial, 
@@ -149,6 +175,7 @@ const PlanificacionDocente = () => {
                     setEsEdicion(true);
                     let seleccionadas = (res.data.habilidades_seleccionadas || []).map(id => Number(id));
                     const resultadosGuardados = res.data.resultados_guardados || {}; 
+                    const metodologiasGuardadas = res.data.metodologias_guardadas || {}; // Traemos metodologías de la BD
 
                     if (form.parcial === '2' && res.data.habilidades_p1 && res.data.habilidades_p1.length > 0) {
                         const idsP1 = res.data.habilidades_p1.map(id => Number(id));
@@ -156,6 +183,7 @@ const PlanificacionDocente = () => {
 
                         const actividadesLimpias = {};
                         const resultadosLimpios = {};
+                        const metodologiasLimpias = {};
 
                         seleccionadas.forEach(id => {
                             if (res.data.actividades_guardadas && res.data.actividades_guardadas[id]) {
@@ -164,12 +192,17 @@ const PlanificacionDocente = () => {
                             if (resultadosGuardados[id]) {
                                 resultadosLimpios[id] = resultadosGuardados[id];
                             }
+                            if (metodologiasGuardadas[id]) {
+                                metodologiasLimpias[id] = metodologiasGuardadas[id];
+                            }
                         });
                         setActividadesPorHabilidad(actividadesLimpias);
                         setResultadosAprendizaje(resultadosLimpios);
+                        setMetodologiasSeleccionadas(metodologiasLimpias);
                     } else {
                         setActividadesPorHabilidad(res.data.actividades_guardadas || {});
                         setResultadosAprendizaje(resultadosGuardados);
+                        setMetodologiasSeleccionadas(metodologiasGuardadas);
                     }
                     
                     setHabilidadesSeleccionadas(seleccionadas);
@@ -182,10 +215,11 @@ const PlanificacionDocente = () => {
                         setHabilidadesSeleccionadas(idsDelP1);
                         setActividadesPorHabilidad({}); 
                         setResultadosAprendizaje({});
+                        setMetodologiasSeleccionadas({});
                         setCardsMinimizadas(idsDelP1); 
                         
                         Swal.mixin({toast: true, position: 'top-end', timer: 3000, showConfirmButton: false})
-                            .fire({icon: 'success', title: 'Habilidades del P1 cargadas. Defina los Resultados de Aprendizaje del 2do Parcial.'});
+                            .fire({icon: 'success', title: 'Habilidades del P1 cargadas. Defina los Resultados y Metodologías del 2do Parcial.'});
                     } else {
                         setEsEdicion(false);
                     }
@@ -208,8 +242,7 @@ const PlanificacionDocente = () => {
 
         if (estaSeleccionado) {
             setHabilidadesSeleccionadas(prev => prev.filter(h => h !== idNum));
-            setActividadesPorHabilidad(prev => { const c = {...prev}; delete c[idNum]; return c; });
-            setResultadosAprendizaje(prev => { const c = {...prev}; delete c[idNum]; return c; });
+            // Los estados se limpian solos en el useEffect
         } else {
             setHabilidadesSeleccionadas(prev => [...prev, idNum]);
         }
@@ -223,6 +256,11 @@ const PlanificacionDocente = () => {
 
     const handleResultadoChange = (habilidadId, texto) => {
         setResultadosAprendizaje(prev => ({ ...prev, [habilidadId]: texto }));
+    };
+
+    // Función para manejar el cambio de metodología
+    const handleMetodologiaChange = (habilidadId, metodologia) => {
+        setMetodologiasSeleccionadas(prev => ({ ...prev, [habilidadId]: metodologia }));
     };
 
     const agregarActividad = (habilidadId, actividad) => {
@@ -251,10 +289,14 @@ const PlanificacionDocente = () => {
         e.preventDefault();
         if (habilidadesSeleccionadas.length === 0) return Swal.fire('Error', 'Selecciona al menos una habilidad.', 'warning');
 
+        // Validaciones antes de guardar
         for (let id of habilidadesSeleccionadas) {
             const nombreHab = catalogoHabilidades.find(h => h.id === id)?.nombre;
             if (!resultadosAprendizaje[id] || resultadosAprendizaje[id].trim().length < 5) {
                 return Swal.fire('Información Incompleta', `Debe definir un Resultado de Aprendizaje válido para: ${nombreHab}`, 'warning');
+            }
+            if (!metodologiasSeleccionadas[id]) {
+                return Swal.fire('Información Incompleta', `Debe seleccionar una Metodología a Aplicar para: ${nombreHab}`, 'warning');
             }
             if (!actividadesPorHabilidad[id] || actividadesPorHabilidad[id].length === 0) {
                 return Swal.fire('Faltan actividades', `Selecciona actividades para: ${nombreHab}`, 'warning');
@@ -264,6 +306,7 @@ const PlanificacionDocente = () => {
         const user = JSON.parse(localStorage.getItem('user'));
         const detalles = habilidadesSeleccionadas.map(id => ({
             habilidad_blanda_id: id,
+            metodologia: metodologiasSeleccionadas[id], // Enviamos la metodología al backend
             actividades: actividadesPorHabilidad[id],
             resultado_aprendizaje: resultadosAprendizaje[id] 
         }));
@@ -274,7 +317,7 @@ const PlanificacionDocente = () => {
                 docente_id: user.id,
                 parcial: form.parcial, 
                 periodo_academico: form.periodo_academico,
-                paralelo: form.paralelo, // Enviamos el paralelo
+                paralelo: form.paralelo,
                 detalles: detalles
             });
             await Swal.fire({
@@ -309,13 +352,12 @@ const PlanificacionDocente = () => {
     
     // CREAR OPCIONES ÚNICAS COMBINANDO ID Y PARALELO
     const opcionesAsignaturas = asignaturasDelPeriodo.map(a => ({
-        value: `${a.id}-${a.paralelo}`, // CLAVE ÚNICA COMPUESTA
-        label: `${a.nombre} - Paralelo ${a.paralelo}`, // ETIQUETA CLARA
+        value: `${a.id}-${a.paralelo}`, 
+        label: `${a.nombre} - Paralelo ${a.paralelo}`, 
         subtext: a.carrera,
         icon: (a.planificacion_p1 && a.planificacion_p2) ? CheckCircleIcon : null
     }));
     
-    // Valor compuesto para el select
     const valorSelectMateria = (form.asignatura_id && form.paralelo) 
         ? `${form.asignatura_id}-${form.paralelo}` 
         : '';
@@ -354,7 +396,6 @@ const PlanificacionDocente = () => {
                             <LockClosedIcon className="h-4 w-4 ml-auto text-blue-400"/>
                         </div>
                     </div>
-                    {/* Selector actualizado con valor compuesto */}
                     <CustomSelect 
                         label="Asignatura y Paralelo" 
                         icon={BookOpenIcon} 
@@ -385,9 +426,11 @@ const PlanificacionDocente = () => {
                                     const opcionesActividades = getOpcionesActividades(hab.id);
                                     const bloqueado = form.parcial === '2'; 
                                     const estaMinimizado = cardsMinimizadas.includes(Number(hab.id));
+                                    
                                     const tieneResultado = resultadosAprendizaje[hab.id] && resultadosAprendizaje[hab.id].length > 4;
+                                    const tieneMetodologia = !!metodologiasSeleccionadas[hab.id];
                                     const tieneActividades = actividadesPorHabilidad[hab.id] && actividadesPorHabilidad[hab.id].length > 0;
-                                    const estaCompleto = tieneResultado && tieneActividades;
+                                    const estaCompleto = tieneResultado && tieneMetodologia && tieneActividades;
 
                                     return (
                                         <div key={hab.id} className={`border rounded-2xl p-6 transition-all flex flex-col shadow-sm ${seleccionado ? (bloqueado ? 'border-gray-300 bg-gray-50' : 'border-purple-500 bg-purple-50/30') : 'border-gray-200 bg-white hover:shadow-md'}`}>
@@ -418,12 +461,17 @@ const PlanificacionDocente = () => {
                                                                     <div className="flex flex-wrap gap-1">
                                                                         {!tieneResultado && (
                                                                             <span className="bg-red-50 text-red-600 text-xs px-2 py-0.5 rounded-full border border-red-100 flex items-center gap-1 animate-pulse">
-                                                                                <ExclamationCircleIcon className="h-3 w-3"/> Falta Resultado
+                                                                                <ExclamationCircleIcon className="h-3 w-3"/> Resultado
+                                                                            </span>
+                                                                        )}
+                                                                        {!tieneMetodologia && (
+                                                                            <span className="bg-orange-50 text-orange-600 text-xs px-2 py-0.5 rounded-full border border-orange-100 flex items-center gap-1 animate-pulse">
+                                                                                <ExclamationTriangleIcon className="h-3 w-3"/> Metodología
                                                                             </span>
                                                                         )}
                                                                         {!tieneActividades && (
                                                                             <span className="bg-amber-50 text-amber-600 text-xs px-2 py-0.5 rounded-full border border-amber-100 flex items-center gap-1 animate-pulse">
-                                                                                <ExclamationTriangleIcon className="h-3 w-3"/> Falta Actividades
+                                                                                <ExclamationTriangleIcon className="h-3 w-3"/> Actividades
                                                                             </span>
                                                                         )}
                                                                     </div>
@@ -447,12 +495,14 @@ const PlanificacionDocente = () => {
                                             
                                             {seleccionado && !estaMinimizado && (
                                                 <div className="mt-2 pt-4 border-t border-purple-200/50 animate-fade-in-down">
-                                                    <div className="mb-5 bg-white p-4 rounded-xl border border-purple-100 shadow-sm group-focus-within:ring-2 ring-purple-100 transition-all">
+                                                    
+                                                    {/* RESULTADO DE APRENDIZAJE */}
+                                                    <div className="mb-5 bg-white p-4 rounded-xl border border-purple-100 shadow-sm focus-within:ring-2 ring-purple-100 transition-all">
                                                         <label className="text-xs font-bold text-purple-700 uppercase tracking-wide flex items-center gap-1 mb-2">
                                                             <PencilSquareIcon className="h-4 w-4"/> Resultado de Aprendizaje ({form.parcial === '1' ? '1er P.' : '2do P.'})
                                                         </label>
                                                         <textarea 
-                                                            rows="3"
+                                                            rows="2"
                                                             className="w-full text-sm p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-200 focus:border-purple-400 outline-none resize-none bg-gray-50 focus:bg-white transition-all placeholder:text-gray-300"
                                                             placeholder={`Defina el resultado esperado para el ${form.parcial}º Parcial...`}
                                                             value={resultadosAprendizaje[hab.id] || ''}
@@ -460,7 +510,23 @@ const PlanificacionDocente = () => {
                                                         />
                                                     </div>
 
-                                                    <p className="text-xs font-bold text-purple-700 mb-3 uppercase tracking-wide">Actividades:</p>
+                                                    {/* METODOLOGÍA A APLICAR */}
+                                                    <div className="mb-5 z-20 relative">
+                                                        <label className="text-xs font-bold text-purple-700 uppercase tracking-wide flex items-center gap-1 mb-1">
+                                                            <RectangleGroupIcon className="h-4 w-4"/> Metodología a Aplicar
+                                                        </label>
+                                                        <CustomSelect 
+                                                            label="" 
+                                                            placeholder="Seleccione la metodología..." 
+                                                            options={OPCIONES_METODOLOGIAS} 
+                                                            value={metodologiasSeleccionadas[hab.id] || ''} 
+                                                            onChange={(val) => handleMetodologiaChange(hab.id, val)} 
+                                                            icon={null}
+                                                        />
+                                                    </div>
+
+                                                    {/* ACTIVIDADES */}
+                                                    <p className="text-xs font-bold text-purple-700 mb-2 uppercase tracking-wide">Actividades:</p>
                                                     <ul className="space-y-2 mb-4">
                                                         {(actividadesPorHabilidad[hab.id] || []).map((act, idx) => (
                                                             <li key={idx} className="flex justify-between items-start bg-white p-3 rounded-lg border border-purple-100 text-sm text-gray-700 shadow-sm">
@@ -471,7 +537,7 @@ const PlanificacionDocente = () => {
                                                         {(actividadesPorHabilidad[hab.id] || []).length === 0 && <li className="text-sm text-gray-400 italic">Sin actividades asignadas.</li>}
                                                     </ul>
                                                     
-                                                    <div className="flex-1 min-w-0">
+                                                    <div className="flex-1 min-w-0 z-10 relative">
                                                         <CustomSelect 
                                                             label="" 
                                                             placeholder="Seleccione una actividad para agregar..." 

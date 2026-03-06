@@ -9,10 +9,38 @@ import {
     TableCellsIcon, ChartBarIcon, DocumentTextIcon
 } from '@heroicons/react/24/outline';
 
+// --- IMPORTACIÓN DE LOGOS LOCALES ---
 import logoIzq from '../assets/facultad.png'; 
-// [CORRECCIÓN] Importamos ambos logos para la lógica dinámica
 import logoSoftware from '../assets/software.png';
 import logoTecnologias from '../assets/tecnologias.png';
+
+// --- FUNCIÓN HÍBRIDA: BASE DE DATOS + ASSETS LOCALES ---
+const obtenerLogoCarrera = async (nombreCarrera, logoPath) => {
+    if (logoPath) {
+        try {
+            // Usamos la ruta segura del backend para evitar problemas de CORS
+            const res = await api.get('/archivo-publico', {
+                params: { path: logoPath },
+                responseType: 'blob' 
+            });
+            
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.readAsDataURL(res.data);
+            });
+        } catch (e) {
+            console.error("Error al cargar logo DB. Usando locales.", e);
+        }
+    }
+
+    // Si falla o no hay logo en la BD, usamos los locales por defecto
+    const nombre = (nombreCarrera || '').toLowerCase();
+    if (nombre.includes('software')) return logoSoftware;
+    if (nombre.includes('tecnolog') || nombre.includes('ti')) return logoTecnologias;
+
+    return logoIzq;
+};
 
 const FichaResumenCoordinador = () => {
     const [reporteData, setReporteData] = useState([]);
@@ -114,7 +142,7 @@ const FichaResumenCoordinador = () => {
     }, [reporteData]);
 
     // ===============================================
-    // GENERAR EXCEL (CON RESUMEN AL FINAL)
+    // GENERAR EXCEL
     // ===============================================
     const generarExcel = () => {
         if (reporteData.length === 0 || !datosProcesados) return;
@@ -140,7 +168,6 @@ const FichaResumenCoordinador = () => {
 
         const worksheet = XLSX.utils.json_to_sheet(filasExcel);
 
-        // Agregamos la tabla resumen al final del Excel
         XLSX.utils.sheet_add_aoa(worksheet, [
             [""], 
             ["RESUMEN DE CARRERA"], 
@@ -163,7 +190,7 @@ const FichaResumenCoordinador = () => {
     // ===============================================
     // GENERAR PDF (CON LOGOS DINÁMICOS)
     // ===============================================
-    const generarFichaPDF = () => {
+    const generarFichaPDF = async () => {
         if (!datosProcesados) return;
         const { porCiclo, ciclosOrdenados, totalCiclos, totalAsignaturas, promedioGeneral } = datosProcesados;
 
@@ -172,13 +199,11 @@ const FichaResumenCoordinador = () => {
         const pageHeight = doc.internal.pageSize.getHeight(); 
         const nombreCarrera = reporteInfo?.carrera || 'Carrera Desconocida';
 
-        // [CORRECCIÓN] Lógica para elegir logo derecho
-        const esTecnologia = nombreCarrera.toLowerCase().includes('tecnolog');
-        const logoDerecho = esTecnologia ? logoTecnologias : logoSoftware;
+        // --- RESOLVER EL LOGO CORRECTO ---
+        const logoDerecho = await obtenerLogoCarrera(nombreCarrera, reporteInfo?.logo);
 
         const dibujarEncabezado = () => {
             try { doc.addImage(logoIzq, 'PNG', 15, 5, 20, 20); } catch (e) {}
-            // Usamos la variable logoDerecho
             try { doc.addImage(logoDerecho, 'PNG', pageWidth - 35, 5, 20, 20); } catch (e) {}
             
             doc.setFontSize(14); doc.setTextColor(0); doc.setFont("helvetica", "bold");

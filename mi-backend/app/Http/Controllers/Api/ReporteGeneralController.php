@@ -52,28 +52,30 @@ class ReporteGeneralController extends Controller
                 ->orderBy('asignaturas.nombre');
 
             $nombreCarreraReporte = 'General';
+            $carreraObj = null;
 
             if ($user->carrera_id) {
                 $asignacionesQuery->whereHas('asignatura.carrera', function($q) use ($user) {
                     $q->where('id', $user->carrera_id);
                 });
                 $carreraObj = Carrera::find($user->carrera_id);
-                $nombreCarreraReporte = $carreraObj ? $carreraObj->nombre : 'Tu Carrera';
+                if ($carreraObj) $nombreCarreraReporte = $carreraObj->nombre;
 
             } elseif ($request->has('carrera') && $request->carrera !== 'Todas') {
                 $asignacionesQuery->whereHas('asignatura.carrera', function($q) use ($request) {
                     $q->where('nombre', 'like', '%' . $request->carrera . '%');
                 });
-                $nombreCarreraReporte = $request->carrera;
+                $carreraObj = Carrera::where('nombre', $request->carrera)->first();
+                if ($carreraObj) $nombreCarreraReporte = $carreraObj->nombre;
             }
 
             $asignaciones = $asignacionesQuery->get();
 
-            // ... (resto de lógica de nombre carrera) ...
             if ($nombreCarreraReporte === 'General' && $asignaciones->isNotEmpty()) {
                 $nombresUnicos = $asignaciones->map(fn($a) => $a->asignatura->carrera->nombre ?? null)->filter()->unique();
                 if ($nombresUnicos->count() === 1) {
                     $nombreCarreraReporte = $nombresUnicos->first();
+                    $carreraObj = $asignaciones->first()->asignatura->carrera;
                 } elseif ($nombresUnicos->count() > 1) {
                     $nombreCarreraReporte = 'Todas las Carreras';
                 }
@@ -81,6 +83,7 @@ class ReporteGeneralController extends Controller
 
             $info = [
                 'carrera' => $nombreCarreraReporte,
+                'logo' => $carreraObj ? $carreraObj->logo : null, // <-- AQUÍ ENVIAMOS EL LOGO
                 'periodo' => $request->periodo
             ];
 

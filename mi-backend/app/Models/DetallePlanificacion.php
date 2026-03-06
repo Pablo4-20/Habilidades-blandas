@@ -14,6 +14,7 @@ class DetallePlanificacion extends Model
     protected $fillable = [
         'planificacion_id',
         'habilidad_blanda_id',
+        'metodologia',
         'actividades',
         'resultado_aprendizaje'
     ];

@@ -7,23 +7,54 @@ import CustomSelect from './ui/CustomSelect';
 import { 
     PrinterIcon, BookOpenIcon, CalendarDaysIcon, 
     DocumentCheckIcon, TableCellsIcon, DocumentTextIcon,
-    FunnelIcon // <--- Importamos el icono para el filtro
+    FunnelIcon
 } from '@heroicons/react/24/outline';
 
-// --- IMPORTACIÓN DE LOGOS ---
+// --- IMPORTACIÓN DE LOGOS LOCALES ---
 import logoIzq from '../assets/facultad.png'; 
 import logoSoftware from '../assets/software.png'; 
 import logoTec from '../assets/tecnologias.png';   
 
+// --- FUNCIÓN HÍBRIDA: BASE DE DATOS + ASSETS LOCALES ---
+const obtenerLogoCarrera = async (nombreCarrera, logoPath) => {
+    console.log("1. PDF solicitado para Carrera:", nombreCarrera);
+    console.log("2. Ruta de la imagen en BD enviada por Laravel:", logoPath);
+
+    if (logoPath) {
+        try {
+            console.log("3. Intentando descargar imagen sin bloqueos CORS...");
+            const res = await api.get('/archivo-publico', {
+                params: { path: logoPath },
+                responseType: 'blob' 
+            });
+            
+            console.log("4. ¡Imagen descargada con éxito!");
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.readAsDataURL(res.data);
+            });
+        } catch (e) {
+            console.error("❌ Error al descargar logo de la BD. ¿La ruta /archivo-publico existe?", e);
+        }
+    } else {
+        console.warn("⚠️ Laravel no envió ninguna ruta de imagen. (El logoPath vino vacío).");
+    }
+
+    const nombre = (nombreCarrera || '').toLowerCase();
+    if (nombre.includes('software')) return logoSoftware;
+    if (nombre.includes('tecnolog') || nombre.includes('ti')) return logoTec;
+
+    console.log("5. Usando el logo de la Facultad como salvavidas.");
+    return logoIzq;
+};
+
 const FichaResumen = () => {
     const [asignacionesRaw, setAsignacionesRaw] = useState([]);
     
-    // Estados de selección
     const [selectedMateriaId, setSelectedMateriaId] = useState('');
     const [selectedParalelo, setSelectedParalelo] = useState(''); 
     const [selectedPeriodo, setSelectedPeriodo] = useState('');
-    
-    // --- NUEVO ESTADO: CARRERA ---
     const [selectedCarrera, setSelectedCarrera] = useState('Todas'); 
 
     const [loadingGeneral, setLoadingGeneral] = useState(false);
@@ -44,7 +75,6 @@ const FichaResumen = () => {
         cargarDatos();
     }, []);
 
-    // --- MANEJO DE SELECTOR DE MATERIA (ID + PARALELO) ---
     const handleCambioMateria = (val) => {
         if (!val) {
             setSelectedMateriaId('');
@@ -56,7 +86,6 @@ const FichaResumen = () => {
         setSelectedParalelo(par);
     };
 
-    // Construcción de opciones con Paralelo (Actas Individuales)
     const opcionesMaterias = useMemo(() => {
         if (!selectedPeriodo) return [];
         const delPeriodo = asignacionesRaw.filter(a => a.periodo === selectedPeriodo);
@@ -72,10 +101,8 @@ const FichaResumen = () => {
         ? `${selectedMateriaId}-${selectedParalelo}` 
         : '';
 
-    // --- NUEVO: OPCIONES DE CARRERA (Ficha Resumen) ---
     const opcionesCarreras = useMemo(() => {
         if (!asignacionesRaw.length) return [];
-        // Extraer nombres de carreras únicos
         const carrerasUnicas = [...new Set(asignacionesRaw.map(a => a.carrera).filter(Boolean))];
         
         return [
@@ -91,10 +118,9 @@ const FichaResumen = () => {
         if (!selectedPeriodo) return;
         setLoadingGeneral(true);
         try {
-            // Enviamos el periodo Y la carrera seleccionada
             const res = await api.post('/reportes/pdf-data-general', { 
                 periodo: selectedPeriodo,
-                carrera: selectedCarrera // <--- FILTRO ENVIADO
+                carrera: selectedCarrera 
             });
             const { info, filas } = res.data;
 
@@ -112,10 +138,8 @@ const FichaResumen = () => {
                 hour: '2-digit', minute: '2-digit'
             });
 
-            // --- LÓGICA DE SELECCIÓN DE LOGO ---
-            const logoDerecha = (info.carrera && info.carrera.toLowerCase().includes('tecnolog')) 
-                                ? logoTec 
-                                : logoSoftware;
+            // --- RESOLVER EL LOGO CORRECTO ---
+            const logoDerecha = await obtenerLogoCarrera(info.carrera, info.logo);
 
             // --- ENCABEZADO ---
             const imgW = 20; const imgH = 20; 
@@ -200,7 +224,7 @@ const FichaResumen = () => {
     };
 
     // ------------------------------------------------------------------------
-    // OPCIÓN 2: ACTAS INDIVIDUALES (LÓGICA CON LOGO DINÁMICO)
+    // OPCIÓN 2: ACTAS INDIVIDUALES
     // ------------------------------------------------------------------------
     const descargarActasIndividuales = async () => {
         if (!selectedMateriaId || !selectedPeriodo || !selectedParalelo) return Swal.fire('Error', 'Selecciona una materia.', 'warning');
@@ -225,13 +249,11 @@ const FichaResumen = () => {
                 hour: '2-digit', minute: '2-digit'
             });
 
+            // --- RESOLVER EL LOGO CORRECTO ---
+            const logoDerecha = await obtenerLogoCarrera(info.carrera, info.logo);
+
             const drawHeader = (doc) => {
                 const imgW = 20; const imgH = 20; 
-                
-                // --- LÓGICA DE SELECCIÓN DE LOGO (REPETIDA PARA ACTAS) ---
-                const logoDerecha = (info.carrera && info.carrera.toLowerCase().includes('tecnolog')) 
-                                    ? logoTec 
-                                    : logoSoftware;
 
                 try { doc.addImage(logoIzq, 'PNG', 10, 8, imgW, imgH); } catch (e) {}
                 try { doc.addImage(logoDerecha, 'PNG', pageWidth - 30, 8, imgW, imgH); } catch (e) {}
@@ -400,7 +422,6 @@ const FichaResumen = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 
-                {/* OPCIÓN 1: ACTAS DE CALIFICACIÓN */}
                 <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center text-center hover:shadow-md transition duration-300 group relative">
                     <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-green-500 to-teal-600 rounded-t-3xl"></div>
                     <div className="bg-green-50 p-4 rounded-full mb-6 group-hover:scale-110 transition duration-300">
@@ -425,7 +446,6 @@ const FichaResumen = () => {
                     </button>
                 </div>
 
-                {/* OPCIÓN 2: FICHA RESUMEN DE EJECUCIÓN (MODIFICADO) */}
                 <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center text-center hover:shadow-md transition duration-300 group relative">
                     <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-t-3xl"></div>
                     <div className="bg-blue-50 p-4 rounded-full mb-6 group-hover:scale-110 transition duration-300">
@@ -436,7 +456,6 @@ const FichaResumen = () => {
                         Documento consolidado con la tabla resumen de <strong>sus asignaturas</strong>.
                     </p>
                     
-                    {/* --- NUEVO SELECTOR DE CARRERA --- */}
                     <div className="w-full mb-6 text-left relative z-10">
                         <CustomSelect 
                             label="" 
@@ -447,7 +466,6 @@ const FichaResumen = () => {
                             icon={FunnelIcon} 
                         />
                     </div>
-                    {/* ---------------------------------- */}
 
                     <button onClick={descargarFichaResumen} disabled={!selectedPeriodo || loadingGeneral} className="w-full mt-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-blue-200 transition transform active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50">
                         {loadingGeneral ? 'Generando...' : <><PrinterIcon className="h-5 w-5"/> Descargar Ficha Resumen</>}
