@@ -5,7 +5,7 @@ import CustomSelect from './ui/CustomSelect';
 import { 
     DocumentTextIcon, BookOpenIcon, CalendarDaysIcon,
     ChartBarIcon, ArrowRightIcon, ArrowLeftIcon, ArrowDownTrayIcon, LockClosedIcon,
-    SparklesIcon, CheckCircleIcon, ExclamationTriangleIcon, UserGroupIcon // Icono nuevo
+    SparklesIcon, CheckCircleIcon, ExclamationTriangleIcon, UserGroupIcon 
 } from '@heroicons/react/24/outline';
 
 const ReportesDocente = () => {
@@ -24,8 +24,14 @@ const ReportesDocente = () => {
     const [guardando, setGuardando] = useState(false);
     const [autoGuardado, setAutoGuardado] = useState(false);
     
-    // Paginación
+    // Paginación y UI de Tarjetas
     const [pasoActual, setPasoActual] = useState(0);
+    const [mostrarTextareaPersonalizado, setMostrarTextareaPersonalizado] = useState(false);
+
+    // Resetea el toggle del textarea al cambiar de paso
+    useEffect(() => {
+        setMostrarTextareaPersonalizado(false);
+    }, [pasoActual]);
 
     // 1. CARGA INICIAL
     useEffect(() => {
@@ -147,7 +153,6 @@ const ReportesDocente = () => {
                     conclusiones: [{ id: planID, habilidad_id: habID, texto: texto }] 
                 });
                 
-                // Intentar guardar en ambos parciales para consistencia
                 if (itemActual.p1 && itemActual.p2) {
                      await api.post('/reportes/guardar-todo', { 
                         conclusiones: [{ id: itemActual.p1.planificacion_id, habilidad_id: habID, texto: texto }] 
@@ -161,19 +166,15 @@ const ReportesDocente = () => {
         }
     };
 
-    // 7. GUARDAR TODO (Botón Final) - CON VALIDACIÓN DE COMPLETITUD
+    // 7. GUARDAR TODO
     const guardarTodo = async () => {
-        
-        // --- NUEVA VALIDACIÓN: Verificar que TODOS los estudiantes estén calificados ---
         for (const grupo of reportesAgrupados) {
-            // Obtenemos la lista de estudiantes matriculados desde el detalle que envía el backend
             const listaEstudiantes = grupo.p1?.detalle_p1 || grupo.p2?.detalle_p2 || [];
             const totalMatriculados = listaEstudiantes.length;
 
             const evaluadosP1 = calcularTotalEvaluados(grupo.p1?.estadisticas);
             const evaluadosP2 = calcularTotalEvaluados(grupo.p2?.estadisticas);
 
-            // Verificamos Parcial 1
             if (grupo.p1 && evaluadosP1 < totalMatriculados) {
                 return Swal.fire({
                     title: 'Evaluación Incompleta',
@@ -183,7 +184,6 @@ const ReportesDocente = () => {
                 });
             }
 
-            // Verificamos Parcial 2
             if (grupo.p2 && evaluadosP2 < totalMatriculados) {
                 return Swal.fire({
                     title: 'Evaluación Incompleta',
@@ -193,7 +193,6 @@ const ReportesDocente = () => {
                 });
             }
         }
-        // -----------------------------------------------------------------------------
 
         setGuardando(true);
         try {
@@ -207,11 +206,9 @@ const ReportesDocente = () => {
                 const habId = grupo.habilidad_id; 
 
                 const texto = conclusiones[keyP2] || conclusiones[keyP1];
-
                 const tP1 = calcularTotalEvaluados(grupo.p1?.estadisticas);
                 const tP2 = calcularTotalEvaluados(grupo.p2?.estadisticas);
                 
-                // Solo enviamos si hay texto y calificaciones, aunque la validación previa ya asegura completitud
                 if (texto && (tP1 + tP2 > 0)) {
                     if (planP2) listaParaEnviar.push({ id: planP2, habilidad_id: habId, texto });
                     if (planP1) listaParaEnviar.push({ id: planP1, habilidad_id: habId, texto });
@@ -244,7 +241,6 @@ const ReportesDocente = () => {
         const totalEvaluados = calcularTotalEvaluados(stats);
         const maxVal = Math.max(...Object.values(stats)) || 1; 
         
-        // Color del indicador: Rojo si faltan, Verde si están completos
         const esCompleto = totalEvaluados >= totalMatriculados;
         const badgeColor = esCompleto ? 'bg-green-100 text-green-700 border-green-200' : 'bg-orange-100 text-orange-700 border-orange-200';
 
@@ -278,7 +274,6 @@ const ReportesDocente = () => {
         );
     };
 
-    // --- MANEJO DE SELECTOR COMPUESTO ---
     const handleCambioMateria = (val) => {
         if(!val) {
             setSelectedMateriaId('');
@@ -305,22 +300,47 @@ const ReportesDocente = () => {
         ? `${selectedMateriaId}-${selectedParalelo}` 
         : '';
 
-    // Variables de renderizado
     const itemActual = reportesAgrupados[pasoActual];
     const keyTextAreaActual = itemActual ? (itemActual.uniqueKeyP2 || itemActual.uniqueKeyP1) : null;
     
-    // Cálculos para validación visual
     const listaEstudiantes = itemActual ? (itemActual.p1?.detalle_p1 || itemActual.p2?.detalle_p2 || []) : [];
     const totalMatriculados = listaEstudiantes.length;
 
     const totalP1 = itemActual ? calcularTotalEvaluados(itemActual.p1?.estadisticas) : 0;
     const totalP2 = itemActual ? calcularTotalEvaluados(itemActual.p2?.estadisticas) : 0;
     
-    // Condición visual para habilitar/deshabilitar textarea
-    // La validación estricta está en el botón "Finalizar", pero aquí damos feedback visual
     const esCompletoP1 = totalP1 >= totalMatriculados;
     const esCompletoP2 = totalP2 >= totalMatriculados;
     const habilitarEscritura = esCompletoP1 && esCompletoP2 && totalMatriculados > 0;
+
+    // --- LÓGICA IF PARA EL TEXTO SUGERIDO ---
+    const sugerenciaCalculada = useMemo(() => {
+        if (!itemActual) return '';
+        const statsP1 = itemActual.p1?.estadisticas;
+        const statsP2 = itemActual.p2?.estadisticas;
+        if (!statsP1 || !statsP2) return '';
+
+        // Función para sacar el promedio
+        const calcularPromedio = (stats) => {
+            let total = 0, count = 0;
+            Object.keys(stats).forEach(nivel => {
+                total += Number(nivel) * Number(stats[nivel]);
+                count += Number(stats[nivel]);
+            });
+            return count > 0 ? total / count : 0;
+        };
+
+        const promP1 = calcularPromedio(statsP1);
+        const promP2 = calcularPromedio(statsP2);
+
+        if (promP2 > promP1) {
+            return `MEJORA: se evidencia avance del Parcial 1 al Parcial 2 en la habilidad de ${itemActual.habilidad}.`;
+        } else if (promP2 < promP1) {
+            return `ALERTA: se evidencia un descenso del Parcial 1 al Parcial 2; se recomienda refuerzo y práctica guiada.`;
+        } else {
+            return `ESTABLE: se mantiene un desempeño similar entre Parcial 1 y Parcial 2; continuar con las estrategias aplicadas.`;
+        }
+    }, [itemActual]);
 
     return (
         <div className="space-y-4 animate-fade-in pb-20 p-4 bg-gray-50 min-h-screen">
@@ -369,6 +389,7 @@ const ReportesDocente = () => {
                             <MiniGrafico stats={itemActual.p2?.estadisticas} titulo="Resultados P2" totalMatriculados={totalMatriculados} />
                         </div>
 
+                        {/* SECCIÓN DE TEXTAREA MODIFICADA */}
                         <div className={`p-5 rounded-xl border transition-colors relative ${habilitarEscritura ? 'bg-blue-50/50 border-blue-100 focus-within:bg-blue-50 focus-within:border-blue-300' : 'bg-gray-100 border-gray-200'}`}>
                             <div className="flex justify-between items-center mb-3">
                                 <label className={`block text-xs font-bold flex items-center gap-2 ${habilitarEscritura ? 'text-gray-700' : 'text-gray-500'}`}>
@@ -384,20 +405,64 @@ const ReportesDocente = () => {
                                 )}
                             </div>
                             
-                            <textarea 
-                                rows="4"
-                                // Opcional: Bloquear escritura si no está completo
-                                disabled={!habilitarEscritura} 
-                                className={`w-full px-4 py-3 border rounded-lg outline-none text-sm resize-none transition-all ${habilitarEscritura ? 'border-blue-200 bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-300' : 'border-gray-300 bg-gray-200 text-gray-500 cursor-not-allowed'}`}
-                                placeholder={habilitarEscritura ? `Escriba aquí sus conclusiones sobre el desarrollo de la habilidad "${itemActual.habilidad}" en el curso...` : "Debe calificar a TODOS los estudiantes en ambos parciales para habilitar el análisis."}
-                                value={conclusiones[keyTextAreaActual] || ''}
-                                onChange={(e) => {
-                                    if (keyTextAreaActual && habilitarEscritura) {
-                                        setConclusiones(prev => ({ ...prev, [keyTextAreaActual]: e.target.value }));
-                                    }
-                                }}
-                                onBlur={handleAutoSave}
-                            />
+                            {/* TARJETAS DE SELECCIÓN */}
+                            {habilitarEscritura && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                    <button 
+                                        onClick={() => {
+                                            setConclusiones(prev => ({ ...prev, [keyTextAreaActual]: sugerenciaCalculada }));
+                                            setMostrarTextareaPersonalizado(false);
+                                        }}
+                                        className={`p-4 rounded-xl border text-left transition-all text-sm flex flex-col gap-2 shadow-sm
+                                            ${(!mostrarTextareaPersonalizado && conclusiones[keyTextAreaActual] === sugerenciaCalculada) 
+                                                ? 'bg-blue-100 border-blue-400 text-blue-900 ring-2 ring-blue-400' 
+                                                : 'bg-white border-gray-200 text-gray-600 hover:border-blue-300 hover:bg-blue-50'}`}
+                                    >
+                                        <div className="font-bold flex items-center gap-2 text-blue-700">
+                                            <SparklesIcon className="h-5 w-5"/> Sugerencia Automática
+                                        </div>
+                                        <span className="leading-tight text-xs">{sugerenciaCalculada}</span>
+                                    </button>
+
+                                    <button 
+                                        onClick={() => {
+                                            setMostrarTextareaPersonalizado(true);
+                                            // Limpiar si el texto es la sugerencia
+                                            if (conclusiones[keyTextAreaActual] === sugerenciaCalculada) {
+                                                setConclusiones(prev => ({ ...prev, [keyTextAreaActual]: '' }));
+                                            }
+                                            setTimeout(() => document.getElementById('textarea-personalizado')?.focus(), 100);
+                                        }}
+                                        className={`p-4 rounded-xl border text-center transition-all text-sm flex flex-col items-center justify-center gap-2 shadow-sm
+                                            ${(mostrarTextareaPersonalizado || (conclusiones[keyTextAreaActual] && conclusiones[keyTextAreaActual] !== sugerenciaCalculada))
+                                                ? 'bg-blue-100 border-blue-400 text-blue-900 ring-2 ring-blue-400' 
+                                                : 'bg-white border-gray-200 text-gray-600 hover:border-blue-300 hover:bg-blue-50'}`}
+                                    >
+                                        <div className="font-bold flex items-center gap-2 text-gray-700">
+                                            <DocumentTextIcon className="h-5 w-5"/> Otro (Personalizado)
+                                        </div>
+                                        <span className="text-gray-500 text-xs">Abre el editor para escribir tu propio análisis.</span>
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* TEXTAREA (Se abre al presionar "Otro" o si ya hay texto personalizado) */}
+                            {(!habilitarEscritura || mostrarTextareaPersonalizado || (conclusiones[keyTextAreaActual] && conclusiones[keyTextAreaActual] !== sugerenciaCalculada)) && (
+                                <textarea 
+                                    id="textarea-personalizado"
+                                    rows="4"
+                                    disabled={!habilitarEscritura} 
+                                    className={`w-full px-4 py-3 border rounded-lg outline-none text-sm resize-none transition-all ${habilitarEscritura ? 'border-blue-200 bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-300 shadow-inner' : 'border-gray-300 bg-gray-200 text-gray-500 cursor-not-allowed'} ${!habilitarEscritura ? 'block' : ''}`}
+                                    placeholder={habilitarEscritura ? `Escriba aquí sus conclusiones personalizadas...` : "Debe calificar a TODOS los estudiantes en ambos parciales para habilitar el análisis."}
+                                    value={conclusiones[keyTextAreaActual] || ''}
+                                    onChange={(e) => {
+                                        if (keyTextAreaActual && habilitarEscritura) {
+                                            setConclusiones(prev => ({ ...prev, [keyTextAreaActual]: e.target.value }));
+                                        }
+                                    }}
+                                    onBlur={handleAutoSave}
+                                />
+                            )}
                         </div>
                     </div>
 

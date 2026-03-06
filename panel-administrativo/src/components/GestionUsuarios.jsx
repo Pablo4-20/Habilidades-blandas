@@ -89,13 +89,14 @@ const GestionUsuarios = () => {
         try {
             const endpoint = activeTab === 'administrativo' ? '/users' : '/estudiantes';
             
+            // AHORA LAS CARRERAS SE CARGAN SIEMPRE, SIN IMPORTAR EL TAB ACTIVO
             const [resData, resCarreras] = await Promise.all([
                 api.get(endpoint),
-                activeTab === 'administrativo' ? api.get('/carreras').catch(() => ({ data: [] })) : Promise.resolve({ data: [] })
+                api.get('/carreras').catch(() => ({ data: [] }))
             ]);
 
             setDataList(Array.isArray(resData.data) ? resData.data : []);
-            if (activeTab === 'administrativo') setListaCarreras(resCarreras.data);
+            setListaCarreras(Array.isArray(resCarreras.data) ? resCarreras.data : []);
 
         } catch (error) {
             console.error("Error cargando datos:", error);
@@ -232,18 +233,19 @@ const GestionUsuarios = () => {
         }
     };
 
-    // --- IMPORTACIÓN Y PLANTILLAS 
+    // --- IMPORTACIÓN Y PLANTILLAS ---
     const downloadTemplate = () => {
         let data = [];
         let name = "";
         let wscols = [];
-        
+
         if (activeTab === 'administrativo') {
             name = "Plantilla_Personal.xlsx";
             data = [{ Cedula: "0201234567", Nombres: "Juan", Apellidos: "Perez", Email: "jperez@ueb.edu.ec", Password: "clave", Rol: "docente", Carrera: "Software (Solo Coord)" }];
             wscols = [{wch: 15}, {wch: 15}, {wch: 15}, {wch: 25}, {wch: 15}, {wch: 15}, {wch: 20}];
         } else {
             name = "Plantilla_Estudiantes.xlsx";
+            // EL EJEMPLO ESTÁ QUEMADO COMO "Software"
             data = [{ Cedula: "0201234567", Nombres: "Carlos", Apellidos: "Ruiz", Email: "cruiz@mailes.ueb.edu.ec", Carrera: "Software" }];
             wscols = [{wch: 15}, {wch: 15}, {wch: 15}, {wch: 30}, {wch: 20}];
         }
@@ -588,7 +590,6 @@ const GestionUsuarios = () => {
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-4">
-                                        {/* EL COMBOBOX AHORA ACTIVA handleRoleChange */}
                                         <select className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white outline-none" 
                                             value={formUser.rol} 
                                             onChange={handleRoleChange}
@@ -610,6 +611,7 @@ const GestionUsuarios = () => {
                                                 required
                                             >
                                                 <option value="">-- Seleccione Carrera --</option>
+                                                {/* MApeo de las carreras traídas desde la BD */}
                                                 {listaCarreras.map(c => (
                                                     <option key={c.id} value={c.id}>{c.nombre}</option>
                                                 ))}
@@ -640,8 +642,10 @@ const GestionUsuarios = () => {
                                             onChange={e => setFormStudent({...formStudent, carrera: e.target.value})} 
                                         >
                                             <option value="">-- Seleccione una Carrera --</option>
-                                            <option value="Software">Software</option>
-                                            <option value="Tecnologías de la Información">Tecnologías de la Información</option>
+                                            {/* MAPEO DINÁMICO DE CARRERAS */}
+                                            {listaCarreras.map((c) => (
+                                                <option key={c.id} value={c.nombre}>{c.nombre}</option>
+                                            ))}
                                         </select>
                                     </div>
                                 </>
@@ -702,7 +706,8 @@ const GestionUsuarios = () => {
                                             <td className="px-3 py-2 border-r border-slate-200 font-mono text-blue-600">020123...</td>
                                             <td className="px-3 py-2 border-r border-slate-200">Juan</td>
                                             <td className="px-3 py-2 border-r border-slate-200">Perez</td>
-                                            <td className="px-3 py-2">
+                                            <td className="px-3 py-2 font-medium">
+                                                {/* MUESTRA SIEMPRE "Software" EN EL UI COMO EJEMPLO */}
                                                 {activeTab === 'administrativo' ? 'Docente' : 'Software'}
                                             </td>
                                         </tr>
