@@ -4,7 +4,7 @@ const isLocal = window.location.hostname === 'localhost' || window.location.host
 
 const baseURL = isLocal 
     ? 'http://127.0.0.1:8000/api'       // 🏠 Entorno Local (Tu PC)
-    : 'http://181.224.197.175/api';     // ☁️ Entorno Servidor (Producción)
+    : 'http://hbb.swueb.net/api';     // ☁️ Entorno Servidor (Producción)
 
 const api = axios.create({
     //baseURL: 'http://127.0.0.1:8000/api', // Tu URL actual

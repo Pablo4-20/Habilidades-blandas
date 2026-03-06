@@ -21,9 +21,16 @@ class UserController extends Controller
 
     public function store(Request $request)
     {
-        // ... (Tu código de store se mantiene igual) ...
+        // 1. CONDICIONAR LA REGLA DE LA CÉDULA
+        $reglasCedula = ['required', 'unique:users,cedula'];
+        
+        // Solo exigimos la validación matemática si es docente
+        if ($request->rol === 'docente') {
+            $reglasCedula[] = new ValidaCedula;
+        }
+
         $request->validate([
-            'cedula'    => ['required', 'unique:users,cedula', new ValidaCedula],
+            'cedula'    => $reglasCedula,
             'nombres'   => 'required|string',   
             'apellidos' => 'required|string', 
             'email'     => ['required', 'email','unique:users,email','regex:/^.+@(ueb\.edu\.ec|mailes\.ueb\.edu\.ec)$/i'],
@@ -49,8 +56,17 @@ class UserController extends Controller
             'must_change_password' => true
         ]);
 
-        $user->notify(new CredencialesVerificacion($rawPassword));
-        return response()->json(['message' => 'Usuario creado', 'user' => $user]);
+        try {
+            // Intenta enviar el correo
+            $user->notify(new CredencialesVerificacion($rawPassword));
+            return response()->json(['message' => 'Usuario creado y correo enviado con éxito', 'user' => $user]);
+        } catch (\Exception $e) {
+            // Si el correo falla, igual responde con éxito porque el usuario SÍ se creó
+            return response()->json([
+                'message' => 'Usuario creado exitosamente, PERO no se pudo enviar el correo de credenciales. Revisa la configuración de Gmail.', 
+                'user' => $user
+            ]);
+        }
     }
 
     public function destroy($id)
@@ -61,7 +77,6 @@ class UserController extends Controller
         return response()->json(['message' => 'Eliminado']);
     }
 
-    // --- CARGA MASIVA CORREGIDA ---
     public function import(Request $request)
     {
         $request->validate(['file' => 'required|file']);
@@ -75,9 +90,9 @@ class UserController extends Controller
             return str_getcsv($linea, $separador);
         }, file($file->getRealPath()));
 
-        array_shift($data); // Quitar cabecera
+        array_shift($data); 
 
-        $creados = 0;       // Renombrado de $count a $creados para claridad
+        $creados = 0;       
         $actualizados = 0;
         $errores = [];
 
@@ -138,12 +153,10 @@ class UserController extends Controller
                 }
 
             } catch (\Exception $e) {
-                // Ahora capturamos el error en el array en lugar de detener todo
                 $errores[] = "Fila " . ($index + 1) . ": " . $e->getMessage();
             }
         }
 
-        // [CORRECCIÓN CLAVE] Estructura JSON correcta
         return response()->json([
             'message' => "Proceso completado.",
             'creados' => $creados,
@@ -154,10 +167,16 @@ class UserController extends Controller
     
     public function update(Request $request, string $id)
     {
-        // ... (Tu código de update se mantiene igual) ...
         $user = User::findOrFail($id);
+        
+        // 2. CONDICIONAR LA REGLA EN EL UPDATE TAMBIÉN
+        $reglasCedula = ['required', Rule::unique('users', 'cedula')->ignore($user->id)];
+        if ($request->rol === 'docente') {
+            $reglasCedula[] = new ValidaCedula;
+        }
+
         $request->validate([
-            'cedula'    => ['required', Rule::unique('users', 'cedula')->ignore($user->id), new ValidaCedula],
+            'cedula'    => $reglasCedula,
             'nombres'   => 'required|string',
             'apellidos' => 'required|string',
             'email'     => ['required', 'email', Rule::unique('users', 'email')->ignore($user->id), 'regex:/^.+@(ueb\.edu\.ec|mailes\.ueb\.edu\.ec)$/i'],

@@ -65,6 +65,22 @@ class UsuarioSeeder extends Seeder
                 'updated_at' => now(),
             ]
         );
+        DB::table('users')->updateOrInsert(
+            ['email' => 'car.contabilidad@ueb.edu.ec'],
+            [
+                'cedula' => '0000000004',
+                'nombres' => 'Coordinador-Contabilidad',
+                'apellidos' => 'Contabilidad',
+                'password' => Hash::make('0000000004'),
+                'rol' => 'coordinador',
+                'carrera_id' => null, 
+                'email_verified_at' => now(),
+                'must_change_password' => false,
+                'created_at' => now(), 
+                'updated_at' => now(),
+            ]
+           
+        );
     // 3. DOCENTE
     DB::table('users')->updateOrInsert(
         ['email' => 'mbonilla@ueb.edu.ec'],

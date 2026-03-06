@@ -17,6 +17,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { UserPlusIcon } from '@heroicons/react/24/outline';
 import { CalculatorIcon } from '@heroicons/react/24/outline';
+import { BriefcaseIcon } from '@heroicons/react/24/outline';
 
 const Sidebar = ({ isOpen, toggleSidebar }) => {
     const userStored = localStorage.getItem('user');
@@ -49,6 +50,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     const menuItems = {
         admin: [
             { name: 'Inicio', path: '/dashboard', icon: HomeIcon },
+            { name: 'Carreras', path: '/dashboard/carreras', icon: BriefcaseIcon },
             { name: 'Periodos Académicos', path: '/dashboard/periodos', icon: CalendarDaysIcon },
             { name: 'Gestión Usuarios', path: '/dashboard/usuarios', icon: UsersIcon },
             { name: 'Asignaturas', path: '/dashboard/asignaturas', icon: BookOpenIcon },

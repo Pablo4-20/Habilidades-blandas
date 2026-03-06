@@ -58,7 +58,7 @@ const GestionUsuarios = () => {
     const [loading, setLoading] = useState(false);
     const [editingId, setEditingId] = useState(null); 
 
-    // Filtros y Paginación (AJUSTADO A 6)
+    // Filtros y Paginación
     const [busqueda, setBusqueda] = useState('');
     const [filtroRol, setFiltroRol] = useState('');
     const [currentPage, setCurrentPage] = useState(1); 
@@ -121,14 +121,32 @@ const GestionUsuarios = () => {
         }
     };
 
-    // --- MANEJO DE INPUTS (Sin cambios) ---
+    // --- MANEJO DE CAMBIO DE ROL ---
+    const handleRoleChange = (e) => {
+        const newRol = e.target.value;
+        setFormUser({ ...formUser, rol: newRol });
+
+        // Re-evaluar la cédula si ya se ingresaron 10 dígitos
+        if (formUser.cedula.length === 10) {
+            const esExento = newRol === 'coordinador' || newRol === 'admin';
+            if (!esExento && !validarCedulaEcuador(formUser.cedula)) {
+                setErrors(prev => ({ ...prev, cedula: 'Cédula inválida (Digito verificador incorrecto)' }));
+            } else {
+                setErrors(prev => { const { cedula, ...rest } = prev; return rest; });
+            }
+        }
+    };
+
+    // --- MANEJO DE INPUTS ---
     const handleInputCedula = (e, isUser) => {
         const val = e.target.value.replace(/\D/g, '').slice(0, 10); 
         if (isUser) setFormUser({ ...formUser, cedula: val });
         else setFormStudent({ ...formStudent, cedula: val });
 
         if (val.length === 10) {
-            if (!validarCedulaEcuador(val)) {
+            const esExento = isUser && (formUser.rol === 'coordinador' || formUser.rol === 'admin');
+            
+            if (!esExento && !validarCedulaEcuador(val)) {
                 setErrors(prev => ({ ...prev, cedula: 'Cédula inválida (Digito verificador incorrecto)' }));
             } else {
                 setErrors(prev => { const { cedula, ...rest } = prev; return rest; }); 
@@ -163,7 +181,7 @@ const GestionUsuarios = () => {
         }
     };
 
-    // --- GUARDAR (Sin cambios mayores) ---
+    // --- GUARDAR ---
     const handleGuardar = async (e) => {
         e.preventDefault();
         
@@ -176,7 +194,9 @@ const GestionUsuarios = () => {
             return Swal.fire('Falta Información', 'Debe asignar una carrera al Coordinador.', 'warning');
         }
 
-        if (!validarCedulaEcuador(payload.cedula)) {
+        const esExento = activeTab === 'administrativo' && (payload.rol === 'coordinador' || payload.rol === 'admin');
+
+        if (!esExento && !validarCedulaEcuador(payload.cedula)) {
             setErrors(prev => ({ ...prev, cedula: 'Cédula inválida' }));
             return;
         }
@@ -206,7 +226,7 @@ const GestionUsuarios = () => {
             fetchData(); 
         } catch (error) {
             const msg = error.response?.data?.message || 'Error al guardar.';
-            if(msg.toLowerCase().includes('cedula')) setErrors(prev => ({ ...prev, cedula: 'Esta cédula ya existe' }));
+            if(msg.toLowerCase().includes('cedula')) setErrors(prev => ({ ...prev, cedula: 'Esta cédula/identificador ya existe' }));
             if(msg.toLowerCase().includes('email')) setErrors(prev => ({ ...prev, email: 'Este correo ya está registrado' }));
             Swal.fire({ title: 'Error', text: msg, icon: 'error', confirmButtonColor: '#d33' });
         }
@@ -281,7 +301,6 @@ const GestionUsuarios = () => {
                 Swal.fire({
                     title: 'Resumen de Carga',
                     html: htmlContent,
-                   
                     confirmButtonText: 'Entendido'
                 });
             }
@@ -322,7 +341,6 @@ const GestionUsuarios = () => {
 
     // --- LÓGICA DE FILTRADO Y PAGINACIÓN ---
     const getFilteredAndSortedData = () => {
-        // 1. Filtrar
         let filtered = dataList.filter(item => {
             const term = busqueda.toLowerCase();
             const fullName = `${item.nombres} ${item.apellidos}`.toLowerCase();
@@ -331,7 +349,6 @@ const GestionUsuarios = () => {
             else return matchesText;
         });
 
-        // 2. Ordenar Alfabéticamente (A-Z por Apellidos)
         filtered.sort((a, b) => {
             const nameA = `${a.apellidos} ${a.nombres}`.toLowerCase();
             const nameB = `${b.apellidos} ${b.nombres}`.toLowerCase();
@@ -343,10 +360,7 @@ const GestionUsuarios = () => {
         return filtered;
     };
 
-    // Datos procesados
     const processedData = getFilteredAndSortedData();
-    
-    // Cálculos de Paginación
     const totalPages = Math.ceil(processedData.length / ITEMS_PER_PAGE);
     const indexOfLastItem = currentPage * ITEMS_PER_PAGE;
     const indexOfFirstItem = indexOfLastItem - ITEMS_PER_PAGE;
@@ -361,9 +375,7 @@ const GestionUsuarios = () => {
 
     const getCarreraDisplay = (item) => {
         if (!item.carrera) return 'Sin Asignar';
-        if (typeof item.carrera === 'object') {
-            return item.carrera.nombre || 'Desconocida';
-        }
+        if (typeof item.carrera === 'object') return item.carrera.nombre || 'Desconocida';
         return item.carrera;
     };
 
@@ -406,7 +418,7 @@ const GestionUsuarios = () => {
                         className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-100" 
                         placeholder="Buscar..." 
                         value={busqueda} 
-                        onChange={(e) => { setBusqueda(e.target.value); setCurrentPage(1); }} // Reset página al buscar
+                        onChange={(e) => { setBusqueda(e.target.value); setCurrentPage(1); }} 
                     />
                 </div>
                 {activeTab === 'administrativo' && (
@@ -538,7 +550,12 @@ const GestionUsuarios = () => {
 
                         <form onSubmit={handleGuardar} className="p-8 space-y-5">
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Cédula</label>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
+                                    {activeTab === 'administrativo' && (formUser.rol === 'coordinador' || formUser.rol === 'admin') 
+                                        ? 'Identificador (10 dígitos)' 
+                                        : 'Cédula'
+                                    }
+                                </label>
                                 <div className="relative">
                                     <IdentificationIcon className={`absolute left-3 top-3 h-5 w-5 ${errors.cedula ? 'text-red-500' : 'text-gray-400'}`} />
                                     <input type="text" required maxLength="10" 
@@ -571,8 +588,14 @@ const GestionUsuarios = () => {
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-4">
-                                        <select className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white outline-none" value={formUser.rol} onChange={e => setFormUser({...formUser, rol: e.target.value})}>
-                                            <option value="docente">Docente</option><option value="coordinador">Coordinador</option><option value="admin">Administrador</option>
+                                        {/* EL COMBOBOX AHORA ACTIVA handleRoleChange */}
+                                        <select className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white outline-none" 
+                                            value={formUser.rol} 
+                                            onChange={handleRoleChange}
+                                        >
+                                            <option value="docente">Docente</option>
+                                            <option value="coordinador">Coordinador</option>
+                                            <option value="admin">Administrador</option>
                                         </select>
                                         <input type="password" placeholder={editingId ? "Clave " : "Contraseña"} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white outline-none" value={formUser.password} onChange={e => setFormUser({...formUser, password: e.target.value})} />
                                     </div>

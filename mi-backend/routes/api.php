@@ -57,6 +57,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/periodos/{id}', [PeriodoAcademicoController::class, 'destroy']);
     Route::get('/periodos/activos', [PeriodoAcademicoController::class, 'activos']);
 
+    // Carreras
+    Route::apiResource('/gestion-carreras', \App\Http\Controllers\Api\CarreraController::class);
+
     // Usuarios
     Route::apiResource('/users', UserController::class);
     Route::post('/users/import', [UserController::class, 'import']);

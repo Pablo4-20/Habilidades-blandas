@@ -21,6 +21,7 @@ import HabilidadesEvaluadas from './components/HabilidadesEvaluadas';
 import PromedioHabilidad from './components/PromedioHabilidad';
 import RecuperarPassword from './components/RecuperarPassword';
 import RestablecerPassword from './components/RestablecerPassword';
+import GestionCarreras from './components/GestionCarreras';
 
 // --- Rutas de Protección ---
 const ProtectedRoute = ({ children }) => {
@@ -64,6 +65,7 @@ function App() {
             {/* ZONA ADMIN */}
             <Route element={<RoleGuard allowedRoles={['admin']} />}>
                 <Route path="usuarios" element={<GestionUsuarios />} />
+                <Route path="carreras" element={<GestionCarreras />} />
                 <Route path="habilidades" element={<GestionHabilidades />} />
                 <Route path="asignaturas" element={<GestionAsignaturas />} /> 
                 <Route path="periodos" element={<GestionPeriodos />} />
