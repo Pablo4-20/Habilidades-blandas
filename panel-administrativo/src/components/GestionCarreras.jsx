@@ -15,7 +15,7 @@ const GestionCarreras = () => {
     const [logoPreview, setLogoPreview] = useState(null);
 
     // Obtiene la URL base del backend sin el /api (ej. http://localhost:8000)
-    const backendUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:8000';
+    const backendUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://hbb.swueb.net';
 
     useEffect(() => {
         fetchCarreras();
