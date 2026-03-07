@@ -18,7 +18,7 @@ const ReportesDocente = () => {
     const [selectedPeriodo, setSelectedPeriodo] = useState('');
     
     const [dataCompleta, setDataCompleta] = useState(null); 
-    const [conclusiones, setConclusiones] = useState({});
+    const [conclusiones, setConclusiones] = useState({}); // Solo guardará las notas extras
     
     const [loading, setLoading] = useState(false);
     const [guardando, setGuardando] = useState(false);
@@ -26,12 +26,6 @@ const ReportesDocente = () => {
     
     // Paginación y UI de Tarjetas
     const [pasoActual, setPasoActual] = useState(0);
-    const [mostrarTextareaPersonalizado, setMostrarTextareaPersonalizado] = useState(false);
-
-    // Resetea el toggle del textarea al cambiar de paso
-    useEffect(() => {
-        setMostrarTextareaPersonalizado(false);
-    }, [pasoActual]);
 
     // 1. CARGA INICIAL
     useEffect(() => {
@@ -95,7 +89,7 @@ const ReportesDocente = () => {
         return Object.values(grupos);
     }, [dataCompleta]);
 
-    // 4. CARGA DE DATOS + POBLAR CONCLUSIONES
+    // 4. CARGA DE DATOS + SEPARAR CONCLUSIÓN DE NOTA EXTRA
     const cargarDatosReporte = async () => {
         setLoading(true);
         try {
@@ -108,9 +102,23 @@ const ReportesDocente = () => {
             
             const initialConclusiones = {};
             const rawReportes = res.data.reportes || [];
+            
             rawReportes.forEach(r => {
                 const key = `${r.planificacion_id}_${r.habilidad_id}`;
-                if (r.conclusion) initialConclusiones[key] = r.conclusion;
+                if (r.conclusion) {
+                    // Si ya viene con el texto adicional unido, lo separamos para mostrarlo en el textarea
+                    const partes = r.conclusion.split('\n\nNota Adicional: ');
+                    if (partes.length > 1) {
+                        initialConclusiones[key] = partes[1]; // Lo extra
+                    } else {
+                        // Si no tiene el separador, verificamos si es pura sugerencia o un texto viejo manual
+                        if (!r.conclusion.includes('MEJORA:') && !r.conclusion.includes('ALERTA:') && !r.conclusion.includes('ESTABLE:')) {
+                            initialConclusiones[key] = r.conclusion; 
+                        } else {
+                            initialConclusiones[key] = ''; // Era pura sugerencia automática
+                        }
+                    }
+                }
             });
             setConclusiones(initialConclusiones);
 
@@ -119,6 +127,34 @@ const ReportesDocente = () => {
             setDataCompleta(null);
         } finally {
             setLoading(false);
+        }
+    };
+
+    // --- FUNCIÓN INDEPENDIENTE PARA CALCULAR LA SUGERENCIA ---
+    const calcularSugerenciaExterna = (grupo) => {
+        if (!grupo) return '';
+        const statsP1 = grupo.p1?.estadisticas;
+        const statsP2 = grupo.p2?.estadisticas;
+        if (!statsP1 || !statsP2) return '';
+
+        const calcularPromedio = (stats) => {
+            let total = 0, count = 0;
+            Object.keys(stats).forEach(nivel => {
+                total += Number(nivel) * Number(stats[nivel]);
+                count += Number(stats[nivel]);
+            });
+            return count > 0 ? total / count : 0;
+        };
+
+        const promP1 = calcularPromedio(statsP1);
+        const promP2 = calcularPromedio(statsP2);
+
+        if (promP2 > promP1) {
+            return `MEJORA: se evidencia avance del Parcial 1 al Parcial 2 en la habilidad de ${grupo.habilidad}.`;
+        } else if (promP2 < promP1) {
+            return `ALERTA: se evidencia un descenso del Parcial 1 al Parcial 2; se recomienda refuerzo y práctica guiada.`;
+        } else {
+            return `ESTABLE: se mantiene un desempeño similar entre Parcial 1 y Parcial 2; continuar con las estrategias aplicadas.`;
         }
     };
 
@@ -144,18 +180,23 @@ const ReportesDocente = () => {
 
         const planID = itemActual.p2?.planificacion_id || itemActual.p1?.planificacion_id;
         const habID = itemActual.habilidad_id;
-        const texto = conclusiones[keyTextAreaActual];
+        
+        const sugerencia = calcularSugerenciaExterna(itemActual);
+        const notaExtra = conclusiones[keyTextAreaActual] || '';
+        
+        // Unir Sugerencia Automática con la Nota Adicional (si existe)
+        const textoFinal = notaExtra.trim() ? `${sugerencia}\n\nNota Adicional: ${notaExtra.trim()}` : sugerencia;
 
-        if (planID && habID && texto !== undefined) {
+        if (planID && habID) {
             setAutoGuardado(true);
             try {
                 await api.post('/reportes/guardar-todo', { 
-                    conclusiones: [{ id: planID, habilidad_id: habID, texto: texto }] 
+                    conclusiones: [{ id: planID, habilidad_id: habID, texto: textoFinal }] 
                 });
                 
                 if (itemActual.p1 && itemActual.p2) {
                      await api.post('/reportes/guardar-todo', { 
-                        conclusiones: [{ id: itemActual.p1.planificacion_id, habilidad_id: habID, texto: texto }] 
+                        conclusiones: [{ id: itemActual.p1.planificacion_id, habilidad_id: habID, texto: textoFinal }] 
                     });
                 }
             } catch (e) {
@@ -205,13 +246,17 @@ const ReportesDocente = () => {
                 const keyP2 = grupo.uniqueKeyP2;
                 const habId = grupo.habilidad_id; 
 
-                const texto = conclusiones[keyP2] || conclusiones[keyP1];
+                const sugerencia = calcularSugerenciaExterna(grupo);
+                const notaExtra = conclusiones[keyP2] || conclusiones[keyP1] || '';
+                
+                const textoFinal = notaExtra.trim() ? `${sugerencia}\n\nNota Adicional: ${notaExtra.trim()}` : sugerencia;
+
                 const tP1 = calcularTotalEvaluados(grupo.p1?.estadisticas);
                 const tP2 = calcularTotalEvaluados(grupo.p2?.estadisticas);
                 
-                if (texto && (tP1 + tP2 > 0)) {
-                    if (planP2) listaParaEnviar.push({ id: planP2, habilidad_id: habId, texto });
-                    if (planP1) listaParaEnviar.push({ id: planP1, habilidad_id: habId, texto });
+                if (textoFinal && (tP1 + tP2 > 0)) {
+                    if (planP2) listaParaEnviar.push({ id: planP2, habilidad_id: habId, texto: textoFinal });
+                    if (planP1) listaParaEnviar.push({ id: planP1, habilidad_id: habId, texto: textoFinal });
                 }
             });
 
@@ -313,34 +358,7 @@ const ReportesDocente = () => {
     const esCompletoP2 = totalP2 >= totalMatriculados;
     const habilitarEscritura = esCompletoP1 && esCompletoP2 && totalMatriculados > 0;
 
-    // --- LÓGICA IF PARA EL TEXTO SUGERIDO ---
-    const sugerenciaCalculada = useMemo(() => {
-        if (!itemActual) return '';
-        const statsP1 = itemActual.p1?.estadisticas;
-        const statsP2 = itemActual.p2?.estadisticas;
-        if (!statsP1 || !statsP2) return '';
-
-        // Función para sacar el promedio
-        const calcularPromedio = (stats) => {
-            let total = 0, count = 0;
-            Object.keys(stats).forEach(nivel => {
-                total += Number(nivel) * Number(stats[nivel]);
-                count += Number(stats[nivel]);
-            });
-            return count > 0 ? total / count : 0;
-        };
-
-        const promP1 = calcularPromedio(statsP1);
-        const promP2 = calcularPromedio(statsP2);
-
-        if (promP2 > promP1) {
-            return `MEJORA: se evidencia avance del Parcial 1 al Parcial 2 en la habilidad de ${itemActual.habilidad}.`;
-        } else if (promP2 < promP1) {
-            return `ALERTA: se evidencia un descenso del Parcial 1 al Parcial 2; se recomienda refuerzo y práctica guiada.`;
-        } else {
-            return `ESTABLE: se mantiene un desempeño similar entre Parcial 1 y Parcial 2; continuar con las estrategias aplicadas.`;
-        }
-    }, [itemActual]);
+    const sugerenciaCalculada = useMemo(() => calcularSugerenciaExterna(itemActual), [itemActual]);
 
     return (
         <div className="space-y-4 animate-fade-in pb-20 p-4 bg-gray-50 min-h-screen">
@@ -389,11 +407,11 @@ const ReportesDocente = () => {
                             <MiniGrafico stats={itemActual.p2?.estadisticas} titulo="Resultados P2" totalMatriculados={totalMatriculados} />
                         </div>
 
-                        {/* SECCIÓN DE TEXTAREA MODIFICADA */}
-                        <div className={`p-5 rounded-xl border transition-colors relative ${habilitarEscritura ? 'bg-blue-50/50 border-blue-100 focus-within:bg-blue-50 focus-within:border-blue-300' : 'bg-gray-100 border-gray-200'}`}>
-                            <div className="flex justify-between items-center mb-3">
-                                <label className={`block text-xs font-bold flex items-center gap-2 ${habilitarEscritura ? 'text-gray-700' : 'text-gray-500'}`}>
-                                    <ChartBarIcon className="h-4 w-4"/> Análisis y Conclusiones
+                        {/* SECCIÓN DE ANÁLISIS REDISEÑADA */}
+                        <div className={`p-5 rounded-xl border transition-colors relative ${habilitarEscritura ? 'bg-white border-blue-100 shadow-sm' : 'bg-gray-100 border-gray-200'}`}>
+                            <div className="flex justify-between items-center mb-4">
+                                <label className={`block text-sm font-bold flex items-center gap-2 ${habilitarEscritura ? 'text-gray-800' : 'text-gray-500'}`}>
+                                    <ChartBarIcon className="h-5 w-5 text-blue-600"/> Análisis y Conclusiones
                                 </label>
                                 
                                 {habilitarEscritura ? (
@@ -405,65 +423,44 @@ const ReportesDocente = () => {
                                 )}
                             </div>
                             
-                            {/* TARJETAS DE SELECCIÓN */}
-                            {habilitarEscritura && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                                    <button 
-                                        onClick={() => {
-                                            setConclusiones(prev => ({ ...prev, [keyTextAreaActual]: sugerenciaCalculada }));
-                                            setMostrarTextareaPersonalizado(false);
-                                        }}
-                                        className={`p-4 rounded-xl border text-left transition-all text-sm flex flex-col gap-2 shadow-sm
-                                            ${(!mostrarTextareaPersonalizado && conclusiones[keyTextAreaActual] === sugerenciaCalculada) 
-                                                ? 'bg-blue-100 border-blue-400 text-blue-900 ring-2 ring-blue-400' 
-                                                : 'bg-white border-gray-200 text-gray-600 hover:border-blue-300 hover:bg-blue-50'}`}
-                                    >
-                                        <div className="font-bold flex items-center gap-2 text-blue-700">
-                                            <SparklesIcon className="h-5 w-5"/> Sugerencia Automática
+                            {habilitarEscritura ? (
+                                <div className="space-y-4">
+                                    {/* SUGERENCIA AUTOMÁTICA (SIEMPRE VISIBLE, SEPARADA DEL TEXTAREA) */}
+                                    <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl flex items-start gap-3 shadow-inner">
+                                        <SparklesIcon className="h-6 w-6 text-blue-500 shrink-0 mt-0.5"/>
+                                        <div>
+                                            <h4 className="text-blue-800 font-bold text-[11px] mb-1 uppercase tracking-wider">Análisis Automático del Sistema</h4>
+                                            <p className="text-blue-900 text-sm leading-relaxed font-medium">{sugerenciaCalculada}</p>
                                         </div>
-                                        <span className="leading-tight text-xs">{sugerenciaCalculada}</span>
-                                    </button>
+                                    </div>
 
-                                    <button 
-                                        onClick={() => {
-                                            setMostrarTextareaPersonalizado(true);
-                                            // Limpiar si el texto es la sugerencia
-                                            if (conclusiones[keyTextAreaActual] === sugerenciaCalculada) {
-                                                setConclusiones(prev => ({ ...prev, [keyTextAreaActual]: '' }));
-                                            }
-                                            setTimeout(() => document.getElementById('textarea-personalizado')?.focus(), 100);
-                                        }}
-                                        className={`p-4 rounded-xl border text-center transition-all text-sm flex flex-col items-center justify-center gap-2 shadow-sm
-                                            ${(mostrarTextareaPersonalizado || (conclusiones[keyTextAreaActual] && conclusiones[keyTextAreaActual] !== sugerenciaCalculada))
-                                                ? 'bg-blue-100 border-blue-400 text-blue-900 ring-2 ring-blue-400' 
-                                                : 'bg-white border-gray-200 text-gray-600 hover:border-blue-300 hover:bg-blue-50'}`}
-                                    >
-                                        <div className="font-bold flex items-center gap-2 text-gray-700">
-                                            <DocumentTextIcon className="h-5 w-5"/> Otro (Personalizado)
-                                        </div>
-                                        <span className="text-gray-500 text-xs">Abre el editor para escribir tu propio análisis.</span>
-                                    </button>
+                                    {/* TEXTAREA EXCLUSIVO PARA COMENTARIOS ADICIONALES */}
+                                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 transition-all focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-300">
+                                        <label className="block text-xs font-bold text-gray-500 mb-2 flex items-center gap-2">
+                                            <DocumentTextIcon className="h-4 w-4"/> Observaciones Adicionales (Opcional)
+                                        </label>
+                                        <textarea 
+                                            id="textarea-personalizado"
+                                            rows="3"
+                                            className="w-full p-0 bg-transparent border-none outline-none text-sm resize-none text-gray-700 placeholder-gray-400 focus:ring-0"
+                                            placeholder="Escriba aquí si desea agregar un comentario manual aparte de la sugerencia automática..."
+                                            value={conclusiones[keyTextAreaActual] || ''}
+                                            onChange={(e) => {
+                                                if (keyTextAreaActual) {
+                                                    setConclusiones(prev => ({ ...prev, [keyTextAreaActual]: e.target.value }));
+                                                }
+                                            }}
+                                            onBlur={handleAutoSave}
+                                        />
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="p-4 bg-gray-200 rounded-xl text-gray-500 text-sm text-center border border-gray-300 border-dashed">
+                                    Debe calificar a TODOS los estudiantes en ambos parciales para habilitar el análisis.
                                 </div>
                             )}
-
-                            {/* TEXTAREA (Se abre al presionar "Otro" o si ya hay texto personalizado) */}
-                            {(!habilitarEscritura || mostrarTextareaPersonalizado || (conclusiones[keyTextAreaActual] && conclusiones[keyTextAreaActual] !== sugerenciaCalculada)) && (
-                                <textarea 
-                                    id="textarea-personalizado"
-                                    rows="4"
-                                    disabled={!habilitarEscritura} 
-                                    className={`w-full px-4 py-3 border rounded-lg outline-none text-sm resize-none transition-all ${habilitarEscritura ? 'border-blue-200 bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-300 shadow-inner' : 'border-gray-300 bg-gray-200 text-gray-500 cursor-not-allowed'} ${!habilitarEscritura ? 'block' : ''}`}
-                                    placeholder={habilitarEscritura ? `Escriba aquí sus conclusiones personalizadas...` : "Debe calificar a TODOS los estudiantes en ambos parciales para habilitar el análisis."}
-                                    value={conclusiones[keyTextAreaActual] || ''}
-                                    onChange={(e) => {
-                                        if (keyTextAreaActual && habilitarEscritura) {
-                                            setConclusiones(prev => ({ ...prev, [keyTextAreaActual]: e.target.value }));
-                                        }
-                                    }}
-                                    onBlur={handleAutoSave}
-                                />
-                            )}
                         </div>
+
                     </div>
 
                     <div className="bg-white px-5 py-4 border-t border-gray-100 flex justify-between items-center mt-auto">
