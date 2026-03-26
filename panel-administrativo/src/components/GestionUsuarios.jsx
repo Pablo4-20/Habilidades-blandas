@@ -61,6 +61,7 @@ const GestionUsuarios = () => {
     // Filtros y Paginación
     const [busqueda, setBusqueda] = useState('');
     const [filtroRol, setFiltroRol] = useState('');
+    const [carreraSeleccionada, setCarreraSeleccionada] = useState('Todas'); // <-- NUEVO ESTADO PARA CARRERAS
     const [currentPage, setCurrentPage] = useState(1); 
     const ITEMS_PER_PAGE = 6; 
     
@@ -108,8 +109,11 @@ const GestionUsuarios = () => {
 
     useEffect(() => {
         fetchData();
-        setBusqueda(''); setFiltroRol(''); 
-        setFileToUpload(null); setFileName('');
+        setBusqueda(''); 
+        setFiltroRol(''); 
+        setCarreraSeleccionada('Todas'); // Resetear carrera al cambiar pestaña
+        setFileToUpload(null); 
+        setFileName('');
         setErrors({});
         setCurrentPage(1); 
     }, [activeTab]);
@@ -347,8 +351,14 @@ const GestionUsuarios = () => {
             const term = busqueda.toLowerCase();
             const fullName = `${item.nombres} ${item.apellidos}`.toLowerCase();
             const matchesText = fullName.includes(term) || (item.email || '').toLowerCase().includes(term) || (item.cedula || '').includes(term);
-            if (activeTab === 'administrativo') return matchesText && (filtroRol ? item.rol === filtroRol : true);
-            else return matchesText;
+            
+            if (activeTab === 'administrativo') {
+                return matchesText && (filtroRol ? item.rol === filtroRol : true);
+            } else {
+                // NUEVO: Lógica de filtro por carrera para Estudiantes
+                const matchCarrera = carreraSeleccionada === 'Todas' || item.carrera === carreraSeleccionada;
+                return matchesText && matchCarrera;
+            }
         });
 
         filtered.sort((a, b) => {
@@ -411,33 +421,73 @@ const GestionUsuarios = () => {
                 </nav>
             </div>
 
-            {/* FILTROS */}
-            <div className="flex flex-col md:flex-row gap-4 bg-gray-50 p-4 rounded-xl border border-gray-200">
-                <div className="relative flex-1">
-                    <MagnifyingGlassIcon className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-                    <input 
-                        type="text" 
-                        className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-100" 
-                        placeholder="Buscar..." 
-                        value={busqueda} 
-                        onChange={(e) => { setBusqueda(e.target.value); setCurrentPage(1); }} 
-                    />
-                </div>
-                {activeTab === 'administrativo' && (
-                    <div className="w-full md:w-48">
-                        <select 
-                            value={filtroRol} 
-                            onChange={(e) => { setFiltroRol(e.target.value); setCurrentPage(1); }} 
-                            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white outline-none text-sm text-gray-600"
+            {/* FILTROS GENERALES */}
+            <div className="flex flex-col gap-4">
+                
+                {/* --- NUEVO: BOTONES DE FILTRO POR CARRERA (SOLO ESTUDIANTES) --- */}
+                {activeTab === 'estudiantil' && listaCarreras.length > 0 && (
+                    <div className="flex flex-wrap gap-2 animate-fade-in">
+                        <button
+                            onClick={() => { setCarreraSeleccionada('Todas'); setCurrentPage(1); }}
+                            className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors duration-200 ${
+                                carreraSeleccionada === 'Todas'
+                                    ? 'bg-blue-600 text-white shadow-md'
+                                    : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+                            }`}
                         >
-                            <option value="">Todos los Roles</option>
-                            <option value="docente">Docentes</option>
-                            <option value="coordinador">Coordinadores</option>
-                            <option value="admin">Administradores</option>
-                        </select>
+                            Todas
+                        </button>
+                        {listaCarreras.map(carrera => (
+                            <button
+                                key={carrera.id}
+                                onClick={() => { setCarreraSeleccionada(carrera.nombre); setCurrentPage(1); }}
+                                className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors duration-200 ${
+                                    carreraSeleccionada === carrera.nombre
+                                        ? 'bg-blue-600 text-white shadow-md'
+                                        : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+                                }`}
+                            >
+                                {carrera.nombre}
+                            </button>
+                        ))}
                     </div>
                 )}
-                {(busqueda || filtroRol) && <button onClick={() => { setBusqueda(''); setFiltroRol(''); setCurrentPage(1); }} className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg">Limpiar</button>}
+                
+                {/* BARRA DE BÚSQUEDA Y ROL */}
+                <div className="flex flex-col md:flex-row gap-4 bg-gray-50 p-4 rounded-xl border border-gray-200">
+                    <div className="relative flex-1">
+                        <MagnifyingGlassIcon className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                        <input 
+                            type="text" 
+                            className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-100" 
+                            placeholder="Buscar..." 
+                            value={busqueda} 
+                            onChange={(e) => { setBusqueda(e.target.value); setCurrentPage(1); }} 
+                        />
+                    </div>
+                    {activeTab === 'administrativo' && (
+                        <div className="w-full md:w-48">
+                            <select 
+                                value={filtroRol} 
+                                onChange={(e) => { setFiltroRol(e.target.value); setCurrentPage(1); }} 
+                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white outline-none text-sm text-gray-600"
+                            >
+                                <option value="">Todos los Roles</option>
+                                <option value="docente">Docentes</option>
+                                <option value="coordinador">Coordinadores</option>
+                                <option value="admin">Administradores</option>
+                            </select>
+                        </div>
+                    )}
+                    {(busqueda || filtroRol || carreraSeleccionada !== 'Todas') && (
+                        <button 
+                            onClick={() => { setBusqueda(''); setFiltroRol(''); setCarreraSeleccionada('Todas'); setCurrentPage(1); }} 
+                            className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg"
+                        >
+                            Limpiar
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* TABLA PRINCIPAL CON PAGINACIÓN */}
