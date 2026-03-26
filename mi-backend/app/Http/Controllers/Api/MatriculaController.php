@@ -75,7 +75,13 @@ class MatriculaController extends Controller
                 if (count($row) < 3 || strtolower(trim($row[0])) === 'cedula' || strtolower(trim($row[0])) === 'identificacion') continue;
 
                 $filasTotales++;
+                
                 $cedula = trim($row[0]);
+                // Si la cédula tiene 9 dígitos, le agregamos el '0' al inicio
+                if (strlen($cedula) === 9) {
+                    $cedula = '0' . $cedula;
+                }
+
                 $carreraFinal = $carreraForzada ? $carreraForzada : trim($row[1]);
                 $cicloNombre = $this->normalizarCiclo(trim($row[2]));
                 

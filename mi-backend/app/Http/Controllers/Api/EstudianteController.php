@@ -108,6 +108,10 @@ class EstudianteController extends Controller
             if (strtolower(trim($row[0])) === 'cedula') continue; 
 
             $cedula = trim($row[0]);
+            // Si la cédula tiene 9 dígitos, le agregamos el '0' al inicio
+            if (strlen($cedula) === 9) {
+                $cedula = '0' . $cedula;
+            }
             
             // Validar existencia previa
             if (Estudiante::where('cedula', $cedula)->exists()) {
