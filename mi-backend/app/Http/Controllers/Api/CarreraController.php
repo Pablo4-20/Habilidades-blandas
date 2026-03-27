@@ -21,7 +21,7 @@ class CarreraController extends Controller
             'logo' => 'nullable|image|mimes:jpeg,png,jpg,svg|max:2048' // Máximo 2MB
         ]);
 
-        $data = ['nombre' => $request->nombre];
+        $data = ['nombre' => mb_strtoupper($request->nombre, 'UTF-8')];
 
         if ($request->hasFile('logo')) {
             // Guarda la imagen en storage/app/public/logos_carreras
@@ -42,7 +42,7 @@ class CarreraController extends Controller
             'logo' => 'nullable|image|mimes:jpeg,png,jpg,svg|max:2048'
         ]);
 
-        $data = ['nombre' => $request->nombre];
+        $data = ['nombre' => mb_strtoupper($request->nombre, 'UTF-8')];
 
         if ($request->hasFile('logo')) {
             // Eliminar logo anterior si existe para no llenar el disco

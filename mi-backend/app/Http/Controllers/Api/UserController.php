@@ -112,7 +112,7 @@ class UserController extends Controller
                 $apellidosFinal = mb_convert_case(trim($row[2]), MB_CASE_TITLE, "UTF-8");
                 $emailFinal     = strtolower(trim($row[3]));
                 $rolFinal       = strtolower(trim($row[5])); 
-                $nombreCarrera  = isset($row[6]) ? trim($row[6]) : null;
+                $nombreCarrera  = isset($row[6]) ? mb_strtoupper(trim($row[6]), 'UTF-8') : null;
                 $carreraId      = null;
 
                 if (!preg_match('/^.+@(ueb\.edu\.ec|mailes\.ueb\.edu\.ec)$/i', $emailFinal)) {
