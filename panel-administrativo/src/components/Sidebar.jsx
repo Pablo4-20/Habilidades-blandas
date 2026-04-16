@@ -52,9 +52,9 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
             { name: 'Inicio', path: '/dashboard', icon: HomeIcon },
             { name: 'Carreras', path: '/dashboard/carreras', icon: BriefcaseIcon },
             { name: 'Periodos Académicos', path: '/dashboard/periodos', icon: CalendarDaysIcon },
-            { name: 'Gestión Usuarios', path: '/dashboard/usuarios', icon: UsersIcon },
             { name: 'Asignaturas', path: '/dashboard/asignaturas', icon: BookOpenIcon },
             { name: 'Habilidades', path: '/dashboard/habilidades', icon: SparklesIcon },
+            { name: 'Gestión Usuarios', path: '/dashboard/usuarios', icon: UsersIcon },
         ],
         coordinador: [
             { name: 'Inicio', path: '/dashboard', icon: HomeIcon },
