@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import api from '../services/api';
 import Swal from 'sweetalert2';
 import { PencilSquareIcon, TrashIcon, PlusIcon, PhotoIcon } from '@heroicons/react/24/outline';
+// Asegúrate de que la ruta sea correcta según dónde creaste el archivo
+import ModalAsignarHabilidades from './ModalAsignarHabilidades';
 
 const GestionCarreras = () => {
     const [carreras, setCarreras] = useState([]);
@@ -13,6 +15,10 @@ const GestionCarreras = () => {
     const [nombre, setNombre] = useState('');
     const [logoFile, setLogoFile] = useState(null);
     const [logoPreview, setLogoPreview] = useState(null);
+
+    // Estados para el Modal de Habilidades
+    const [modalHabilidadesAbierto, setModalHabilidadesAbierto] = useState(false);
+    const [carreraSeleccionada, setCarreraSeleccionada] = useState(null);
 
     // Obtiene la URL base del backend sin el /api (ej. http://localhost:8000)
     const backendUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://hbb.swueb.net';
@@ -116,6 +122,12 @@ const GestionCarreras = () => {
         }
     };
 
+    // Función para abrir el modal de habilidades
+    const abrirModalHabilidades = (carrera) => {
+        setCarreraSeleccionada(carrera);
+        setModalHabilidadesAbierto(true);
+    };
+
     return (
         <div className="p-6">
             <div className="flex justify-between items-center mb-6">
@@ -157,8 +169,15 @@ const GestionCarreras = () => {
                                     <button onClick={() => openModal(carrera)} className="text-blue-600 hover:text-blue-900 mr-4">
                                         <PencilSquareIcon className="h-5 w-5 inline" />
                                     </button>
-                                    <button onClick={() => handleDelete(carrera.id)} className="text-red-600 hover:text-red-900">
+                                    <button onClick={() => handleDelete(carrera.id)} className="text-red-600 hover:text-red-900 mr-4">
                                         <TrashIcon className="h-5 w-5 inline" />
+                                    </button>
+                                    
+                                    <button 
+                                        onClick={() => abrirModalHabilidades(carrera)}
+                                        className="text-green-600 hover:text-green-900 font-semibold"
+                                    >
+                                        Asignar Habilidades
                                     </button>
                                 </td>
                             </tr>
@@ -167,7 +186,7 @@ const GestionCarreras = () => {
                 </table>
             </div>
 
-            {/* Modal */}
+            {/* Modal de Crear/Editar Carrera */}
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                     <div className="bg-white p-6 rounded-lg w-full max-w-md">
@@ -209,6 +228,15 @@ const GestionCarreras = () => {
                         </form>
                     </div>
                 </div>
+            )}
+
+            {/* Modal de Asignar Habilidades */}
+            {modalHabilidadesAbierto && carreraSeleccionada && (
+                <ModalAsignarHabilidades 
+                    carrera={carreraSeleccionada} 
+                    onClose={() => setModalHabilidadesAbierto(false)}
+                    onRefresh={fetchCarreras} 
+                />
             )}
         </div>
     );

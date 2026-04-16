@@ -59,6 +59,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Carreras
     Route::apiResource('/gestion-carreras', \App\Http\Controllers\Api\CarreraController::class);
+    // NUEVA RUTA: Asignar habilidades a una carrera específica
+    Route::post('/gestion-carreras/{id}/habilidades', [\App\Http\Controllers\Api\CarreraController::class, 'asignarHabilidades']);
 
     // Usuarios
     Route::apiResource('/users', UserController::class);

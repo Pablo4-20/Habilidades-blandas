@@ -9,62 +9,89 @@ use Illuminate\Support\Facades\Storage;
 
 class CarreraController extends Controller
 {
+    // Listar carreras incluyendo sus habilidades blandas
     public function index()
     {
-        return Carrera::orderBy('id', 'desc')->get();
+        $carreras = Carrera::with('habilidadesBlandas')->get();
+        return response()->json($carreras);
     }
 
     public function store(Request $request)
     {
         $request->validate([
-            'nombre' => 'required|string|unique:carreras,nombre',
-            'logo' => 'nullable|image|mimes:jpeg,png,jpg,svg|max:2048' // Máximo 2MB
+            'nombre' => 'required|string|max:255|unique:carreras',
+            'logo' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
-        $data = ['nombre' => mb_strtoupper($request->nombre, 'UTF-8')];
+        $data = $request->only(['nombre']);
 
         if ($request->hasFile('logo')) {
-            // Guarda la imagen en storage/app/public/logos_carreras
-            $path = $request->file('logo')->store('logos_carreras', 'public');
+            $path = $request->file('logo')->store('logos', 'public');
             $data['logo'] = $path;
         }
 
         $carrera = Carrera::create($data);
-        return response()->json(['message' => 'Carrera creada', 'carrera' => $carrera]);
+        return response()->json($carrera, 201);
+    }
+
+    // Ver una carrera específica con sus habilidades
+    public function show($id)
+    {
+        $carrera = Carrera::with('habilidadesBlandas')->findOrFail($id);
+        return response()->json($carrera);
     }
 
     public function update(Request $request, $id)
     {
         $carrera = Carrera::findOrFail($id);
-        
+
         $request->validate([
-            'nombre' => 'required|string|unique:carreras,nombre,'.$id,
-            'logo' => 'nullable|image|mimes:jpeg,png,jpg,svg|max:2048'
+            'nombre' => 'required|string|max:255|unique:carreras,nombre,' . $id,
+            'logo' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
-        $data = ['nombre' => mb_strtoupper($request->nombre, 'UTF-8')];
+        $carrera->nombre = $request->nombre;
 
         if ($request->hasFile('logo')) {
-            // Eliminar logo anterior si existe para no llenar el disco
             if ($carrera->logo) {
                 Storage::disk('public')->delete($carrera->logo);
             }
-            $path = $request->file('logo')->store('logos_carreras', 'public');
-            $data['logo'] = $path;
+            $path = $request->file('logo')->store('logos', 'public');
+            $carrera->logo = $path;
         }
 
-        $carrera->update($data);
-        return response()->json(['message' => 'Carrera actualizada', 'carrera' => $carrera]);
+        $carrera->save();
+        return response()->json($carrera);
     }
 
     public function destroy($id)
     {
         $carrera = Carrera::findOrFail($id);
-        // Si tiene logo, borrarlo del disco
         if ($carrera->logo) {
             Storage::disk('public')->delete($carrera->logo);
         }
         $carrera->delete();
-        return response()->json(['message' => 'Carrera eliminada']);
+        return response()->json(['message' => 'Carrera eliminada correctamente']);
+    }
+
+    /**
+     * Nuevo método para sincronizar habilidades con la carrera
+     */
+    public function asignarHabilidades(Request $request, $id)
+    {
+        $request->validate([
+            'habilidades' => 'required|array',
+            'habilidades.*' => 'exists:habilidades_blandas,id'
+        ]);
+
+        $carrera = Carrera::findOrFail($id);
+        
+        // sync() reemplaza todas las asociaciones anteriores por las nuevas
+        $carrera->habilidadesBlandas()->sync($request->habilidades);
+
+        return response()->json([
+            'message' => 'Habilidades actualizadas para la carrera',
+            'carrera' => $carrera->load('habilidadesBlandas')
+        ]);
     }
 }

@@ -8,6 +8,7 @@ use App\Models\Planificacion;
 use App\Models\HabilidadBlanda; 
 use App\Models\Asignacion; 
 use App\Models\Evaluacion;
+use App\Models\Asignatura; // <--- Importación necesaria para buscar la carrera
 use Illuminate\Support\Facades\DB;
 
 class PlanificacionController extends Controller
@@ -39,11 +40,22 @@ class PlanificacionController extends Controller
                 ]);
             }
 
-            // 2. Traer Catálogo Global
-            $catalogoHabilidades = HabilidadBlanda::with('actividades')
+            // 2. Traer Catálogo filtrado por la carrera de la asignatura
+            $asignatura = Asignatura::find($asignatura_id);
+            
+            if ($asignatura && $asignatura->carrera_id) {
+                // Buscamos solo las habilidades asignadas a la carrera de esta materia
+                $catalogoHabilidades = HabilidadBlanda::whereHas('carreras', function($query) use ($asignatura) {
+                    $query->where('carreras.id', $asignatura->carrera_id);
+                })
+                ->with('actividades')
                 ->select('id', 'nombre', 'descripcion')
                 ->orderBy('nombre', 'asc')
                 ->get();
+            } else {
+                // Si la materia no tiene carrera asignada, devolvemos un array vacío
+                $catalogoHabilidades = collect();
+            }
 
             // 3. RECUPERAR AMBOS PARCIALES (Filtrando por paralelo)
             $planP1 = Planificacion::with('detalles')
@@ -94,7 +106,7 @@ class PlanificacionController extends Controller
                 'habilidades_seleccionadas' => [], 
                 'actividades_guardadas' => [],
                 'resultados_guardados' => [], 
-                'metodologias_guardadas' => [], // <--- AÑADIDO: Arreglo de metodologías
+                'metodologias_guardadas' => [], // Arreglo de metodologías
                 'habilidades_p1' => $idsP1, 
                 'debug_sincronizados' => $sincronizados,
                 'debug_p1_completo' => $p1Completo,
@@ -111,7 +123,7 @@ class PlanificacionController extends Controller
                     $datosRespuesta['actividades_guardadas'][$detalle->habilidad_blanda_id] = array_values(array_filter($actividadesRaw, fn($v) => trim($v) !== ''));
                     $datosRespuesta['resultados_guardados'][$detalle->habilidad_blanda_id] = $detalle->resultado_aprendizaje;
                     
-                    // <--- AÑADIDO: Enviamos la metodología al Frontend
+                    // Enviamos la metodología al Frontend
                     $datosRespuesta['metodologias_guardadas'][$detalle->habilidad_blanda_id] = $detalle->metodologia; 
                 }
             }
@@ -165,7 +177,7 @@ class PlanificacionController extends Controller
                 if (empty($detalle['habilidad_blanda_id'])) continue;
                 $planificacion->detalles()->create([
                     'habilidad_blanda_id' => $detalle['habilidad_blanda_id'],
-                    'metodologia' => $detalle['metodologia'] ?? null, // <--- AÑADIDO: Guardamos la metodología en la BD
+                    'metodologia' => $detalle['metodologia'] ?? null, 
                     'actividades' => is_array($detalle['actividades']) ? implode("\n", $detalle['actividades']) : $detalle['actividades'],
                     'resultado_aprendizaje' => $detalle['resultado_aprendizaje'] ?? null 
                 ]);
