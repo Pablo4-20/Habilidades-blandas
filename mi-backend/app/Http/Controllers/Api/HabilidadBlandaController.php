@@ -23,8 +23,7 @@ class HabilidadBlandaController extends Controller
     {
         $request->validate([
             'nombre' => 'required|unique:habilidades_blandas,nombre',
-            'descripcion' => 'nullable|string',
-            'actividades' => 'nullable|array' // Array de textos
+            'descripcion' => 'nullable|string'
         ]);
 
         return DB::transaction(function () use ($request) {
@@ -33,13 +32,12 @@ class HabilidadBlandaController extends Controller
                 'descripcion' => $request->descripcion
             ]);
 
-            // Guardar actividades si vienen
-            if (!empty($request->actividades)) {
-                foreach ($request->actividades as $actividadTexto) {
-                    if (trim($actividadTexto) !== '') {
-                        $habilidad->actividades()->create(['descripcion' => trim($actividadTexto)]);
-                    }
-                }
+            // Buscar cuáles son las actividades globales actuales (las sacamos de otra habilidad existente)
+            $actividadesGlobales = ActividadHabilidad::select('descripcion')->distinct()->pluck('descripcion');
+
+            // Asignárselas automáticamente a la nueva habilidad
+            foreach ($actividadesGlobales as $actDesc) {
+                $habilidad->actividades()->create(['descripcion' => $actDesc]);
             }
 
             return response()->json($habilidad->load('actividades'), 201);
@@ -86,8 +84,8 @@ class HabilidadBlandaController extends Controller
         return response()->json(['message' => 'Eliminado correctamente']);
     }
 
-    // 5. IMPORTAR MASIVA (CSV con Actividades)
-   public function import(Request $request)
+    // 5. IMPORTAR MASIVA (CSV solo Nombre y Descripción)
+    public function import(Request $request)
     {
         $request->validate(['file' => 'required|file']);
         
@@ -110,9 +108,12 @@ class HabilidadBlandaController extends Controller
 
         $habilidadesNuevas = 0;
         $habilidadesActualizadas = 0;
-        $actividadesTotal = 0;
 
-        DB::transaction(function () use ($lines, $separador, &$habilidadesNuevas, &$habilidadesActualizadas, &$actividadesTotal) {
+        DB::transaction(function () use ($lines, $separador, &$habilidadesNuevas, &$habilidadesActualizadas) {
+            
+            // Obtenemos la lista de actividades globales actuales (para asignárselas a las nuevas habilidades importadas)
+            $actividadesGlobales = ActividadHabilidad::select('descripcion')->distinct()->pluck('descripcion');
+
             foreach ($lines as $linea) {
                 if (trim($linea) === '') continue;
                 
@@ -124,32 +125,27 @@ class HabilidadBlandaController extends Controller
                 $nombre = $this->formatearTexto($row[0]);
                 $descripcion = isset($row[1]) ? trim($row[1]) : '';
 
+                // Crea o actualiza la habilidad
                 $habilidad = HabilidadBlanda::updateOrCreate(
                     ['nombre' => $nombre],
                     ['descripcion' => $descripcion]
                 );
 
+                // Si es nueva, le inyectamos las actividades globales
                 if ($habilidad->wasRecentlyCreated) {
                     $habilidadesNuevas++;
+                    
+                    foreach ($actividadesGlobales as $actDesc) {
+                        $habilidad->actividades()->create(['descripcion' => $actDesc]);
+                    }
                 } else {
                     $habilidadesActualizadas++;
-                }
-
-                for ($i = 2; $i < count($row); $i++) {
-                    $actDesc = trim($row[$i]);
-                    if (!empty($actDesc)) {
-                        ActividadHabilidad::firstOrCreate([
-                            'habilidad_blanda_id' => $habilidad->id,
-                            'descripcion' => $actDesc
-                        ]);
-                        $actividadesTotal++;
-                    }
                 }
             }
         });
 
         return response()->json([
-            'message' => "Carga exitosa: $habilidadesNuevas nuevas, $habilidadesActualizadas actualizadas. ($actividadesTotal actividades procesadas).",
+            'message' => "Carga exitosa: $habilidadesNuevas nuevas, $habilidadesActualizadas actualizadas.",
             'resumen' => [
                 'creadas' => $habilidadesNuevas,
                 'actualizadas' => $habilidadesActualizadas
@@ -159,5 +155,50 @@ class HabilidadBlandaController extends Controller
 
     private function formatearTexto($texto) {
         return mb_convert_case(trim($texto), MB_CASE_TITLE, "UTF-8");
+    }
+
+
+    public function syncGlobalActivities(Request $request)
+    {
+        $request->validate([
+            'actividades' => 'array'
+        ]);
+
+        return DB::transaction(function () use ($request) {
+           
+            ActividadHabilidad::truncate(); 
+
+            $actividadesTextos = $request->actividades ?? [];
+            
+            
+            if (empty($actividadesTextos)) {
+                return response()->json(['message' => 'Todas las actividades fueron eliminadas']);
+            }
+
+            
+            $habilidades = HabilidadBlanda::all();
+            $insertData = [];
+
+            // 3. Por cada habilidad, preparamos la lista de actividades para insertarlas masivamente
+            foreach ($habilidades as $habilidad) {
+                foreach ($actividadesTextos as $texto) {
+                    if (trim($texto) !== '') {
+                        $insertData[] = [
+                            'habilidad_blanda_id' => $habilidad->id,
+                            'descripcion' => trim($texto),
+                            'created_at' => now(),
+                            'updated_at' => now()
+                        ];
+                    }
+                }
+            }
+
+            // 4. Insertamos todo de golpe (más eficiente)
+            if (!empty($insertData)) {
+                ActividadHabilidad::insert($insertData);
+            }
+
+            return response()->json(['message' => 'Actividades globales sincronizadas con éxito a todas las habilidades.']);
+        });
     }
 }

@@ -175,7 +175,7 @@ const AsignarMaterias = () => {
             Toast.fire({ icon: 'success', title: 'Asignado' });
             fetchData();
             
-            // --- MODIFICACIÓN AQUÍ: PRESERVAR DOCENTE ---
+            // ---  PRESERVAR DOCENTE ---
             setForm(prev => ({ 
                 ...initialFormState, 
                 periodo_id: periodoActivo.nombre,
@@ -345,7 +345,7 @@ const AsignarMaterias = () => {
                         </div>
                     </div>
                 ) : (
-                    /* MODO NUEVO */
+                    
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
                         <div className="md:col-span-3">
                             <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Periodo (Automático)</label>

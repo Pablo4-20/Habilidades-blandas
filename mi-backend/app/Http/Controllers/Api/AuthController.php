@@ -32,7 +32,6 @@ class AuthController extends Controller
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
-           
             'message' => 'Bienvenido ' . $user->nombres, 
             'access_token' => $token,
             'token_type' => 'Bearer',
@@ -41,6 +40,7 @@ class AuthController extends Controller
         ]);
     }
 
+    // Para el primer inicio de sesión obligatorio
     public function changeInitialPassword(Request $request)
     {
         $request->validate([
@@ -52,6 +52,31 @@ class AuthController extends Controller
         $user->update([
             'password' => Hash::make($request->password),
             'must_change_password' => false 
+        ]);
+
+        return response()->json(['message' => 'Contraseña actualizada correctamente.']);
+    }
+
+    // --- NUEVO MÉTODO: Para el cambio de contraseña desde la configuración ---
+    public function changePassword(Request $request)
+    {
+        $request->validate([
+            'current_password' => 'required',
+            'new_password' => 'required|min:8|confirmed',
+        ]);
+
+        $user = $request->user();
+
+        // 1. Verificamos que la contraseña actual ingresada sea la correcta
+        if (!Hash::check($request->current_password, $user->password)) {
+            return response()->json([
+                'message' => 'La contraseña actual no coincide con nuestros registros.'
+            ], 400); 
+        }
+
+        // 2. Si es correcta, guardamos la nueva
+        $user->update([
+            'password' => Hash::make($request->new_password)
         ]);
 
         return response()->json(['message' => 'Contraseña actualizada correctamente.']);

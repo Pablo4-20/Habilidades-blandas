@@ -39,6 +39,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', function (Request $request) { return $request->user(); });
     Route::post('/change-initial-password', [AuthController::class, 'changeInitialPassword']);
     Route::post('/email/resend', [VerificationController::class, 'resend']);
+    Route::post('/change-password', [App\Http\Controllers\Api\AuthController::class, 'changePassword']);
 
     // --- DASHBOARD ---
     Route::get('/dashboard/stats', [DashboardController::class, 'index']);
@@ -77,7 +78,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Habilidades Blandas
     Route::apiResource('habilidades-blandas', HabilidadBlandaController::class);
     Route::post('/habilidades-blandas/import', [HabilidadBlandaController::class, 'import']);
-
+    Route::post('/habilidades-blandas/actividades-globales', [App\Http\Controllers\Api\HabilidadBlandaController::class, 'syncGlobalActivities']);
     // --- COORDINADOR ---
     Route::get('/reportes/filtros', [CoordinadorController::class, 'filtrosReporte']);
     Route::get('/reportes/general', [CoordinadorController::class, 'reporteGeneral']);
