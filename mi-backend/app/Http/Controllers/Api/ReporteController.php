@@ -78,14 +78,15 @@ class ReporteController extends Controller
     }
 
     // ----------------------------------------------------
-    // ACTAS DE CALIFICACIONES
+    // ACTAS DE CALIFICACIONES (MODIFICADO PARA FILTRAR PARCIAL)
     // ----------------------------------------------------
     public function datosParaPdf(Request $request)
     {
         $request->validate([
             'asignatura_id' => 'required', 
             'periodo' => 'required',
-            'paralelo' => 'required' 
+            'paralelo' => 'required',
+            'parcial' => 'nullable|in:1,2,anual' // NUEVA VALIDACIÓN
         ]);
         
         $user = $request->user();
@@ -96,15 +97,22 @@ class ReporteController extends Controller
         $estudiantes = $this->_getEstudiantes($request->asignatura_id, $periodoObj->id, $request->paralelo);
         $idsEstudiantes = $estudiantes->pluck('id');
 
-        $planes = Planificacion::with(['asignatura', 'docente', 'detalles.habilidad'])
+        // Construir la consulta de Planificaciones
+        $queryPlanes = Planificacion::with(['asignatura', 'docente', 'detalles.habilidad'])
             ->where('asignatura_id', $request->asignatura_id)
             ->where('docente_id', $user->id)
             ->where('periodo_academico', $request->periodo)
-            ->where('paralelo', $request->paralelo) 
-            ->get();
+            ->where('paralelo', $request->paralelo);
+
+        // APLICAR EL FILTRO DE PARCIAL SI ES ENVIADO Y NO ES 'anual'
+        if ($request->has('parcial') && in_array($request->parcial, ['1', '2'])) {
+            $queryPlanes->where('parcial', $request->parcial);
+        }
+
+        $planes = $queryPlanes->get();
 
         if ($planes->isEmpty()) {
-            return response()->json(['message' => 'No hay planificaciones para este paralelo.'], 404);
+            return response()->json(['message' => 'No hay planificaciones para este paralelo/parcial.'], 404);
         }
 
         $nombreCiclo = $planes[0]->asignatura->ciclo->nombre ?? 'N/A';
@@ -203,7 +211,6 @@ class ReporteController extends Controller
             $query->whereHas('asignatura.carrera', function($q) use ($nombre) {
                 $q->where('nombre', $nombre);
             });
-            // AQUÍ AGREGAMOS LA BÚSQUEDA DEL OBJETO PARA OBTENER SU LOGO
             $carreraObj = Carrera::where('nombre', $nombre)->first(); 
             $nombreCarreraReporte = $nombre;
         }
@@ -213,7 +220,7 @@ class ReporteController extends Controller
         if ($nombreCarreraReporte === 'General' && $asignaciones->isNotEmpty()) {
             $primerAsig = $asignaciones->first();
             if ($primerAsig->asignatura && $primerAsig->asignatura->carrera) {
-                $carreraObj = $primerAsig->asignatura->carrera; // AQUÍ TAMBIÉN LO CAPTURAMOS
+                $carreraObj = $primerAsig->asignatura->carrera;
                 $nombreCarreraReporte = $carreraObj->nombre;
             }
         }
@@ -296,12 +303,9 @@ class ReporteController extends Controller
             return $a['ciclo'] <=> $b['ciclo'];
         })->values();
 
-        // ----------------------------------------------------
-        // ¡AQUÍ ESTABA EL ERROR! AHORA SÍ ENVIAMOS EL LOGO
-        // ----------------------------------------------------
         $info = [
             'carrera' => $nombreCarreraReporte,
-            'logo' => $carreraObj ? $carreraObj->logo : null, // <--- ESTO FALTABA
+            'logo' => $carreraObj ? $carreraObj->logo : null, 
             'periodo' => $request->periodo,
             'generado_por' => $user->nombres . ' ' . $user->apellidos,
             'resultado_aprendizaje' => implode(" | ", array_unique($resultadosAprendizaje)) 

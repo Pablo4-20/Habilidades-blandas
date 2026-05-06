@@ -12,21 +12,6 @@ import {
     CheckIcon, ExclamationCircleIcon, ExclamationTriangleIcon 
 } from '@heroicons/react/24/outline';
 
-// --- LISTA FIJA DE METODOLOGÍAS ---
-const OPCIONES_METODOLOGIAS = [
-    { value: 'Aprender a pensar', label: '1. Aprender a pensar' },
-    { value: 'Aprendizaje basado en juegos', label: '2. Aprendizaje basado en juegos' },
-    { value: 'Aprendizaje basado en problemas', label: '3. Aprendizaje basado en problemas' },
-    { value: 'Aprendizaje basado en proyectos', label: '4. Aprendizaje basado en proyectos' },
-    { value: 'Aprendizaje basado en retos', label: '5. Aprendizaje basado en retos' },
-    { value: 'Aprendizaje Cooperativo', label: '6. Aprendizaje Cooperativo' },
-    { value: 'Aula Invertida (Flipped-Classroom)', label: '7. Aula Invertida (Flipped-Classroom)' },
-    { value: 'Pensamiento de Diseño (Design-Thinking)', label: '8. Pensamiento de Diseño (Design-Thinking)' },
-    { value: 'Gamificación', label: '9. Gamificación' },
-    { value: 'Pensamiento Computacional', label: '10. Pensamiento Computacional' },
-    { value: 'Técnicas Cooperativo Dinámicas', label: '11. Técnicas Cooperativo Dinámicas' }
-];
-
 const PlanificacionDocente = () => {
     // Estados principales
     const [misAsignaturas, setMisAsignaturas] = useState([]);
@@ -38,18 +23,20 @@ const PlanificacionDocente = () => {
         asignatura_id: '',
         parcial: '1',
         periodo_academico: '', 
-        paralelo: '' // Nuevo estado
+        paralelo: '' 
     });
 
     // Estado de la planificación actual
     const [habilidadesSeleccionadas, setHabilidadesSeleccionadas] = useState([]); 
     const [actividadesPorHabilidad, setActividadesPorHabilidad] = useState({}); 
     const [resultadosAprendizaje, setResultadosAprendizaje] = useState({}); 
-    const [metodologiasSeleccionadas, setMetodologiasSeleccionadas] = useState({}); // <--- NUEVO ESTADO PARA METODOLOGÍAS
+    const [metodologiasSeleccionadas, setMetodologiasSeleccionadas] = useState({}); 
+
+    // Opciones Dinámicas
+    const [metodologiasDisponibles, setMetodologiasDisponibles] = useState([]);
 
     // Estado para tarjetas minimizadas
     const [cardsMinimizadas, setCardsMinimizadas] = useState([]);
-
     const [esEdicion, setEsEdicion] = useState(false);
 
     // Paginación
@@ -60,10 +47,13 @@ const PlanificacionDocente = () => {
     useEffect(() => {
         const cargarDatos = async () => {
             try {
-                const [resAsig, resPer] = await Promise.all([
+                // Hacemos las 3 peticiones al mismo tiempo para mayor velocidad
+                const [resAsig, resPer, resMetodologias] = await Promise.all([
                     api.get('/docente/asignaturas'),
-                    api.get('/periodos/activos')
+                    api.get('/periodos/activos'),
+                    api.get('/metodologias-globales') // <--- Obtenemos las metodologías dinámicas
                 ]);
+                
                 setMisAsignaturas(Array.isArray(resAsig.data) ? resAsig.data : []);
                 
                 const periodosActivos = Array.isArray(resPer.data) ? resPer.data : [];
@@ -72,6 +62,16 @@ const PlanificacionDocente = () => {
                 if (activo) {
                     setForm(prev => ({ ...prev, periodo_academico: activo.nombre }));
                 }
+
+                // Cargamos y formateamos las metodologías para el CustomSelect
+                if (resMetodologias.data && Array.isArray(resMetodologias.data)) {
+                    const opcionesMetodologias = resMetodologias.data.map((met, index) => ({
+                        value: met,
+                        label: `${index + 1}. ${met}`
+                    }));
+                    setMetodologiasDisponibles(opcionesMetodologias);
+                }
+
             } catch (error) {
                 console.error("Error cargando datos iniciales", error);
             }
@@ -117,7 +117,6 @@ const PlanificacionDocente = () => {
             return cambios ? nuevas : prev;
         });
 
-        // Limpiar metodologías si se desmarca la habilidad
         setMetodologiasSeleccionadas(prev => {
             const nuevas = { ...prev };
             let cambios = false;
@@ -156,7 +155,7 @@ const PlanificacionDocente = () => {
         setHabilidadesSeleccionadas([]);
         setActividadesPorHabilidad({});
         setResultadosAprendizaje({});
-        setMetodologiasSeleccionadas({}); // Limpiamos metodologías anteriores
+        setMetodologiasSeleccionadas({}); 
         setCardsMinimizadas([]); 
 
         try {
@@ -175,7 +174,7 @@ const PlanificacionDocente = () => {
                     setEsEdicion(true);
                     let seleccionadas = (res.data.habilidades_seleccionadas || []).map(id => Number(id));
                     const resultadosGuardados = res.data.resultados_guardados || {}; 
-                    const metodologiasGuardadas = res.data.metodologias_guardadas || {}; // Traemos metodologías de la BD
+                    const metodologiasGuardadas = res.data.metodologias_guardadas || {};
 
                     if (form.parcial === '2' && res.data.habilidades_p1 && res.data.habilidades_p1.length > 0) {
                         const idsP1 = res.data.habilidades_p1.map(id => Number(id));
@@ -242,7 +241,6 @@ const PlanificacionDocente = () => {
 
         if (estaSeleccionado) {
             setHabilidadesSeleccionadas(prev => prev.filter(h => h !== idNum));
-            // Los estados se limpian solos en el useEffect
         } else {
             setHabilidadesSeleccionadas(prev => [...prev, idNum]);
         }
@@ -258,7 +256,6 @@ const PlanificacionDocente = () => {
         setResultadosAprendizaje(prev => ({ ...prev, [habilidadId]: texto }));
     };
 
-    // Función para manejar el cambio de metodología
     const handleMetodologiaChange = (habilidadId, metodologia) => {
         setMetodologiasSeleccionadas(prev => ({ ...prev, [habilidadId]: metodologia }));
     };
@@ -306,7 +303,7 @@ const PlanificacionDocente = () => {
         const user = JSON.parse(localStorage.getItem('user'));
         const detalles = habilidadesSeleccionadas.map(id => ({
             habilidad_blanda_id: id,
-            metodologia: metodologiasSeleccionadas[id], // Enviamos la metodología al backend
+            metodologia: metodologiasSeleccionadas[id],
             actividades: actividadesPorHabilidad[id],
             resultado_aprendizaje: resultadosAprendizaje[id] 
         }));
@@ -517,8 +514,8 @@ const PlanificacionDocente = () => {
                                                         </label>
                                                         <CustomSelect 
                                                             label="" 
-                                                            placeholder="Seleccione la metodología..." 
-                                                            options={OPCIONES_METODOLOGIAS} 
+                                                            placeholder={metodologiasDisponibles.length > 0 ? "Seleccione la metodología..." : "Cargando metodologías..."} 
+                                                            options={metodologiasDisponibles} 
                                                             value={metodologiasSeleccionadas[hab.id] || ''} 
                                                             onChange={(val) => handleMetodologiaChange(hab.id, val)} 
                                                             icon={null}

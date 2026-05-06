@@ -9,49 +9,37 @@ class ValidaCedula implements ValidationRule
 {
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
-        // 1. Longitud exacta
         if (strlen($value) !== 10) {
-            $fail('La cédula debe tener 10 dígitos.');
+            $fail('La cédula debe tener exactamente 10 dígitos.');
             return;
         }
 
-        // 2. Solo números
-        if (!is_numeric($value)) {
-            $fail('La cédula debe contener solo números.');
-            return;
-        }
-
-        // 3. Código de provincia (01-24 o 30)
-        $provincia = substr($value, 0, 2);
-        if ($provincia < 1 || $provincia > 24) {
-            $fail('El código de provincia de la cédula es inválido.');
-            return;
-        }
-
-        // 4. Tercer dígito (menor a 6 para personas naturales)
-        $tercerDigito = $value[2];
-        if ($tercerDigito >= 6) {
-            $fail('El tercer dígito es inválido para cédula personal.');
-            return;
-        }
-
-        // 5. Algoritmo Módulo 10
-        $coeficientes = [2, 1, 2, 1, 2, 1, 2, 1, 2];
-        $total = 0;
-
-        for ($i = 0; $i < 9; $i++) {
-            $valor = $value[$i] * $coeficientes[$i];
-            $total += ($valor >= 10) ? $valor - 9 : $valor;
-        }
-
-        $digitoVerificador = $value[9];
-        $decenaSuperior = ceil($total / 10) * 10;
-        $calculado = $decenaSuperior - $total;
+        $region = (int) substr($value, 0, 2);
         
-        if ($calculado == 10) $calculado = 0;
+        // CAMBIO: Permitimos hasta la región 30
+        if ($region < 1 || $region > 30) {
+            $fail('Los dos primeros dígitos de la cédula no corresponden a una región válida.');
+            return;
+        }
 
-        if ($calculado != $digitoVerificador) {
-            $fail('La cédula ingresada es inválida (Dígito verificador incorrecto).');
+        $ultimoDigito = (int) substr($value, 9, 1);
+        $pares = (int) substr($value, 1, 1) + (int) substr($value, 3, 1) + (int) substr($value, 5, 1) + (int) substr($value, 7, 1);
+        
+        $impares = 0;
+        for ($i = 0; $i < 9; $i += 2) {
+            $num = (int) substr($value, $i, 1) * 2;
+            if ($num > 9) $num -= 9;
+            $impares += $num;
+        }
+
+        $suma = $pares + $impares;
+        $decena = (ceil($suma / 10)) * 10;
+        $digitoValidador = $decena - $suma;
+
+        if ($digitoValidador == 10) $digitoValidador = 0;
+
+        if ($digitoValidador !== $ultimoDigito) {
+            $fail('La cédula ingresada no es válida.');
         }
     }
 }

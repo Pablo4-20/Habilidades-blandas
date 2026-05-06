@@ -6,7 +6,8 @@ import {
     MagnifyingGlassIcon, PlusIcon, PencilSquareIcon, TrashIcon,
     SparklesIcon, CloudArrowUpIcon, XMarkIcon, DocumentTextIcon,
     LightBulbIcon, ArrowDownTrayIcon, ListBulletIcon,
-    ChevronLeftIcon, ChevronRightIcon, ClipboardDocumentListIcon
+    ChevronLeftIcon, ChevronRightIcon, ClipboardDocumentListIcon,
+    BriefcaseIcon
 } from '@heroicons/react/24/outline';
 
 const GestionHabilidades = () => {
@@ -28,12 +29,18 @@ const GestionHabilidades = () => {
     // --- ESTADOS PARA ACTIVIDADES GLOBALES ---
     const [showActividadesModal, setShowActividadesModal] = useState(false);
     const [actividadesGlobales, setActividadesGlobales] = useState(['']);
-
-    // --- ESTADOS PARA CARGA MASIVA DE ACTIVIDADES ---
     const [showImportActividadesModal, setShowImportActividadesModal] = useState(false);
     const [fileActividadesToUpload, setFileActividadesToUpload] = useState(null);
     const [fileNameActividades, setFileNameActividades] = useState('');
     const fileInputActividadesRef = useRef(null);
+
+    // --- ESTADOS PARA METODOLOGÍAS GLOBALES ---
+    const [showMetodologiasModal, setShowMetodologiasModal] = useState(false);
+    const [metodologiasGlobales, setMetodologiasGlobales] = useState(['']);
+    const [showImportMetodologiasModal, setShowImportMetodologiasModal] = useState(false);
+    const [fileMetodologiasToUpload, setFileMetodologiasToUpload] = useState(null);
+    const [fileNameMetodologias, setFileNameMetodologias] = useState('');
+    const fileInputMetodologiasRef = useRef(null);
 
     // Archivos Habilidades
     const [fileToUpload, setFileToUpload] = useState(null);
@@ -123,14 +130,20 @@ const GestionHabilidades = () => {
     };
 
     // --- LÓGICA DE ACTIVIDADES GLOBALES ---
-    const openGlobalActivitiesModal = () => {
-        if (habilidades.length > 0 && habilidades[0].actividades && habilidades[0].actividades.length > 0) {
-            const acts = [...new Set(habilidades[0].actividades.map(a => a.descripcion))];
-            setActividadesGlobales(acts);
-        } else {
+    const openGlobalActivitiesModal = async () => {
+        try {
+            const res = await api.get('/actividades-globales');
+            if (res.data && res.data.length > 0) {
+                setActividadesGlobales(res.data);
+            } else {
+                setActividadesGlobales(['']);
+            }
+            setShowActividadesModal(true);
+        } catch (error) {
+            console.error("Error al cargar actividades:", error);
             setActividadesGlobales(['']);
+            setShowActividadesModal(true);
         }
-        setShowActividadesModal(true);
     };
 
     const handleActividadGlobalChange = (index, value) => {
@@ -148,11 +161,31 @@ const GestionHabilidades = () => {
 
     const handleGuardarActividadesGlobales = async (e) => {
         e.preventDefault();
-        const actividadesLimpias = actividadesGlobales.filter(a => a.trim() !== '');
+        const limpias = actividadesGlobales.map(a => a.trim()).filter(a => a !== '');
         
+        const unicas = new Set();
+        const duplicadas = [];
+        for (const act of limpias) {
+            const actLower = act.toLowerCase();
+            if (unicas.has(actLower)) {
+                duplicadas.push(act);
+            } else {
+                unicas.add(actLower);
+            }
+        }
+
+        if (duplicadas.length > 0) {
+            return Swal.fire({
+                icon: 'warning',
+                title: 'Actividad Duplicada',
+                text: `La actividad "${duplicadas[0]}" ya existe en tu lista. Por favor, elimina el duplicado antes de guardar.`,
+                confirmButtonColor: '#a855f7' 
+            });
+        }
+
         try {
-            await api.post('/habilidades-blandas/actividades-globales', { actividades: actividadesLimpias });
-            Swal.fire({ title: 'Éxito', text: 'Actividades aplicadas a todas las habilidades', icon: 'success', timer: 2000, showConfirmButton: false });
+            const res = await api.post('/habilidades-blandas/actividades-globales', { actividades: limpias });
+            Swal.fire({ title: '¡Éxito!', text: res.data?.message || 'Actividades aplicadas a todas las habilidades.', icon: 'success', timer: 2500, showConfirmButton: false });
             setShowActividadesModal(false);
             fetchData();
         } catch (error) {
@@ -160,12 +193,9 @@ const GestionHabilidades = () => {
         }
     };
 
-    // --- LÓGICA DE CARGA MASIVA DE ACTIVIDADES (NUEVO MODAL) ---
+    // --- LÓGICA DE CARGA MASIVA DE ACTIVIDADES ---
     const downloadActividadesTemplate = () => {
-        const data = [
-            { Actividad: "Debate grupal sobre el tema" },
-            { Actividad: "Resolución de casos prácticos" }
-        ];
+        const data = [{ Actividad: "Debate grupal sobre el tema" }, { Actividad: "Resolución de casos prácticos" }];
         const worksheet = XLSX.utils.json_to_sheet(data);
         worksheet['!cols'] = [{wch: 50}];
         const workbook = XLSX.utils.book_new();
@@ -185,34 +215,39 @@ const GestionHabilidades = () => {
         reader.onload = (evt) => {
             const bstr = evt.target.result;
             const wb = XLSX.read(bstr, { type: 'binary' });
-            const wsname = wb.SheetNames[0];
-            const ws = wb.Sheets[wsname];
+            const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
             
-            const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
+            const currentActsLower = actividadesGlobales.map(a => a.trim().toLowerCase()).filter(a => a !== '');
+            const finalActs = actividadesGlobales.filter(a => a.trim() !== '');
             
-            const nuevasActividades = [];
+            let agregadas = 0;
+            let duplicadas = 0;
+
             data.forEach((row, index) => {
                 if (row[0] && typeof row[0] === 'string' && row[0].trim() !== '') {
-                    // Omitir encabezado
                     if (index === 0 && row[0].toLowerCase().includes('actividad')) return;
-                    nuevasActividades.push(row[0].trim());
+                    
+                    const actTrimmed = row[0].trim();
+                    const actLower = actTrimmed.toLowerCase();
+                    
+                    if (!currentActsLower.includes(actLower)) {
+                        finalActs.push(actTrimmed);
+                        currentActsLower.push(actLower); 
+                        agregadas++;
+                    } else {
+                        duplicadas++;
+                    }
                 }
             });
 
-            if (nuevasActividades.length > 0) {
-                 const currentActs = actividadesGlobales.filter(a => a.trim() !== '');
-                 setActividadesGlobales([...nuevasActividades, ...currentActs]); 
-                 
+            if (agregadas > 0 || duplicadas > 0) {
+                 setActividadesGlobales(finalActs.length ? finalActs : ['']); 
                  Swal.fire({
-                     title: 'Extracción Exitosa',
-                     text: `Se añadieron ${nuevasActividades.length} actividades a la lista.`,
-                     icon: 'success',
-                     toast: true,
-                     position: 'top-end',
-                     timer: 3000,
-                     showConfirmButton: false
+                     title: agregadas > 0 ? 'Extracción Exitosa' : 'Sin actividades nuevas',
+                     text: `Se añadieron ${agregadas} actividades. ${duplicadas > 0 ? `Se omitieron ${duplicadas} por estar duplicadas.` : ''}`,
+                     icon: agregadas > 0 ? 'success' : 'info',
+                     confirmButtonColor: '#a855f7'
                  });
-                 // Cerrar y limpiar este modal
                  setShowImportActividadesModal(false);
                  setFileActividadesToUpload(null);
                  setFileNameActividades('');
@@ -221,6 +256,135 @@ const GestionHabilidades = () => {
             }
         };
         reader.readAsBinaryString(fileActividadesToUpload);
+    };
+
+    // --- LÓGICA DE METODOLOGÍAS GLOBALES ---
+    const openGlobalMetodologiasModal = async () => {
+        try {
+            const res = await api.get('/metodologias-globales');
+            if (res.data && res.data.length > 0) {
+                setMetodologiasGlobales(res.data);
+            } else {
+                setMetodologiasGlobales(['']);
+            }
+            setShowMetodologiasModal(true);
+        } catch (error) {
+            console.error("Error al cargar metodologías:", error);
+            setMetodologiasGlobales(['']);
+            setShowMetodologiasModal(true);
+        }
+    };
+
+    const handleMetodologiaGlobalChange = (index, value) => {
+        const nuevas = [...metodologiasGlobales];
+        nuevas[index] = value;
+        setMetodologiasGlobales(nuevas);
+    };
+
+    const agregarCampoMetodologiaGlobal = () => setMetodologiasGlobales(['', ...metodologiasGlobales]);
+    
+    const eliminarCampoMetodologiaGlobal = (index) => {
+        const nuevas = metodologiasGlobales.filter((_, i) => i !== index);
+        setMetodologiasGlobales(nuevas.length ? nuevas : ['']);
+    };
+
+    const handleGuardarMetodologiasGlobales = async (e) => {
+        e.preventDefault();
+        const limpias = metodologiasGlobales.map(m => m.trim()).filter(m => m !== '');
+        
+        const unicas = new Set();
+        const duplicadas = [];
+        for (const met of limpias) {
+            const metLower = met.toLowerCase();
+            if (unicas.has(metLower)) {
+                duplicadas.push(met);
+            } else {
+                unicas.add(metLower);
+            }
+        }
+
+        if (duplicadas.length > 0) {
+            return Swal.fire({
+                icon: 'warning',
+                title: 'Metodología Duplicada',
+                text: `La metodología "${duplicadas[0]}" ya existe en tu lista. Por favor, elimina el duplicado antes de guardar.`,
+                confirmButtonColor: '#ea580c' 
+            });
+        }
+
+        try {
+            const res = await api.post('/habilidades-blandas/metodologias-globales', { metodologias: limpias });
+            Swal.fire({ title: '¡Éxito!', text: res.data?.message || 'Metodologías aplicadas a todas las habilidades.', icon: 'success', timer: 2500, showConfirmButton: false });
+            setShowMetodologiasModal(false);
+            fetchData();
+        } catch (error) {
+            Swal.fire('Error', 'No se pudieron sincronizar las metodologías globales.', 'error');
+        }
+    };
+
+    // --- LÓGICA DE CARGA MASIVA DE METODOLOGÍAS ---
+    const downloadMetodologiasTemplate = () => {
+        const data = [{ Metodologia: "Aprendizaje Basado en Proyectos" }, { Metodologia: "Flipped Classroom" }];
+        const worksheet = XLSX.utils.json_to_sheet(data);
+        worksheet['!cols'] = [{wch: 50}];
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Metodologias");
+        XLSX.writeFile(workbook, "Plantilla_Metodologias.xlsx");
+    };
+
+    const handleFileSelectMetodologias = (e) => { 
+        const file = e.target.files[0]; 
+        if (file) { setFileMetodologiasToUpload(file); setFileNameMetodologias(file.name); } 
+    };
+
+    const handleExtraerMetodologias = () => {
+        if (!fileMetodologiasToUpload) return Swal.fire('Atención', 'Seleccione un archivo.', 'warning');
+
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            const bstr = evt.target.result;
+            const wb = XLSX.read(bstr, { type: 'binary' });
+            const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
+            
+            const currentMetsLower = metodologiasGlobales.map(m => m.trim().toLowerCase()).filter(m => m !== '');
+            const finalMets = metodologiasGlobales.filter(m => m.trim() !== '');
+            
+            let agregadas = 0;
+            let duplicadas = 0;
+
+            data.forEach((row, index) => {
+                if (row[0] && typeof row[0] === 'string' && row[0].trim() !== '') {
+                    if (index === 0 && row[0].toLowerCase().includes('metodologia')) return;
+                    
+                    const metTrimmed = row[0].trim();
+                    const metLower = metTrimmed.toLowerCase();
+                    
+                    if (!currentMetsLower.includes(metLower)) {
+                        finalMets.push(metTrimmed);
+                        currentMetsLower.push(metLower); 
+                        agregadas++;
+                    } else {
+                        duplicadas++;
+                    }
+                }
+            });
+
+            if (agregadas > 0 || duplicadas > 0) {
+                 setMetodologiasGlobales(finalMets.length ? finalMets : ['']); 
+                 Swal.fire({
+                     title: agregadas > 0 ? 'Extracción Exitosa' : 'Sin metodologías nuevas',
+                     text: `Se añadieron ${agregadas} metodologías. ${duplicadas > 0 ? `Se omitieron ${duplicadas} por estar duplicadas.` : ''}`,
+                     icon: agregadas > 0 ? 'success' : 'info',
+                     confirmButtonColor: '#ea580c'
+                 });
+                 setShowImportMetodologiasModal(false);
+                 setFileMetodologiasToUpload(null);
+                 setFileNameMetodologias('');
+            } else {
+                 Swal.fire('Atención', 'No se encontraron metodologías válidas en la primera columna.', 'warning');
+            }
+        };
+        reader.readAsBinaryString(fileMetodologiasToUpload);
     };
 
     // --- LÓGICA IMPORTACIÓN MASIVA DE HABILIDADES ---
@@ -289,10 +453,13 @@ const GestionHabilidades = () => {
                 <div>
                     <h2 className="text-2xl font-bold text-gray-900">Catálogo de Habilidades</h2>
                     <p className="text-gray-500 text-sm mt-1">
-                        Gestión de habilidades blandas y configuración de sus actividades.
+                        Gestión de habilidades blandas, actividades y metodologías.
                     </p>
                 </div>
                 <div className="flex flex-wrap gap-3">
+                    <button onClick={openGlobalMetodologiasModal} className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-4 py-2.5 rounded-lg font-medium shadow-sm transition text-sm">
+                        <BriefcaseIcon className="h-5 w-5" /> Metodologías Globales
+                    </button>
                     <button onClick={openGlobalActivitiesModal} className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-lg font-medium shadow-sm transition text-sm">
                         <ClipboardDocumentListIcon className="h-5 w-5" /> Actividades Globales
                     </button>
@@ -437,17 +604,14 @@ const GestionHabilidades = () => {
                                     </label>
                                     
                                     <div className="flex items-center gap-2">
-                                        {/* Botón que ABRE EL NUEVO MODAL de Carga Masiva de Actividades */}
                                         <button 
                                             type="button" 
                                             onClick={() => setShowImportActividadesModal(true)} 
                                             className="text-xs bg-purple-50 text-purple-700 px-3 py-1.5 rounded-lg hover:bg-purple-100 border border-purple-200 transition font-bold flex items-center gap-1 shadow-sm"
-                                            title="Ver estructura y subir archivo"
                                         >
                                             <CloudArrowUpIcon className="h-4 w-4" /> Carga Masiva
                                         </button>
 
-                                        {/* Botón de Añadir Manual */}
                                         <button 
                                             type="button" 
                                             onClick={agregarCampoActividadGlobal} 
@@ -487,7 +651,74 @@ const GestionHabilidades = () => {
                 </div>
             )}
 
-            {/* --- NUEVO SUB-MODAL: IMPORTACIÓN MASIVA DE ACTIVIDADES --- */}
+            {/* --- MODAL PRINCIPAL: METODOLOGÍAS GLOBALES --- */}
+            {showMetodologiasModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm transition-all animate-fade-in">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+                        <div className="px-8 py-6 bg-gradient-to-r from-orange-600 to-amber-700 flex justify-between items-center shrink-0">
+                            <div>
+                                <h3 className="text-xl font-bold text-white tracking-wide">Metodologías Globales</h3>
+                            </div>
+                            <button onClick={() => setShowMetodologiasModal(false)} className="p-2 bg-white/10 rounded-full text-white hover:bg-white/20 transition-colors">
+                                <XMarkIcon className="h-6 w-6" />
+                            </button>
+                        </div>
+                        <div className="p-8 overflow-y-auto custom-scrollbar">
+                            <form id="globalMetodologiasForm" onSubmit={handleGuardarMetodologiasGlobales} className="space-y-6">
+                                <div className="flex justify-between items-center mb-3 border-b border-gray-100 pb-3">
+                                    <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                                        <BriefcaseIcon className="h-5 w-5 text-orange-600"/> Lista de Metodologías
+                                    </label>
+                                    
+                                    <div className="flex items-center gap-2">
+                                        <button 
+                                            type="button" 
+                                            onClick={() => setShowImportMetodologiasModal(true)} 
+                                            className="text-xs bg-orange-50 text-orange-700 px-3 py-1.5 rounded-lg hover:bg-orange-100 border border-orange-200 transition font-bold flex items-center gap-1 shadow-sm"
+                                        >
+                                            <CloudArrowUpIcon className="h-4 w-4" /> Carga Masiva
+                                        </button>
+
+                                        <button 
+                                            type="button" 
+                                            onClick={agregarCampoMetodologiaGlobal} 
+                                            className="text-xs bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg hover:bg-amber-100 transition font-bold shadow-sm"
+                                        >
+                                            + Añadir Opción
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div className="space-y-3">
+                                    {metodologiasGlobales.map((met, idx) => (
+                                        <div key={idx} className="flex gap-2 items-center">
+                                            <span className="text-gray-400 font-bold text-sm w-4">{metodologiasGlobales.length - idx}.</span>
+                                            <input 
+                                                type="text" 
+                                                className="flex-1 border border-gray-300 rounded-lg p-3 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200 outline-none transition"
+                                                placeholder={`Ej: Aprendizaje Basado en Proyectos...`}
+                                                value={met}
+                                                onChange={(e) => handleMetodologiaGlobalChange(idx, e.target.value)}
+                                            />
+                                            <button type="button" onClick={() => eliminarCampoMetodologiaGlobal(idx)} className="text-gray-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition">
+                                                <TrashIcon className="h-5 w-5"/>
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </form>
+                        </div>
+                        <div className="p-6 border-t border-gray-100 flex gap-4 bg-gray-50 shrink-0">
+                            <button type="button" onClick={() => setShowMetodologiasModal(false)} className="flex-1 px-4 py-3 rounded-xl border border-gray-200 text-gray-700 font-medium hover:bg-gray-200 transition-all">Cancelar</button>
+                            <button type="submit" form="globalMetodologiasForm" className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 text-white font-bold shadow-lg shadow-orange-500/30 hover:-translate-y-0.5 transition-all">
+                                Guardar para Todas
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- SUB-MODAL: IMPORTACIÓN MASIVA DE ACTIVIDADES --- */}
             {showImportActividadesModal && (
                 <div className="fixed inset-0 z-[70] flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 animate-fade-in">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-8 relative overflow-hidden flex flex-col max-h-[90vh]">
@@ -501,8 +732,6 @@ const GestionHabilidades = () => {
                         </div>
 
                         <div className="overflow-y-auto custom-scrollbar flex-1 mb-6 pr-2">
-                            
-                            {/* ESTRUCTURA DEL EXCEL */}
                             <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 mb-6">
                                 <div className="flex justify-between items-center mb-3">
                                     <h4 className="text-sm font-bold text-slate-700 uppercase flex items-center gap-2">
@@ -513,7 +742,6 @@ const GestionHabilidades = () => {
                                         <ArrowDownTrayIcon className="h-4 w-4" /> Plantilla
                                     </button>
                                 </div>
-                                
                                 <div className="overflow-x-auto rounded-lg border border-slate-300 shadow-sm bg-white">
                                     <table className="min-w-full text-xs text-left whitespace-nowrap">
                                         <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-300">
@@ -536,7 +764,6 @@ const GestionHabilidades = () => {
                                 </p>
                             </div>
 
-                            {/* ZONA DE DROP */}
                             <div onClick={() => fileInputActividadesRef.current.click()} className="border-2 border-dashed border-purple-300 bg-purple-50/50 rounded-xl p-8 cursor-pointer hover:bg-purple-50 transition-colors group text-center">
                                 <input type="file" ref={fileInputActividadesRef} accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" onChange={handleFileSelectActividades} className="hidden" />
                                 {fileNameActividades ? (
@@ -557,6 +784,78 @@ const GestionHabilidades = () => {
                             <button onClick={() => {setShowImportActividadesModal(false); setFileActividadesToUpload(null); setFileNameActividades('');}} className="flex-1 py-3 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 transition-colors">Cancelar</button>
                             <button onClick={handleExtraerActividades} className={`flex-1 py-3 text-white font-bold rounded-xl shadow-lg transition-all ${fileActividadesToUpload ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:shadow-purple-500/40 hover:-translate-y-0.5' : 'bg-gray-300 cursor-not-allowed'}`} disabled={!fileActividadesToUpload}>
                                 Extraer Actividades
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- SUB-MODAL: IMPORTACIÓN MASIVA DE METODOLOGÍAS --- */}
+            {showImportMetodologiasModal && (
+                <div className="fixed inset-0 z-[70] flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 animate-fade-in">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-8 relative overflow-hidden flex flex-col max-h-[90vh]">
+                        
+                        <div className="text-center mb-6 shrink-0">
+                            <div className="mx-auto w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center mb-4 border border-orange-100">
+                                <CloudArrowUpIcon className="h-8 w-8 text-orange-600" />
+                            </div>
+                            <h3 className="text-2xl font-bold text-gray-900">Carga Masiva de Metodologías</h3>
+                            <p className="text-sm text-gray-500 mt-1">Sube un archivo para rellenar la lista de metodologías.</p>
+                        </div>
+
+                        <div className="overflow-y-auto custom-scrollbar flex-1 mb-6 pr-2">
+                            <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 mb-6">
+                                <div className="flex justify-between items-center mb-3">
+                                    <h4 className="text-sm font-bold text-slate-700 uppercase flex items-center gap-2">
+                                        <DocumentTextIcon className="h-5 w-5 text-slate-500"/>
+                                        Estructura del Archivo
+                                    </h4>
+                                    <button onClick={downloadMetodologiasTemplate} className="text-xs flex items-center gap-1 text-orange-700 hover:text-orange-800 font-semibold bg-white px-3 py-1.5 rounded-lg border border-orange-200 shadow-sm transition-all hover:shadow-md">
+                                        <ArrowDownTrayIcon className="h-4 w-4" /> Plantilla
+                                    </button>
+                                </div>
+                                <div className="overflow-x-auto rounded-lg border border-slate-300 shadow-sm bg-white">
+                                    <table className="min-w-full text-xs text-left whitespace-nowrap">
+                                        <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-300">
+                                            <tr>
+                                                <th className="px-3 py-2.5">Metodología <span className="text-red-500">*</span></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="text-slate-600">
+                                            <tr className="border-b border-slate-100">
+                                                <td className="px-3 py-2.5 font-medium">Aprendizaje Basado en Proyectos...</td>
+                                            </tr>
+                                            <tr>
+                                                <td className="px-3 py-2.5 font-medium">Flipped Classroom...</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <p className="text-[11px] text-gray-500 mt-3 flex items-center gap-1">
+                                    <span className="text-red-500 font-bold">*</span> Solo se extraerá la primera columna de tu archivo.
+                                </p>
+                            </div>
+
+                            <div onClick={() => fileInputMetodologiasRef.current.click()} className="border-2 border-dashed border-orange-300 bg-orange-50/50 rounded-xl p-8 cursor-pointer hover:bg-orange-50 transition-colors group text-center">
+                                <input type="file" ref={fileInputMetodologiasRef} accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" onChange={handleFileSelectMetodologias} className="hidden" />
+                                {fileNameMetodologias ? (
+                                    <div className="flex flex-col items-center">
+                                        <DocumentTextIcon className="h-10 w-10 text-orange-600 mb-2" />
+                                        <span className="text-orange-800 font-semibold break-all">{fileNameMetodologias}</span>
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col items-center">
+                                        <p className="text-orange-700 font-bold text-lg">Clic aquí para seleccionar archivo</p>
+                                        <p className="text-sm text-orange-600/70 mt-1">Soporta Excel (.xlsx) y CSV</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="flex gap-4 shrink-0 border-t border-gray-100 pt-4">
+                            <button onClick={() => {setShowImportMetodologiasModal(false); setFileMetodologiasToUpload(null); setFileNameMetodologias('');}} className="flex-1 py-3 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 transition-colors">Cancelar</button>
+                            <button onClick={handleExtraerMetodologias} className={`flex-1 py-3 text-white font-bold rounded-xl shadow-lg transition-all ${fileMetodologiasToUpload ? 'bg-gradient-to-r from-orange-600 to-amber-600 hover:shadow-orange-500/40 hover:-translate-y-0.5' : 'bg-gray-300 cursor-not-allowed'}`} disabled={!fileMetodologiasToUpload}>
+                                Extraer Metodologías
                             </button>
                         </div>
                     </div>

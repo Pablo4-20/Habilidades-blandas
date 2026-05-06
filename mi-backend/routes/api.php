@@ -79,6 +79,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('habilidades-blandas', HabilidadBlandaController::class);
     Route::post('/habilidades-blandas/import', [HabilidadBlandaController::class, 'import']);
     Route::post('/habilidades-blandas/actividades-globales', [App\Http\Controllers\Api\HabilidadBlandaController::class, 'syncGlobalActivities']);
+    Route::post('/habilidades-blandas/metodologias-globales', [HabilidadBlandaController::class, 'syncGlobalMetodologias']);
+    Route::get('/actividades-globales', [App\Http\Controllers\Api\HabilidadBlandaController::class, 'getGlobalActividades']);
+Route::get('/metodologias-globales', [App\Http\Controllers\Api\HabilidadBlandaController::class, 'getGlobalMetodologias']);
     // --- COORDINADOR ---
     Route::get('/reportes/filtros', [CoordinadorController::class, 'filtrosReporte']);
     Route::get('/reportes/general', [CoordinadorController::class, 'reporteGeneral']);

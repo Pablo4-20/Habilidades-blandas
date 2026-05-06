@@ -25,8 +25,12 @@ import {
 // --- VALIDACIÓN CÉDULA ECUADOR ---
 const validarCedulaEcuador = (cedula) => {
     if (cedula.length !== 10) return false;
+    
     const digitoRegion = parseInt(cedula.substring(0, 2));
-    if (digitoRegion < 1 || digitoRegion > 24) return false;
+    
+    // CAMBIO: Permitimos códigos de región hasta el 30 
+    if (digitoRegion < 1 || digitoRegion > 30) return false; 
+    
     const ultimoDigito = parseInt(cedula.substring(9, 10));
     const pares = parseInt(cedula.substring(1, 2)) + parseInt(cedula.substring(3, 4)) + parseInt(cedula.substring(5, 6)) + parseInt(cedula.substring(7, 8));
     let numeroUno = parseInt(cedula.substring(0, 1)) * 2;
@@ -45,6 +49,7 @@ const validarCedulaEcuador = (cedula) => {
     const decena = (primerDigitoSuma + 1) * 10;
     let digitoValidador = decena - sumaTotal;
     if (digitoValidador === 10) digitoValidador = 0;
+    
     return digitoValidador === ultimoDigito;
 };
 

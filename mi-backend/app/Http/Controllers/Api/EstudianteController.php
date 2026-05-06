@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Estudiante;
 use App\Models\User; 
+use App\Models\Carrera; // <-- Importamos el modelo de Carrera
 use Illuminate\Validation\Rule;
 use App\Rules\ValidaCedula; 
 use Illuminate\Support\Facades\DB;
@@ -14,9 +15,7 @@ class EstudianteController extends Controller
 {
     public function index()
     {
-        // CORRECCIÓN: Ordenar por Apellidos A-Z en lugar de ID descendente.
-        // Esto permite que en el listado aparezcan mezclados Software y Tecnología
-        // ordenados alfabéticamente, facilitando la búsqueda visual.
+        // Ordenar por Apellidos A-Z en lugar de ID descendente.
         return Estudiante::with('ultimaMatricula.periodo', 'ultimaMatricula.ciclo')
             ->orderBy('apellidos', 'asc')
             ->orderBy('nombres', 'asc')
@@ -43,6 +42,7 @@ class EstudianteController extends Controller
         $data = $request->all();
         $data['nombres']   = mb_convert_case($request->nombres, MB_CASE_TITLE, "UTF-8");
         $data['apellidos'] = mb_convert_case($request->apellidos, MB_CASE_TITLE, "UTF-8");
+        $data['carrera']   = mb_strtoupper($request->carrera, "UTF-8");
 
         $estudiante = Estudiante::create($data);
         return response()->json($estudiante, 201);
@@ -74,6 +74,9 @@ class EstudianteController extends Controller
         if ($request->has('apellidos')) {
             $data['apellidos'] = mb_convert_case($request->apellidos, MB_CASE_TITLE, "UTF-8");
         }
+        if ($request->has('carrera')) {
+            $data['carrera'] = mb_strtoupper($request->carrera, "UTF-8");
+        }
 
         $estudiante->update($data);
         return response()->json($estudiante);
@@ -98,6 +101,11 @@ class EstudianteController extends Controller
 
         $creados = 0;
         $errores = [];
+
+        // 1. Obtenemos todas las carreras válidas y las pasamos a mayúsculas para comparar
+        $carrerasValidas = Carrera::pluck('nombre')->map(function ($nombre) {
+            return mb_strtoupper(trim($nombre), 'UTF-8');
+        })->toArray();
 
         foreach ($lines as $index => $linea) {
             if (trim($linea) === '') continue;
@@ -124,13 +132,22 @@ class EstudianteController extends Controller
                 continue;
             }
 
+            // 2. Extraemos la carrera del Excel en mayúsculas
+            $carreraExcel = mb_strtoupper(trim($row[4] ?? 'SOFTWARE'), "UTF-8");
+
+            // 3. Validamos que exista en el catálogo de carreras
+            if (!in_array($carreraExcel, $carrerasValidas)) {
+                $errores[] = "Fila ".($index+1).": La carrera '$carreraExcel' no está registrada en el sistema.";
+                continue; // Saltamos a este estudiante
+            }
+
             try {
                 Estudiante::create([
                     'cedula'    => $cedula,
                     'nombres'   => mb_convert_case(trim($row[1]), MB_CASE_TITLE, "UTF-8"),
                     'apellidos' => mb_convert_case(trim($row[2]), MB_CASE_TITLE, "UTF-8"),
                     'email'     => strtolower(trim($row[3])),
-                    'carrera'   => trim($row[4] ?? 'SOFTWARE'),
+                    'carrera'   => $carreraExcel, // Guardamos la carrera verificada
                     'estado'    => 'Activo'
                 ]);
                 $creados++;
@@ -154,14 +171,15 @@ class EstudianteController extends Controller
 
         $estudiantes = Estudiante::query()
             ->when($carrera, function($q) use ($carrera) {
-                return $q->where('carrera', $carrera);
+                // Al buscar, nos aseguramos de que el parámetro busque en mayúsculas
+                return $q->where('carrera', mb_strtoupper($carrera, 'UTF-8'));
             })
             ->where(function($q) use ($search) {
                 $q->where('nombres', 'LIKE', "%{$search}%")
                   ->orWhere('apellidos', 'LIKE', "%{$search}%")
                   ->orWhere('cedula', 'LIKE', "%{$search}%");
             })
-            ->orderBy('apellidos', 'asc') // También ordenamos aquí por consistencia
+            ->orderBy('apellidos', 'asc')
             ->limit(10)
             ->get();
 

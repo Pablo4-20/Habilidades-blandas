@@ -7,7 +7,7 @@ import CustomSelect from './ui/CustomSelect';
 import { 
     PrinterIcon, BookOpenIcon, CalendarDaysIcon, 
     DocumentCheckIcon, TableCellsIcon, DocumentTextIcon,
-    FunnelIcon
+    FunnelIcon, ClockIcon
 } from '@heroicons/react/24/outline';
 
 // --- IMPORTACIÓN DE LOGOS LOCALES ---
@@ -17,35 +17,26 @@ import logoTec from '../assets/tecnologias.png';
 
 // --- FUNCIÓN HÍBRIDA: BASE DE DATOS + ASSETS LOCALES ---
 const obtenerLogoCarrera = async (nombreCarrera, logoPath) => {
-    console.log("1. PDF solicitado para Carrera:", nombreCarrera);
-    console.log("2. Ruta de la imagen en BD enviada por Laravel:", logoPath);
-
     if (logoPath) {
         try {
-            console.log("3. Intentando descargar imagen sin bloqueos CORS...");
             const res = await api.get('/archivo-publico', {
                 params: { path: logoPath },
                 responseType: 'blob' 
             });
-            
-            console.log("4. ¡Imagen descargada con éxito!");
             return new Promise((resolve) => {
                 const reader = new FileReader();
                 reader.onloadend = () => resolve(reader.result);
                 reader.readAsDataURL(res.data);
             });
         } catch (e) {
-            console.error("❌ Error al descargar logo de la BD. ¿La ruta /archivo-publico existe?", e);
+            console.error("Error al descargar logo de la BD.", e);
         }
-    } else {
-        console.warn("⚠️ Laravel no envió ninguna ruta de imagen. (El logoPath vino vacío).");
     }
 
     const nombre = (nombreCarrera || '').toLowerCase();
     if (nombre.includes('software')) return logoSoftware;
     if (nombre.includes('tecnolog') || nombre.includes('ti')) return logoTec;
 
-    console.log("5. Usando el logo de la Facultad como salvavidas.");
     return logoIzq;
 };
 
@@ -56,6 +47,9 @@ const FichaResumen = () => {
     const [selectedParalelo, setSelectedParalelo] = useState(''); 
     const [selectedPeriodo, setSelectedPeriodo] = useState('');
     const [selectedCarrera, setSelectedCarrera] = useState('Todas'); 
+    
+    // --- EL PARCIAL AHORA INICIA EN 1 POR DEFECTO ---
+    const [selectedParcialActa, setSelectedParcialActa] = useState('1');
 
     const [loadingGeneral, setLoadingGeneral] = useState(false);
     const [loadingIndividual, setLoadingIndividual] = useState(false);
@@ -111,6 +105,12 @@ const FichaResumen = () => {
         ];
     }, [asignacionesRaw]);
 
+    // Opciones modificadas: Solo 1er y 2do Parcial
+    const opcionesParcial = [
+        { value: '1', label: 'Primer Parcial' },
+        { value: '2', label: 'Segundo Parcial' }
+    ];
+
     // ------------------------------------------------------------------------
     // OPCIÓN 1: FICHA RESUMEN GENERAL (PDF HORIZONTAL)
     // ------------------------------------------------------------------------
@@ -138,10 +138,8 @@ const FichaResumen = () => {
                 hour: '2-digit', minute: '2-digit'
             });
 
-            // --- RESOLVER EL LOGO CORRECTO ---
             const logoDerecha = await obtenerLogoCarrera(info.carrera, info.logo);
 
-            // --- ENCABEZADO ---
             const imgW = 20; const imgH = 20; 
             try { doc.addImage(logoIzq, 'PNG', 10, 5, imgW, imgH); } catch (e) {}
             try { doc.addImage(logoDerecha, 'PNG', pageWidth - 30, 5, imgW, imgH); } catch (e) {}
@@ -155,7 +153,6 @@ const FichaResumen = () => {
             doc.setTextColor(0); doc.setFont("helvetica", "bold");
             doc.text("ANEXO 1: FICHA RESUMEN DE EJECUCIÓN", pageWidth / 2, 28, { align: "center" });
 
-            // --- INFO ---
             autoTable(doc, {
                 startY: 34, theme: 'plain',
                 body: [
@@ -187,7 +184,6 @@ const FichaResumen = () => {
                 }
             });
 
-            // --- PIE DE PÁGINA (GENERAL) ---
             const footerY = pageHeight - 25; 
             if (doc.lastAutoTable.finalY > (footerY - 20)) {
                 doc.addPage();
@@ -224,7 +220,7 @@ const FichaResumen = () => {
     };
 
     // ------------------------------------------------------------------------
-    // OPCIÓN 2: ACTAS INDIVIDUALES
+    // OPCIÓN 2: ACTAS INDIVIDUALES (AHORA CON FILTRO DE PARCIAL)
     // ------------------------------------------------------------------------
     const descargarActasIndividuales = async () => {
         if (!selectedMateriaId || !selectedPeriodo || !selectedParalelo) return Swal.fire('Error', 'Selecciona una materia.', 'warning');
@@ -234,10 +230,11 @@ const FichaResumen = () => {
             const res = await api.post('/reportes/pdf-data', { 
                 asignatura_id: selectedMateriaId, 
                 periodo: selectedPeriodo,
-                paralelo: selectedParalelo
+                paralelo: selectedParalelo,
+                parcial: selectedParcialActa 
             });
             const data = res.data;
-            if (!data.reportes || data.reportes.length === 0) { Swal.fire('Info', 'Sin datos.', 'info'); return; }
+            if (!data.reportes || data.reportes.length === 0) { Swal.fire('Info', 'Sin datos para este parcial.', 'info'); return; }
 
             const doc = new jsPDF(); 
             const info = data.info;
@@ -249,7 +246,6 @@ const FichaResumen = () => {
                 hour: '2-digit', minute: '2-digit'
             });
 
-            // --- RESOLVER EL LOGO CORRECTO ---
             const logoDerecha = await obtenerLogoCarrera(info.carrera, info.logo);
 
             const drawHeader = (doc) => {
@@ -289,7 +285,6 @@ const FichaResumen = () => {
 
                     doc.setFontSize(10);
                     
-                    // --- BLOQUE DE INFORMACIÓN ---
                     doc.setFont("helvetica", "bold"); doc.text("Carrera:", xLabelL, y);
                     doc.setFont("helvetica", "normal"); doc.text(info.carrera, xValueL, y);
 
@@ -351,7 +346,6 @@ const FichaResumen = () => {
                         }
                     });
 
-                    // --- FIRMA ---
                     const finalY = doc.lastAutoTable.finalY; 
                     
                     const espacioAntesFirma = 20;    
@@ -386,7 +380,8 @@ const FichaResumen = () => {
                 }
             });
 
-            if (paginaAgregada) doc.save(`Actas_${info.asignatura}_${selectedParalelo}.pdf`); 
+            const parcialNomb = `P${selectedParcialActa}`;
+            if (paginaAgregada) doc.save(`Actas_${info.asignatura}_${selectedParalelo}_${parcialNomb}.pdf`); 
             else Swal.fire('Info', 'Sin estudiantes calificados.', 'info');
 
         } catch (error) { 
@@ -395,7 +390,7 @@ const FichaResumen = () => {
                 Swal.fire({
                     icon: 'warning',
                     title: 'Atención',
-                    text: 'No se ha realizado la planificación ni evaluación para este paralelo.',
+                    text: 'No se ha realizado la planificación ni evaluación para este paralelo en el periodo/parcial seleccionado.',
                     confirmButtonColor: '#F59E0B'
                 });
             } else {
@@ -422,6 +417,7 @@ const FichaResumen = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 
+                {/* --- CARD: ACTAS INDIVIDUALES --- */}
                 <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center text-center hover:shadow-md transition duration-300 group relative">
                     <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-green-500 to-teal-600 rounded-t-3xl"></div>
                     <div className="bg-green-50 p-4 rounded-full mb-6 group-hover:scale-110 transition duration-300">
@@ -431,7 +427,9 @@ const FichaResumen = () => {
                     <p className="text-gray-500 text-sm mb-4 px-4">
                         Nóminas detalladas con las calificaciones de una <strong>materia específica</strong>.
                     </p>
-                    <div className="w-full mb-6 text-left relative z-10">
+                    
+                    {/* SELECT DE MATERIA */}
+                    <div className="w-full mb-3 text-left relative z-20">
                         <CustomSelect 
                             label="" 
                             placeholder={opcionesMaterias.length > 0 ? "Seleccione Materia..." : "Sin materias"} 
@@ -441,11 +439,25 @@ const FichaResumen = () => {
                             icon={BookOpenIcon} 
                         />
                     </div>
+
+                    {/* SELECT DE PARCIAL */}
+                    <div className="w-full mb-6 text-left relative z-10">
+                        <CustomSelect 
+                            label="" 
+                            placeholder="Seleccione Parcial" 
+                            options={opcionesParcial} 
+                            value={selectedParcialActa} 
+                            onChange={setSelectedParcialActa} 
+                            icon={ClockIcon} 
+                        />
+                    </div>
+
                     <button onClick={descargarActasIndividuales} disabled={!selectedMateriaId || loadingIndividual} className="w-full mt-auto bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-green-200 transition transform active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50">
                         {loadingIndividual ? 'Generando...' : <><PrinterIcon className="h-5 w-5"/> Descargar Actas</>}
                     </button>
                 </div>
 
+                {/* --- CARD: FICHA RESUMEN GENERAL --- */}
                 <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center text-center hover:shadow-md transition duration-300 group relative">
                     <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-t-3xl"></div>
                     <div className="bg-blue-50 p-4 rounded-full mb-6 group-hover:scale-110 transition duration-300">
