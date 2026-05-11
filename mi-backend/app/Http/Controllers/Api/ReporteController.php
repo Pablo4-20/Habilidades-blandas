@@ -23,27 +23,36 @@ class ReporteController extends Controller
         $asignatura = Asignatura::with(['carrera', 'ciclo'])->find($asignaturaId);
         if (!$asignatura) return collect();
 
+        // 1. OBTENER ESTUDIANTES DIRECTOS (Inscritos por el docente)
         $estudiantesDirectos = DetalleMatricula::where('asignatura_id', $asignaturaId)
             ->where('estado_materia', '!=', 'Baja')
-            ->whereHas('matricula', function($q) use ($periodoId, $paralelo) {
+            // EL CAMBIO CLAVE: Filtramos por el paralelo de la MATERIA, no el base.
+            ->when($paralelo, function($q) use ($paralelo) {
+                return $q->where('paralelo', $paralelo); 
+            })
+            ->whereHas('matricula', function($q) use ($periodoId) {
+                // Aquí quitamos la restricción de paralelo base
                 $q->where('periodo_id', $periodoId)->where('estado', 'Activo');
-                if ($paralelo) $q->where('paralelo', $paralelo);
             })
             ->with(['matricula.estudiante'])
             ->get()
             ->map(fn($d) => optional($d->matricula)->estudiante)
             ->filter();
 
-        $idsConRegistro = DetalleMatricula::where('asignatura_id', $asignaturaId)
+        // 2. IDENTIFICAR QUIÉNES YA ESTÁN EN LA MATERIA (En cualquier paralelo)
+        $idsEstudiantesYaAsignados = DetalleMatricula::where('asignatura_id', $asignaturaId)
             ->whereHas('matricula', fn($q) => $q->where('periodo_id', $periodoId))
-            ->pluck('matricula_id');
+            ->join('matriculas', 'detalle_matriculas.matricula_id', '=', 'matriculas.id')
+            ->pluck('matriculas.estudiante_id');
 
         $estudiantesCiclo = collect();
+        
+        // 3. MATRICULACIÓN AUTOMÁTICA POR CICLO
         if ($asignatura->ciclo_id) {
             $queryAutomaticos = Matricula::where('periodo_id', $periodoId)
                 ->where('ciclo_id', $asignatura->ciclo_id)
                 ->where('estado', 'Activo')
-                ->whereNotIn('id', $idsConRegistro);
+                ->whereNotIn('estudiante_id', $idsEstudiantesYaAsignados);
 
             if ($paralelo) $queryAutomaticos->where('paralelo', $paralelo);
 
