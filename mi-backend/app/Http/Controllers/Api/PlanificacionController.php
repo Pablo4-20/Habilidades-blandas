@@ -48,7 +48,10 @@ class PlanificacionController extends Controller
                 $catalogoHabilidades = HabilidadBlanda::whereHas('carreras', function($query) use ($asignatura) {
                     $query->where('carreras.id', $asignatura->carrera_id);
                 })
-                ->with('actividades')
+                // MODIFICACIÓN CLAVE: Ordenar las actividades alfabéticamente
+                ->with(['actividades' => function($query) {
+                    $query->orderBy('descripcion', 'asc');
+                }])
                 ->select('id', 'nombre', 'descripcion')
                 ->orderBy('nombre', 'asc')
                 ->get();

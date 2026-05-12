@@ -224,14 +224,22 @@ class HabilidadBlandaController extends Controller
     public function getGlobalActividades()
     {
         // Obtiene una lista única de todas las actividades guardadas
-        $actividades = ActividadHabilidad::select('descripcion')->distinct()->pluck('descripcion');
+        $actividades = ActividadHabilidad::select('descripcion')
+        ->distinct()
+        ->orderBy('descripcion', 'asc')
+        ->pluck('descripcion');
+
         return response()->json($actividades);
     }
 
     public function getGlobalMetodologias()
     {
         // Obtiene una lista única de todas las metodologías guardadas
-        $metodologias = MetodologiaHabilidad::select('descripcion')->distinct()->pluck('descripcion');
+        $metodologias = MetodologiaHabilidad::select('descripcion')
+        ->distinct()
+        ->orderBy('descripcion', 'asc')
+        ->pluck('descripcion');
+        
         return response()->json($metodologias);
     }
 }
