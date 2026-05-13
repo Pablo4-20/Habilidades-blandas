@@ -170,6 +170,8 @@ class ReporteController extends Controller
                     'habilidad_id' => $detalle->habilidad_blanda_id,
                     'habilidad' => $detalle->habilidad->nombre,
                     'resultado_aprendizaje' => $detalle->resultado_aprendizaje,
+                    'metodologia' => $detalle->metodologia, 
+                    'actividades' => $detalle->actividades,
                     'parcial_asignado' => $plan->parcial,
                     'estadisticas' => $conteos, 
                     'conclusion' => $reporteDB ? $reporteDB->conclusion_progreso : ''

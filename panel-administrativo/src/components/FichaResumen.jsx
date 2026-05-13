@@ -316,18 +316,46 @@ const FichaResumen = () => {
                     const extraHeightHab = (habilidadLines.length - 1) * 5;
                     y += 10 + extraHeightHab; 
 
+                    // --- RESULTADO DE APRENDIZAJE ---
                     doc.setFont("helvetica", "bold"); 
                     doc.text("Resultado de Aprendizaje:", xLabelL, y);
                     y += 5; 
 
                     doc.setFont("helvetica", "normal");
-                    const maxW_Resultado = 180; 
+                    const maxW_Textos = 180; 
                     const resultadoTexto = rep.resultado_aprendizaje || 'No definido';
-                    const resultadoLines = doc.splitTextToSize(resultadoTexto, maxW_Resultado);
+                    const resultadoLines = doc.splitTextToSize(resultadoTexto, maxW_Textos);
                     doc.text(resultadoLines, xLabelL, y);
 
                     const alturaResultado = resultadoLines.length * 5; 
                     y += alturaResultado + 5; 
+
+                    // --- NUEVO: METODOLOGÍA ---
+                    doc.setFont("helvetica", "bold"); 
+                    doc.text("Metodología a aplicar:", xLabelL, y);
+                    y += 5; 
+
+                    doc.setFont("helvetica", "normal");
+                    const metodologiaTexto = rep.metodologia || 'No definida';
+                    const metodologiaLines = doc.splitTextToSize(metodologiaTexto, maxW_Textos);
+                    doc.text(metodologiaLines, xLabelL, y);
+
+                    const alturaMetodologia = metodologiaLines.length * 5; 
+                    y += alturaMetodologia + 5; 
+
+                    // --- NUEVO: ACTIVIDADES ---
+                    doc.setFont("helvetica", "bold"); 
+                    doc.text("Actividades:", xLabelL, y);
+                    y += 5; 
+
+                    doc.setFont("helvetica", "normal");
+                    const actividadesTexto = rep.actividades || 'No definidas';
+                    const actividadesLines = doc.splitTextToSize(actividadesTexto, maxW_Textos);
+                    doc.text(actividadesLines, xLabelL, y);
+
+                    const alturaActividades = actividadesLines.length * 5; 
+                    y += alturaActividades + 5; 
+                    // ------------------------------------
 
                     const body = ests.map((e) => [e.nombre, e.n1, e.n2, e.n3, e.n4, e.n5]);
 

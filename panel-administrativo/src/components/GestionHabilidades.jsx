@@ -535,7 +535,7 @@ const GestionHabilidades = () => {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                     <h2 className="text-2xl font-bold text-gray-900">Catálogo de Habilidades</h2>
-                    <p className="text-gray-500 text-sm mt-1">Gestión de habilidades blandas, actividades, metodologías y guías de evaluación.</p>
+                    <p className="text-gray-500 text-sm mt-1">Gestión de habilidades blandas, actividades, metodologías y rubricas de evaluación.</p>
                 </div>
                 <div className="flex flex-wrap gap-3">
                     <button onClick={openGlobalMetodologiasModal} className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-4 py-2.5 rounded-lg font-medium shadow-sm transition text-sm">
@@ -546,7 +546,7 @@ const GestionHabilidades = () => {
                     </button>
                     {/* BOTÓN: GUÍAS DE EVALUACIÓN AHORA EN ROJO */}
                     <button onClick={() => setShowGuiasModal(true)} className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-lg font-medium shadow-sm transition text-sm">
-                        <DocumentCheckIcon className="h-5 w-5" /> Guías de Evaluación
+                        <DocumentCheckIcon className="h-5 w-5" /> Rubrica de Evaluación
                     </button>
                     <button onClick={() => setShowImportModal(true)} className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-lg font-medium shadow-sm transition text-sm">
                         <CloudArrowUpIcon className="h-5 w-5" /> Carga Masiva
