@@ -634,7 +634,7 @@ const GestionHabilidades = () => {
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
                         <div className="px-8 py-6 bg-gradient-to-r from-red-600 to-red-800 flex justify-between items-center shrink-0">
                             <div>
-                                <h3 className="text-xl font-bold text-white tracking-wide">Gestor de Guías de Evaluación</h3>
+                                <h3 className="text-xl font-bold text-white tracking-wide">Gestor de Rubricas de Evaluación</h3>
                                 <p className="text-red-100 text-sm mt-1">Configura los 5 niveles de calificación para cada habilidad.</p>
                             </div>
                             <button onClick={() => setShowGuiasModal(false)} className="p-2 bg-white/10 rounded-full text-white hover:bg-white/20 transition-colors">
