@@ -197,7 +197,7 @@ const GestionHabilidades = () => {
             const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
             
             let actualizadas = 0;
-            let noEncontradas = 0;
+            const nombresNoEncontrados = []; // <-- CAMBIO: Ahora es un arreglo
             const promesas = [];
 
             Swal.fire({ title: 'Procesando...', text: 'Actualizando guías de evaluación, por favor espere.', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
@@ -209,7 +209,6 @@ const GestionHabilidades = () => {
                 const habExistente = habilidades.find(h => h.nombre.trim().toLowerCase() === String(nombreHab).trim().toLowerCase());
 
                 if (habExistente) {
-                    // Armamos un payload limpio sin mandar los arreglos relacionales (EVITA ERROR 500)
                     const payload = {
                         nombre: habExistente.nombre,
                         descripcion: habExistente.descripcion,
@@ -223,7 +222,7 @@ const GestionHabilidades = () => {
                         api.put(`/habilidades-blandas/${habExistente.id}`, payload).then(() => actualizadas++)
                     );
                 } else {
-                    noEncontradas++;
+                    nombresNoEncontrados.push(nombreHab); // <-- CAMBIO: Guardamos el nombre
                 }
             }
 
@@ -234,11 +233,27 @@ const GestionHabilidades = () => {
                 setFileRubricasToUpload(null);
                 setFileNameRubricas('');
                 
-                Swal.fire(
-                    '¡Carga Completada!', 
-                    `Se actualizaron ${actualizadas} habilidades. ${noEncontradas > 0 ? `No se encontraron ${noEncontradas} habilidades por tener un nombre diferente.` : ''}`, 
-                    'success'
-                );
+                // <-- CAMBIO: Construimos el mensaje con la lista de nombres
+                let mensajeHtml = `Se actualizaron <b>${actualizadas}</b> rúbricas.`;
+                
+                if (nombresNoEncontrados.length > 0) {
+                    const listaHtml = nombresNoEncontrados.map(n => `<li>• ${n}</li>`).join('');
+                    mensajeHtml += `
+                        <div style="margin-top: 15px; padding: 10px; background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; text-align: left;">
+                            <p style="color: #b91c1c; font-weight: bold; font-size: 14px; margin-bottom: 5px;">No se encontraron (${nombresNoEncontrados.length}):</p>
+                            <ul style="color: #7f1d1d; font-size: 13px; max-height: 120px; overflow-y: auto; padding-left: 10px; margin: 0;">
+                                ${listaHtml}
+                            </ul>
+                        </div>
+                    `;
+                }
+
+                Swal.fire({
+                    title: '¡Carga Completada!', 
+                    html: mensajeHtml, 
+                    icon: actualizadas > 0 ? 'success' : 'warning'
+                });
+
             } catch (error) {
                 console.error(error);
                 Swal.fire('Error', 'Hubo un problema al guardar algunas rúbricas.', 'error');
