@@ -7,7 +7,7 @@ import {
     SparklesIcon, CloudArrowUpIcon, XMarkIcon, DocumentTextIcon,
     LightBulbIcon, ArrowDownTrayIcon, ListBulletIcon,
     ChevronLeftIcon, ChevronRightIcon, ClipboardDocumentListIcon,
-    BriefcaseIcon
+    BriefcaseIcon, DocumentCheckIcon
 } from '@heroicons/react/24/outline';
 
 const GestionHabilidades = () => {
@@ -25,6 +25,17 @@ const GestionHabilidades = () => {
     const [showImportModal, setShowImportModal] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [form, setForm] = useState({ id: null, nombre: '', descripcion: '' });
+
+    // --- ESTADOS DE GUÍAS DE EVALUACIÓN (RÚBRICAS) ---
+    const [showGuiasModal, setShowGuiasModal] = useState(false);
+    const [showRubricaModal, setShowRubricaModal] = useState(false);
+    const [showImportRubricasModal, setShowImportRubricasModal] = useState(false);
+    const [rubricaForm, setRubricaForm] = useState({ 
+        id: null, nombre: '', nivel_1: '', nivel_2: '', nivel_3: '', nivel_4: '', nivel_5: '' 
+    });
+    const [fileRubricasToUpload, setFileRubricasToUpload] = useState(null);
+    const [fileNameRubricas, setFileNameRubricas] = useState('');
+    const fileInputRubricasRef = useRef(null);
 
     // --- ESTADOS PARA ACTIVIDADES GLOBALES ---
     const [showActividadesModal, setShowActividadesModal] = useState(false);
@@ -62,7 +73,6 @@ const GestionHabilidades = () => {
         }
     };
 
-    // --- LÓGICA DE FILTRADO, ORDENAMIENTO Y PAGINACIÓN ---
     const getFilteredAndSortedData = () => {
         let filtered = habilidades.filter(item => 
             item.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
@@ -111,7 +121,7 @@ const GestionHabilidades = () => {
     const handleEliminar = (id) => {
         Swal.fire({
             title: '¿Eliminar habilidad?',
-            text: "Se eliminará del catálogo permanentemente.",
+            text: "Se eliminará permanentemente.",
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#EF4444',
@@ -129,35 +139,129 @@ const GestionHabilidades = () => {
         });
     };
 
+    // --- ACCIONES DE GUÍAS DE EVALUACIÓN (RÚBRICAS) ---
+    const openRubricaModal = (item) => {
+        setRubricaForm({
+            id: item.id,
+            nombre: item.nombre,
+            nivel_1: item.nivel_1 || '',
+            nivel_2: item.nivel_2 || '',
+            nivel_3: item.nivel_3 || '',
+            nivel_4: item.nivel_4 || '',
+            nivel_5: item.nivel_5 || ''
+        });
+        setShowRubricaModal(true);
+    };
+
+    const handleGuardarRubrica = async (e) => {
+        e.preventDefault();
+        try {
+            await api.put(`/habilidades-blandas/${rubricaForm.id}`, rubricaForm);
+            Swal.fire({ title: 'Rúbrica Actualizada', icon: 'success', timer: 1500, showConfirmButton: false });
+            setShowRubricaModal(false);
+            fetchData();
+        } catch (error) {
+            console.error(error);
+            Swal.fire('Error', 'No se pudo guardar la rúbrica.', 'error');
+        }
+    };
+
+    const downloadRubricasTemplate = () => {
+        const data = [{
+            "Nombre Habilidad": "Liderazgo",
+            "Nivel 1": "No asume responsabilidades...",
+            "Nivel 2": "Asume responsabilidades mínimas...",
+            "Nivel 3": "Dirige tareas básicas...",
+            "Nivel 4": "Organiza y motiva al equipo...",
+            "Nivel 5": "Inspira al grupo, toma decisiones efectivas..."
+        }];
+        const worksheet = XLSX.utils.json_to_sheet(data);
+        worksheet['!cols'] = [{wch: 25}, {wch: 40}, {wch: 40}, {wch: 40}, {wch: 40}, {wch: 40}];
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Guias_Evaluacion");
+        XLSX.writeFile(workbook, "Plantilla_Carga_Masiva_Rubricas.xlsx");
+    };
+
+    const handleFileSelectRubricas = (e) => { 
+        const file = e.target.files[0]; 
+        if (file) { setFileRubricasToUpload(file); setFileNameRubricas(file.name); } 
+    };
+
+    const handleExtraerRubricas = async () => {
+        if (!fileRubricasToUpload) return Swal.fire('Atención', 'Seleccione un archivo.', 'warning');
+        
+        const reader = new FileReader();
+        reader.onload = async (evt) => {
+            const bstr = evt.target.result;
+            const wb = XLSX.read(bstr, { type: 'binary' });
+            const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+            
+            let actualizadas = 0;
+            let noEncontradas = 0;
+            const promesas = [];
+
+            Swal.fire({ title: 'Procesando...', text: 'Actualizando guías de evaluación, por favor espere.', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+            for (const row of data) {
+                const nombreHab = row["Nombre Habilidad"] || row["Nombre"] || row["Habilidad"];
+                if (!nombreHab) continue;
+
+                const habExistente = habilidades.find(h => h.nombre.trim().toLowerCase() === String(nombreHab).trim().toLowerCase());
+
+                if (habExistente) {
+                    // Armamos un payload limpio sin mandar los arreglos relacionales (EVITA ERROR 500)
+                    const payload = {
+                        nombre: habExistente.nombre,
+                        descripcion: habExistente.descripcion,
+                        nivel_1: row["Nivel 1"] || habExistente.nivel_1,
+                        nivel_2: row["Nivel 2"] || habExistente.nivel_2,
+                        nivel_3: row["Nivel 3"] || habExistente.nivel_3,
+                        nivel_4: row["Nivel 4"] || habExistente.nivel_4,
+                        nivel_5: row["Nivel 5"] || habExistente.nivel_5,
+                    };
+                    promesas.push(
+                        api.put(`/habilidades-blandas/${habExistente.id}`, payload).then(() => actualizadas++)
+                    );
+                } else {
+                    noEncontradas++;
+                }
+            }
+
+            try {
+                await Promise.all(promesas);
+                fetchData();
+                setShowImportRubricasModal(false);
+                setFileRubricasToUpload(null);
+                setFileNameRubricas('');
+                
+                Swal.fire(
+                    '¡Carga Completada!', 
+                    `Se actualizaron ${actualizadas} habilidades. ${noEncontradas > 0 ? `No se encontraron ${noEncontradas} habilidades por tener un nombre diferente.` : ''}`, 
+                    'success'
+                );
+            } catch (error) {
+                console.error(error);
+                Swal.fire('Error', 'Hubo un problema al guardar algunas rúbricas.', 'error');
+            }
+        };
+        reader.readAsBinaryString(fileRubricasToUpload);
+    };
+
     // --- LÓGICA DE ACTIVIDADES GLOBALES ---
     const openGlobalActivitiesModal = async () => {
         try {
             const res = await api.get('/actividades-globales');
-            if (res.data && res.data.length > 0) {
-                setActividadesGlobales(res.data);
-            } else {
-                setActividadesGlobales(['']);
-            }
+            setActividadesGlobales(res.data?.length ? res.data : ['']);
             setShowActividadesModal(true);
-        } catch (error) {
-            console.error("Error al cargar actividades:", error);
-            setActividadesGlobales(['']);
-            setShowActividadesModal(true);
+        } catch (error) { 
+            setActividadesGlobales(['']); 
+            setShowActividadesModal(true); 
         }
     };
 
-    const handleActividadGlobalChange = (index, value) => {
-        const nuevas = [...actividadesGlobales];
-        nuevas[index] = value;
-        setActividadesGlobales(nuevas);
-    };
-
+    const handleActividadGlobalChange = (index, value) => { const nuevas = [...actividadesGlobales]; nuevas[index] = value; setActividadesGlobales(nuevas); };
     const agregarCampoActividadGlobal = () => setActividadesGlobales(['', ...actividadesGlobales]);
-    
-    const eliminarCampoActividadGlobal = (index) => {
-        const nuevas = actividadesGlobales.filter((_, i) => i !== index);
-        setActividadesGlobales(nuevas.length ? nuevas : ['']);
-    };
+    const eliminarCampoActividadGlobal = (index) => { const nuevas = actividadesGlobales.filter((_, i) => i !== index); setActividadesGlobales(nuevas.length ? nuevas : ['']); };
 
     const handleGuardarActividadesGlobales = async (e) => {
         e.preventDefault();
@@ -186,14 +290,64 @@ const GestionHabilidades = () => {
         try {
             const res = await api.post('/habilidades-blandas/actividades-globales', { actividades: limpias });
             Swal.fire({ title: '¡Éxito!', text: res.data?.message || 'Actividades aplicadas a todas las habilidades.', icon: 'success', timer: 2500, showConfirmButton: false });
-            setShowActividadesModal(false);
+            setShowActividadesModal(false); 
             fetchData();
-        } catch (error) {
-            Swal.fire('Error', 'No se pudieron sincronizar las actividades globales.', 'error');
+        } catch (error) { 
+            Swal.fire('Error', 'No se pudo guardar.', 'error'); 
         }
     };
 
-    // --- LÓGICA DE CARGA MASIVA DE ACTIVIDADES ---
+    // --- LÓGICA DE METODOLOGÍAS GLOBALES ---
+    const openGlobalMetodologiasModal = async () => {
+        try {
+            const res = await api.get('/metodologias-globales');
+            setMetodologiasGlobales(res.data?.length ? res.data : ['']);
+            setShowMetodologiasModal(true);
+        } catch (error) { 
+            setMetodologiasGlobales(['']); 
+            setShowMetodologiasModal(true); 
+        }
+    };
+
+    const handleMetodologiaGlobalChange = (index, value) => { const nuevas = [...metodologiasGlobales]; nuevas[index] = value; setMetodologiasGlobales(nuevas); };
+    const agregarCampoMetodologiaGlobal = () => setMetodologiasGlobales(['', ...metodologiasGlobales]);
+    const eliminarCampoMetodologiaGlobal = (index) => { const nuevas = metodologiasGlobales.filter((_, i) => i !== index); setMetodologiasGlobales(nuevas.length ? nuevas : ['']); };
+
+    const handleGuardarMetodologiasGlobales = async (e) => {
+        e.preventDefault();
+        const limpias = metodologiasGlobales.map(m => m.trim()).filter(m => m !== '');
+        
+        const unicas = new Set();
+        const duplicadas = [];
+        for (const met of limpias) {
+            const metLower = met.toLowerCase();
+            if (unicas.has(metLower)) {
+                duplicadas.push(met);
+            } else {
+                unicas.add(metLower);
+            }
+        }
+
+        if (duplicadas.length > 0) {
+            return Swal.fire({
+                icon: 'warning',
+                title: 'Metodología Duplicada',
+                text: `La metodología "${duplicadas[0]}" ya existe en tu lista. Por favor, elimina el duplicado antes de guardar.`,
+                confirmButtonColor: '#ea580c' 
+            });
+        }
+
+        try {
+            const res = await api.post('/habilidades-blandas/metodologias-globales', { metodologias: limpias });
+            Swal.fire({ title: '¡Éxito!', text: res.data?.message || 'Metodologías aplicadas a todas las habilidades.', icon: 'success', timer: 2500, showConfirmButton: false });
+            setShowMetodologiasModal(false); 
+            fetchData();
+        } catch (error) { 
+            Swal.fire('Error', 'No se pudo guardar.', 'error'); 
+        }
+    };
+
+    // --- MANEJO DE ARCHIVOS DE ACTIVIDADES Y METODOLOGÍAS ---
     const downloadActividadesTemplate = () => {
         const data = [{ Actividad: "Debate grupal sobre el tema" }, { Actividad: "Resolución de casos prácticos" }];
         const worksheet = XLSX.utils.json_to_sheet(data);
@@ -203,11 +357,8 @@ const GestionHabilidades = () => {
         XLSX.writeFile(workbook, "Plantilla_Actividades.xlsx");
     };
 
-    const handleFileSelectActividades = (e) => { 
-        const file = e.target.files[0]; 
-        if (file) { setFileActividadesToUpload(file); setFileNameActividades(file.name); } 
-    };
-
+    const handleFileSelectActividades = (e) => { const file = e.target.files[0]; if (file) { setFileActividadesToUpload(file); setFileNameActividades(file.name); } };
+    
     const handleExtraerActividades = () => {
         if (!fileActividadesToUpload) return Swal.fire('Atención', 'Seleccione un archivo.', 'warning');
 
@@ -258,71 +409,6 @@ const GestionHabilidades = () => {
         reader.readAsBinaryString(fileActividadesToUpload);
     };
 
-    // --- LÓGICA DE METODOLOGÍAS GLOBALES ---
-    const openGlobalMetodologiasModal = async () => {
-        try {
-            const res = await api.get('/metodologias-globales');
-            if (res.data && res.data.length > 0) {
-                setMetodologiasGlobales(res.data);
-            } else {
-                setMetodologiasGlobales(['']);
-            }
-            setShowMetodologiasModal(true);
-        } catch (error) {
-            console.error("Error al cargar metodologías:", error);
-            setMetodologiasGlobales(['']);
-            setShowMetodologiasModal(true);
-        }
-    };
-
-    const handleMetodologiaGlobalChange = (index, value) => {
-        const nuevas = [...metodologiasGlobales];
-        nuevas[index] = value;
-        setMetodologiasGlobales(nuevas);
-    };
-
-    const agregarCampoMetodologiaGlobal = () => setMetodologiasGlobales(['', ...metodologiasGlobales]);
-    
-    const eliminarCampoMetodologiaGlobal = (index) => {
-        const nuevas = metodologiasGlobales.filter((_, i) => i !== index);
-        setMetodologiasGlobales(nuevas.length ? nuevas : ['']);
-    };
-
-    const handleGuardarMetodologiasGlobales = async (e) => {
-        e.preventDefault();
-        const limpias = metodologiasGlobales.map(m => m.trim()).filter(m => m !== '');
-        
-        const unicas = new Set();
-        const duplicadas = [];
-        for (const met of limpias) {
-            const metLower = met.toLowerCase();
-            if (unicas.has(metLower)) {
-                duplicadas.push(met);
-            } else {
-                unicas.add(metLower);
-            }
-        }
-
-        if (duplicadas.length > 0) {
-            return Swal.fire({
-                icon: 'warning',
-                title: 'Metodología Duplicada',
-                text: `La metodología "${duplicadas[0]}" ya existe en tu lista. Por favor, elimina el duplicado antes de guardar.`,
-                confirmButtonColor: '#ea580c' 
-            });
-        }
-
-        try {
-            const res = await api.post('/habilidades-blandas/metodologias-globales', { metodologias: limpias });
-            Swal.fire({ title: '¡Éxito!', text: res.data?.message || 'Metodologías aplicadas a todas las habilidades.', icon: 'success', timer: 2500, showConfirmButton: false });
-            setShowMetodologiasModal(false);
-            fetchData();
-        } catch (error) {
-            Swal.fire('Error', 'No se pudieron sincronizar las metodologías globales.', 'error');
-        }
-    };
-
-    // --- LÓGICA DE CARGA MASIVA DE METODOLOGÍAS ---
     const downloadMetodologiasTemplate = () => {
         const data = [{ Metodologia: "Aprendizaje Basado en Proyectos" }, { Metodologia: "Flipped Classroom" }];
         const worksheet = XLSX.utils.json_to_sheet(data);
@@ -332,10 +418,7 @@ const GestionHabilidades = () => {
         XLSX.writeFile(workbook, "Plantilla_Metodologias.xlsx");
     };
 
-    const handleFileSelectMetodologias = (e) => { 
-        const file = e.target.files[0]; 
-        if (file) { setFileMetodologiasToUpload(file); setFileNameMetodologias(file.name); } 
-    };
+    const handleFileSelectMetodologias = (e) => { const file = e.target.files[0]; if (file) { setFileMetodologiasToUpload(file); setFileNameMetodologias(file.name); } };
 
     const handleExtraerMetodologias = () => {
         if (!fileMetodologiasToUpload) return Swal.fire('Atención', 'Seleccione un archivo.', 'warning');
@@ -452,9 +535,7 @@ const GestionHabilidades = () => {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                     <h2 className="text-2xl font-bold text-gray-900">Catálogo de Habilidades</h2>
-                    <p className="text-gray-500 text-sm mt-1">
-                        Gestión de habilidades blandas, actividades y metodologías.
-                    </p>
+                    <p className="text-gray-500 text-sm mt-1">Gestión de habilidades blandas, actividades, metodologías y guías de evaluación.</p>
                 </div>
                 <div className="flex flex-wrap gap-3">
                     <button onClick={openGlobalMetodologiasModal} className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-4 py-2.5 rounded-lg font-medium shadow-sm transition text-sm">
@@ -462,6 +543,10 @@ const GestionHabilidades = () => {
                     </button>
                     <button onClick={openGlobalActivitiesModal} className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-lg font-medium shadow-sm transition text-sm">
                         <ClipboardDocumentListIcon className="h-5 w-5" /> Actividades Globales
+                    </button>
+                    {/* BOTÓN: GUÍAS DE EVALUACIÓN AHORA EN ROJO */}
+                    <button onClick={() => setShowGuiasModal(true)} className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-lg font-medium shadow-sm transition text-sm">
+                        <DocumentCheckIcon className="h-5 w-5" /> Guías de Evaluación
                     </button>
                     <button onClick={() => setShowImportModal(true)} className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-lg font-medium shadow-sm transition text-sm">
                         <CloudArrowUpIcon className="h-5 w-5" /> Carga Masiva
@@ -476,17 +561,11 @@ const GestionHabilidades = () => {
             <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
                 <div className="relative">
                     <MagnifyingGlassIcon className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-                    <input 
-                        type="text" 
-                        className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-100"
-                        placeholder="Buscar habilidad por nombre o descripción..." 
-                        value={busqueda} 
-                        onChange={(e) => { setBusqueda(e.target.value); setCurrentPage(1); }} 
-                    />
+                    <input type="text" className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-100" placeholder="Buscar habilidad..." value={busqueda} onChange={(e) => { setBusqueda(e.target.value); setCurrentPage(1); }} />
                 </div>
             </div>
 
-            {/* TABLA DE HABILIDADES */}
+            {/* TABLA PRINCIPAL DE HABILIDADES */}
             <div className="flex flex-col flex-1 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="overflow-auto flex-1">
                     <table className="min-w-full divide-y divide-gray-100">
@@ -541,12 +620,193 @@ const GestionHabilidades = () => {
                         Mostrando del <span className="font-bold text-gray-800">{currentItems.length > 0 ? indexOfFirstItem + 1 : 0}</span> al <span className="font-bold text-gray-800">{Math.min(indexOfLastItem, processedData.length)}</span> de <span className="font-bold text-gray-800">{processedData.length}</span> registros
                     </span>
                     <div className="flex items-center gap-2">
-                        <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className={`p-2 rounded-lg border transition ${currentPage === 1 ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-gray-300 text-gray-600 hover:bg-white hover:shadow-sm'}`}><ChevronLeftIcon className="h-4 w-4" /></button>
-                        <span className="text-sm font-medium text-gray-600 px-2">Página {currentPage} de {totalPages || 1}</span>
-                        <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages || totalPages === 0} className={`p-2 rounded-lg border transition ${currentPage === totalPages || totalPages === 0 ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-gray-300 text-gray-600 hover:bg-white hover:shadow-sm'}`}><ChevronRightIcon className="h-4 w-4" /></button>
+                        <button onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1} className="p-2 border rounded-lg hover:bg-white transition"><ChevronLeftIcon className="h-4 w-4" /></button>
+                        <button onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages || totalPages===0} className="p-2 border rounded-lg hover:bg-white transition"><ChevronRightIcon className="h-4 w-4" /></button>
                     </div>
                 </div>
             </div>
+
+            {/* ========================================================================= */}
+            {/* MODAL 1: LISTADO DE GUÍAS DE EVALUACIÓN */}
+            {/* ========================================================================= */}
+            {showGuiasModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm transition-all animate-fade-in">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+                        <div className="px-8 py-6 bg-gradient-to-r from-red-600 to-red-800 flex justify-between items-center shrink-0">
+                            <div>
+                                <h3 className="text-xl font-bold text-white tracking-wide">Gestor de Guías de Evaluación</h3>
+                                <p className="text-red-100 text-sm mt-1">Configura los 5 niveles de calificación para cada habilidad.</p>
+                            </div>
+                            <button onClick={() => setShowGuiasModal(false)} className="p-2 bg-white/10 rounded-full text-white hover:bg-white/20 transition-colors">
+                                <XMarkIcon className="h-6 w-6" />
+                            </button>
+                        </div>
+                        
+                        <div className="p-6 bg-gray-50 border-b border-gray-100 flex justify-between items-center shrink-0">
+                            <h4 className="text-sm font-bold text-gray-700">Habilidades Existentes</h4>
+                            <button 
+                                onClick={() => setShowImportRubricasModal(true)} 
+                                className="flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-700 px-4 py-2 rounded-lg font-bold transition text-xs border border-red-200 shadow-sm"
+                            >
+                                <CloudArrowUpIcon className="h-4 w-4" /> Carga Masiva de Rúbricas
+                            </button>
+                        </div>
+
+                        <div className="overflow-y-auto custom-scrollbar flex-1 p-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {habilidades.map((hab) => {
+                                    const tieneRubrica = hab.nivel_1 && hab.nivel_5; 
+                                    return (
+                                        <div key={hab.id} className="p-4 rounded-xl border border-gray-200 bg-white hover:border-red-300 transition shadow-sm flex flex-col justify-between">
+                                            <div className="flex items-start justify-between gap-2 mb-3">
+                                                <span className="font-bold text-gray-800 text-sm">{hab.nombre}</span>
+                                                {tieneRubrica ? (
+                                                    <span className="bg-green-100 text-green-700 text-[10px] px-2 py-0.5 rounded-full font-bold border border-green-200 whitespace-nowrap">Configurada</span>
+                                                ) : (
+                                                    <span className="bg-amber-100 text-amber-700 text-[10px] px-2 py-0.5 rounded-full font-bold border border-amber-200 whitespace-nowrap">Pendiente</span>
+                                                )}
+                                            </div>
+                                            <button 
+                                                onClick={() => openRubricaModal(hab)} 
+                                                className="w-full py-2 bg-gray-50 hover:bg-red-50 border border-gray-200 hover:border-red-200 rounded-lg text-xs font-bold text-red-600 transition flex items-center justify-center gap-2"
+                                            >
+                                                <PencilSquareIcon className="h-4 w-4"/> Editar 5 Niveles
+                                            </button>
+                                        </div>
+                                    )
+                                })}
+                                {habilidades.length === 0 && (
+                                    <div className="col-span-2 text-center text-gray-400 py-10 text-sm font-medium">
+                                        No hay habilidades creadas aún.
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ========================================================================= */}
+            {/* MODAL 2: EDITAR LOS 5 NIVELES (RÚBRICA INDIVIDUAL) */}
+            {/* ========================================================================= */}
+            {showRubricaModal && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm transition-all animate-fade-in">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col border border-red-100">
+                        <div className="px-8 py-6 bg-red-50 flex justify-between items-center shrink-0 border-b border-red-100">
+                            <div>
+                                <h3 className="text-xl font-bold text-red-900">Editar Rúbrica</h3>
+                                <p className="text-red-600 text-sm font-medium">Habilidad: <span className="font-bold">{rubricaForm.nombre}</span></p>
+                            </div>
+                            <button onClick={() => setShowRubricaModal(false)} className="p-2 bg-red-100 rounded-full text-red-600 hover:bg-red-200 transition-colors">
+                                <XMarkIcon className="h-6 w-6" />
+                            </button>
+                        </div>
+                        <div className="p-8 overflow-y-auto custom-scrollbar">
+                            <form id="rubricaForm" onSubmit={handleGuardarRubrica} className="space-y-5">
+                                {[1, 2, 3, 4, 5].map(nivel => (
+                                    <div key={nivel} className="space-y-1">
+                                        <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                                            <span className={`w-6 h-6 rounded-full text-white flex items-center justify-center text-xs shadow-sm ${nivel === 1 ? 'bg-red-600' : nivel === 2 ? 'bg-orange-500' : nivel === 3 ? 'bg-yellow-500' : nivel === 4 ? 'bg-lime-500' : 'bg-green-700'}`}>
+                                                {nivel}
+                                            </span>
+                                            Criterio Nivel {nivel}
+                                        </label>
+                                        <textarea 
+                                            required 
+                                            placeholder={`Describe qué debe cumplir el estudiante para obtener el nivel ${nivel}...`} 
+                                            rows="2" 
+                                            className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-gray-700 focus:border-red-500 focus:ring-4 focus:ring-red-500/10 transition-all outline-none resize-none shadow-sm"
+                                            value={rubricaForm[`nivel_${nivel}`]} 
+                                            onChange={e => setRubricaForm({...rubricaForm, [`nivel_${nivel}`]: e.target.value})} 
+                                        />
+                                    </div>
+                                ))}
+                            </form>
+                        </div>
+                        <div className="p-6 border-t border-gray-100 flex gap-4 bg-gray-50 shrink-0">
+                            <button type="button" onClick={() => setShowRubricaModal(false)} className="flex-1 px-4 py-3 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-200 transition-all">Regresar</button>
+                            <button type="submit" form="rubricaForm" className="flex-1 px-4 py-3 rounded-xl bg-red-600 text-white font-bold shadow-lg shadow-red-500/30 hover:bg-red-700 transition-all">
+                                Guardar Niveles
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ========================================================================= */}
+            {/* MODAL 3: CARGA MASIVA DE RÚBRICAS DESDE EXCEL */}
+            {/* ========================================================================= */}
+            {showImportRubricasModal && (
+                <div className="fixed inset-0 z-[70] flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 animate-fade-in">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl p-8 relative overflow-hidden flex flex-col max-h-[90vh]">
+                        
+                        <div className="text-center mb-6 shrink-0">
+                            <div className="mx-auto w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mb-4 border border-red-100">
+                                <DocumentCheckIcon className="h-8 w-8 text-red-600" />
+                            </div>
+                            <h3 className="text-2xl font-bold text-gray-900">Importar Rúbricas (5 Niveles)</h3>
+                            <p className="text-sm text-gray-500 mt-1">Sube un Excel para actualizar las guías de evaluación masivamente.</p>
+                        </div>
+
+                        <div className="overflow-y-auto custom-scrollbar flex-1 mb-6 pr-2">
+                            <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 mb-6">
+                                <div className="flex justify-between items-center mb-3">
+                                    <h4 className="text-sm font-bold text-slate-700 uppercase flex items-center gap-2">
+                                        <DocumentTextIcon className="h-5 w-5 text-slate-500"/>
+                                        Formato Requerido
+                                    </h4>
+                                    <button onClick={downloadRubricasTemplate} className="text-xs flex items-center gap-1 text-red-700 hover:text-red-800 font-semibold bg-white px-3 py-1.5 rounded-lg border border-red-200 shadow-sm transition-all hover:shadow-md">
+                                        <ArrowDownTrayIcon className="h-4 w-4" /> Descargar Plantilla
+                                    </button>
+                                </div>
+                                <div className="overflow-x-auto rounded-lg border border-slate-300 shadow-sm bg-white">
+                                    <table className="min-w-full text-xs text-left whitespace-nowrap">
+                                        <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-300">
+                                            <tr>
+                                                <th className="px-3 py-2.5 border-r">Nombre Habilidad</th>
+                                                <th className="px-3 py-2.5 border-r">Nivel 1</th>
+                                                <th className="px-3 py-2.5 border-r">Nivel 2...</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="text-slate-600">
+                                            <tr className="border-b border-slate-100">
+                                                <td className="px-3 py-2.5 border-r font-medium">Liderazgo</td>
+                                                <td className="px-3 py-2.5 border-r italic text-gray-400">Texto nivel 1</td>
+                                                <td className="px-3 py-2.5 border-r italic text-gray-400">Texto nivel 2...</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <p className="text-[11px] text-gray-500 mt-3">
+                                    <span className="text-red-500 font-bold">* Importante:</span> El <span className="font-bold">Nombre Habilidad</span> debe coincidir exactamente con una habilidad ya creada en el sistema. Los niveles se asignarán a esa habilidad, sin importar en cuántas materias se use.
+                                </p>
+                            </div>
+
+                            <div onClick={() => fileInputRubricasRef.current.click()} className="border-2 border-dashed border-red-300 bg-red-50/50 rounded-xl p-8 cursor-pointer hover:bg-red-50 transition-colors group text-center">
+                                <input type="file" ref={fileInputRubricasRef} accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" onChange={handleFileSelectRubricas} className="hidden" />
+                                {fileNameRubricas ? (
+                                    <div className="flex flex-col items-center">
+                                        <DocumentCheckIcon className="h-10 w-10 text-red-600 mb-2" />
+                                        <span className="text-red-800 font-semibold break-all">{fileNameRubricas}</span>
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col items-center">
+                                        <p className="text-red-700 font-bold text-lg">Clic aquí para seleccionar archivo Excel</p>
+                                        <p className="text-sm text-red-600/70 mt-1">Buscaremos coincidencias por nombre</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="flex gap-4 shrink-0 border-t border-gray-100 pt-4">
+                            <button onClick={() => {setShowImportRubricasModal(false); setFileRubricasToUpload(null); setFileNameRubricas('');}} className="flex-1 py-3 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 transition-colors">Cancelar</button>
+                            <button onClick={handleExtraerRubricas} className={`flex-1 py-3 text-white font-bold rounded-xl shadow-lg transition-all ${fileRubricasToUpload ? 'bg-red-600 hover:bg-red-700 shadow-red-500/40 hover:-translate-y-0.5' : 'bg-gray-300 cursor-not-allowed'}`} disabled={!fileRubricasToUpload}>
+                                Procesar Rúbricas
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* --- MODAL CREAR/EDITAR HABILIDAD --- */}
             {showModal && (
@@ -938,6 +1198,7 @@ const GestionHabilidades = () => {
                     </div>
                 </div>
             )}
+
         </div>
     );
 };

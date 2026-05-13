@@ -24,13 +24,23 @@ class HabilidadBlandaController extends Controller
     {
         $request->validate([
             'nombre' => 'required|unique:habilidades_blandas,nombre',
-            'descripcion' => 'nullable|string'
+            'descripcion' => 'nullable|string',
+            'nivel_1' => 'nullable|string',
+            'nivel_2' => 'nullable|string',
+            'nivel_3' => 'nullable|string',
+            'nivel_4' => 'nullable|string',
+            'nivel_5' => 'nullable|string',
         ]);
 
         return DB::transaction(function () use ($request) {
             $habilidad = HabilidadBlanda::create([
                 'nombre' => $this->formatearTexto($request->nombre),
-                'descripcion' => $request->descripcion
+                'descripcion' => $request->descripcion,
+                'nivel_1' => $request->nivel_1,
+                'nivel_2' => $request->nivel_2,
+                'nivel_3' => $request->nivel_3,
+                'nivel_4' => $request->nivel_4,
+                'nivel_5' => $request->nivel_5,
             ]);
 
             // Heredar Actividades Globales
@@ -49,7 +59,7 @@ class HabilidadBlandaController extends Controller
         });
     }
 
-    // 3. ACTUALIZAR (Manual desde Admin)
+    // 3. ACTUALIZAR (Dinámico: Actualiza solo lo que se envía)
     public function update(Request $request, $id)
     {
         $habilidad = HabilidadBlanda::findOrFail($id);
@@ -58,34 +68,53 @@ class HabilidadBlandaController extends Controller
             'nombre' => 'required|unique:habilidades_blandas,nombre,' . $id,
             'descripcion' => 'nullable|string',
             'actividades' => 'nullable|array',
-            'metodologias' => 'nullable|array'
+            'metodologias' => 'nullable|array',
+            'nivel_1' => 'nullable|string',
+            'nivel_2' => 'nullable|string',
+            'nivel_3' => 'nullable|string',
+            'nivel_4' => 'nullable|string',
+            'nivel_5' => 'nullable|string',
         ]);
 
         return DB::transaction(function () use ($request, $habilidad) {
-            $habilidad->update([
+            
+            // 1. Armamos el arreglo solo con los campos que vienen en el request
+            $dataToUpdate = [
                 'nombre' => $this->formatearTexto($request->nombre),
-                'descripcion' => $request->descripcion
-            ]);
+            ];
 
-            // Sincronizar Actividades
-            $habilidad->actividades()->delete();
-            if (!empty($request->actividades)) {
-                $actividadesUnicas = collect($request->actividades)
-                    ->map(fn($t) => trim($t))->filter(fn($t) => $t !== '')
-                    ->unique(fn($t) => strtolower($t))->values();
-                foreach ($actividadesUnicas as $actTexto) {
-                    $habilidad->actividades()->create(['descripcion' => $actTexto]);
+            if ($request->has('descripcion')) $dataToUpdate['descripcion'] = $request->descripcion;
+            if ($request->has('nivel_1')) $dataToUpdate['nivel_1'] = $request->nivel_1;
+            if ($request->has('nivel_2')) $dataToUpdate['nivel_2'] = $request->nivel_2;
+            if ($request->has('nivel_3')) $dataToUpdate['nivel_3'] = $request->nivel_3;
+            if ($request->has('nivel_4')) $dataToUpdate['nivel_4'] = $request->nivel_4;
+            if ($request->has('nivel_5')) $dataToUpdate['nivel_5'] = $request->nivel_5;
+
+            $habilidad->update($dataToUpdate);
+
+            // 2. Sincronizar Actividades SOLO si vienen en el request (protege los datos al guardar rúbricas)
+            if ($request->has('actividades')) {
+                $habilidad->actividades()->delete();
+                if (!empty($request->actividades)) {
+                    $actividadesUnicas = collect($request->actividades)
+                        ->map(fn($t) => trim($t))->filter(fn($t) => $t !== '')
+                        ->unique(fn($t) => strtolower($t))->values();
+                    foreach ($actividadesUnicas as $actTexto) {
+                        $habilidad->actividades()->create(['descripcion' => $actTexto]);
+                    }
                 }
             }
 
-            // Sincronizar Metodologías
-            $habilidad->metodologias()->delete();
-            if (!empty($request->metodologias)) {
-                $metodologiasUnicas = collect($request->metodologias)
-                    ->map(fn($t) => trim($t))->filter(fn($t) => $t !== '')
-                    ->unique(fn($t) => strtolower($t))->values();
-                foreach ($metodologiasUnicas as $metTexto) {
-                    $habilidad->metodologias()->create(['descripcion' => $metTexto]);
+            // 3. Sincronizar Metodologías SOLO si vienen en el request
+            if ($request->has('metodologias')) {
+                $habilidad->metodologias()->delete();
+                if (!empty($request->metodologias)) {
+                    $metodologiasUnicas = collect($request->metodologias)
+                        ->map(fn($t) => trim($t))->filter(fn($t) => $t !== '')
+                        ->unique(fn($t) => strtolower($t))->values();
+                    foreach ($metodologiasUnicas as $metTexto) {
+                        $habilidad->metodologias()->create(['descripcion' => $metTexto]);
+                    }
                 }
             }
 
@@ -223,7 +252,6 @@ class HabilidadBlandaController extends Controller
 
     public function getGlobalActividades()
     {
-        // Obtiene una lista única de todas las actividades guardadas
         $actividades = ActividadHabilidad::select('descripcion')
         ->distinct()
         ->orderBy('descripcion', 'asc')
@@ -234,7 +262,6 @@ class HabilidadBlandaController extends Controller
 
     public function getGlobalMetodologias()
     {
-        // Obtiene una lista única de todas las metodologías guardadas
         $metodologias = MetodologiaHabilidad::select('descripcion')
         ->distinct()
         ->orderBy('descripcion', 'asc')

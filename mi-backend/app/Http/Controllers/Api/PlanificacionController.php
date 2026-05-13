@@ -52,7 +52,8 @@ class PlanificacionController extends Controller
                 ->with(['actividades' => function($query) {
                     $query->orderBy('descripcion', 'asc');
                 }])
-                ->select('id', 'nombre', 'descripcion')
+                // AHORA SÍ ENVIAMOS LOS NIVELES A REACT
+                ->select('id', 'nombre', 'descripcion', 'nivel_1', 'nivel_2', 'nivel_3', 'nivel_4', 'nivel_5')
                 ->orderBy('nombre', 'asc')
                 ->get();
             } else {

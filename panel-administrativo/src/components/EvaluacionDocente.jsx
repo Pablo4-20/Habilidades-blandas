@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../services/api';
 import Swal from 'sweetalert2';
-import { RUBRICAS } from '../data/rubricas'; 
 import CustomSelect from './ui/CustomSelect';
 import { 
     UserGroupIcon, 
@@ -373,18 +372,17 @@ const EvaluacionDocente = () => {
         return baseClass + "bg-white text-gray-300 border-gray-100 hover:border-blue-300 hover:text-blue-500 hover:bg-blue-50";
     };
 
-    const getNombreHabilidadActiva = () => {
-        const hab = habilidadesPlanificadas.find(h => Number(h.id) === Number(habilidadActiva));
-        return hab ? hab.nombre : '';
-    };
-    
-    const normalizeText = (text) => {
-        return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-    };
+    // --- NUEVA LÓGICA DE RÚBRICA DINÁMICA ---
+    const habilidadSeleccionada = habilidadesPlanificadas.find(h => Number(h.id) === Number(habilidadActiva)) || {};
+    const nombreHabilidadActiva = habilidadSeleccionada.nombre || '';
 
-    const nombreHabilidad = getNombreHabilidadActiva();
-    const keyRubrica = Object.keys(RUBRICAS).find(k => normalizeText(k) === normalizeText(nombreHabilidad)) || nombreHabilidad;
-    const rubricaActual = RUBRICAS[keyRubrica] || {};
+    const rubricaActual = {
+        1: habilidadSeleccionada.nivel_1 || "Criterio no configurado por el administrador.",
+        2: habilidadSeleccionada.nivel_2 || "Criterio no configurado por el administrador.",
+        3: habilidadSeleccionada.nivel_3 || "Criterio no configurado por el administrador.",
+        4: habilidadSeleccionada.nivel_4 || "Criterio no configurado por el administrador.",
+        5: habilidadSeleccionada.nivel_5 || "Criterio no configurado por el administrador."
+    };
 
     const handleCambioParcial = (val) => {
         if (val === '2' && !p2Habilitado) {
@@ -490,22 +488,31 @@ const EvaluacionDocente = () => {
                         <>
                             <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 shadow-sm animate-fade-in">
                                 <div className="flex justify-between items-center cursor-pointer" onClick={() => setMostrarRubrica(!mostrarRubrica)}>
-                                    <h4 className="text-sm font-bold text-blue-800 flex items-center gap-2"><InformationCircleIcon className="h-5 w-5"/> Guía de Rúbrica - {getNombreHabilidadActiva()}</h4>
+                                    <h4 className="text-sm font-bold text-blue-800 flex items-center gap-2">
+                                        <InformationCircleIcon className="h-5 w-5"/> Guía de Rúbrica - {nombreHabilidadActiva}
+                                    </h4>
                                     <span className="text-blue-500 text-xs font-semibold bg-white px-2 py-1 rounded border border-blue-200">{mostrarRubrica ? 'Ocultar ▲' : 'Ver Detalles ▼'}</span>
                                 </div>
                                 {mostrarRubrica && (
-                                    <div className="mt-3 grid grid-cols-1 md:grid-cols-5 gap-2 text-[11px] text-blue-900">
-                                            {[1, 2, 3, 4, 5].map(nivel => (
-                                                <div key={nivel} className="flex flex-col gap-1 p-2 bg-white rounded-lg border border-blue-100 shadow-sm hover:shadow-md transition">
-                                                    <div className="flex items-center gap-1.5 border-b border-blue-50 pb-1 mb-1">
-                                                        <span className={`font-bold w-5 h-5 flex items-center justify-center rounded-full text-white text-xs ${nivel === 1 ? 'bg-red-600' : nivel === 2 ? 'bg-orange-500' : nivel === 3 ? 'bg-yellow-500' : nivel === 4 ? 'bg-lime-500' : 'bg-green-700'}`}>{nivel}</span>
-                                                        <span className="font-bold text-blue-700">Nivel {nivel}</span>
-                                                    </div>
-                                                    <p className="leading-tight opacity-90 text-gray-600">{rubricaActual[nivel] || "Criterio estándar."}</p>
-                                                </div>
-                                            ))}
-                                    </div>
-                                )}
+    <div className="mt-3 grid grid-cols-1 md:grid-cols-5 gap-2 text-[11px] text-blue-900 items-stretch">
+            {[1, 2, 3, 4, 5].map(nivel => (
+                <div key={nivel} className="flex flex-col h-full gap-1 p-2.5 bg-white rounded-lg border border-blue-100 shadow-sm hover:shadow-md transition overflow-hidden">
+                    {/* CABECERA DE LA CARTA */}
+                    <div className="flex items-center gap-1.5 border-b border-blue-50 pb-1.5 mb-1 shrink-0">
+                        <span className={`font-bold w-5 h-5 flex items-center justify-center rounded-full text-white text-xs shrink-0 shadow-sm ${nivel === 1 ? 'bg-red-600' : nivel === 2 ? 'bg-orange-500' : nivel === 3 ? 'bg-yellow-500' : nivel === 4 ? 'bg-lime-500' : 'bg-green-700'}`}>{nivel}</span>
+                        <span className="font-bold text-blue-700 truncate">Nivel {nivel}</span>
+                    </div>
+                    
+                    {/* CONTENEDOR DEL TEXTO CON SCROLL */}
+                    <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar max-h-28">
+                        <p className="leading-relaxed opacity-90 text-gray-600 break-words whitespace-pre-wrap">
+                            {rubricaActual[nivel]}
+                        </p>
+                    </div>
+                </div>
+            ))}
+    </div>
+)}
                             </div>
 
                             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col animate-fade-in">

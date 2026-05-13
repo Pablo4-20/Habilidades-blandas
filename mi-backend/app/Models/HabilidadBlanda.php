@@ -14,6 +14,11 @@ class HabilidadBlanda extends Model
     protected $fillable = [
         'nombre',
         'descripcion',
+        'nivel_1',
+        'nivel_2',
+        'nivel_3',
+        'nivel_4',
+        'nivel_5'
     ];
 
     
@@ -31,6 +36,7 @@ class HabilidadBlanda extends Model
             'carrera_id'
         )->withTimestamps();
     }
+    
     public function metodologias()
 {
     return $this->hasMany(MetodologiaHabilidad::class, 'habilidad_blanda_id');
