@@ -21,6 +21,8 @@ use App\Http\Controllers\Api\NewPasswordController;
 use App\Http\Controllers\Api\CatalogoController;
 use App\Http\Controllers\Api\MatriculaController;
 use App\Http\Controllers\Api\ReporteGeneralController;
+use App\Http\Controllers\Api\FacultadController;
+use App\Http\Controllers\Api\CarreraController; // Asegúrate de importarlo aquí
 
 // 1. LOGIN (Público)
 Route::post('/login', [AuthController::class, 'login']);
@@ -39,7 +41,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', function (Request $request) { return $request->user(); });
     Route::post('/change-initial-password', [AuthController::class, 'changeInitialPassword']);
     Route::post('/email/resend', [VerificationController::class, 'resend']);
-    Route::post('/change-password', [App\Http\Controllers\Api\AuthController::class, 'changePassword']);
+    Route::post('/change-password', [AuthController::class, 'changePassword']);
 
     // --- DASHBOARD ---
     Route::get('/dashboard/stats', [DashboardController::class, 'index']);
@@ -58,11 +60,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/periodos/{id}', [PeriodoAcademicoController::class, 'destroy']);
     Route::get('/periodos/activos', [PeriodoAcademicoController::class, 'activos']);
 
-    // Carreras
-    Route::apiResource('/gestion-carreras', \App\Http\Controllers\Api\CarreraController::class);
-    // NUEVA RUTA: Asignar habilidades a una carrera específica
-    Route::post('/gestion-carreras/{id}/habilidades', [\App\Http\Controllers\Api\CarreraController::class, 'asignarHabilidades']);
+    // Facultades y Extensiones (NUEVO)
+    Route::apiResource('/facultades', FacultadController::class);
+    Route::post('/carreras/asignar-facultad', [CarreraController::class, 'asignarFacultad']);
 
+    // Carreras
+    Route::apiResource('/gestion-carreras', CarreraController::class);
+    Route::post('/gestion-carreras/{id}/habilidades', [CarreraController::class, 'asignarHabilidades']);
+    Route::post('/gestion-carreras/{id}/desvincular', [CarreraController::class, 'desvincularFacultad']);
     // Usuarios
     Route::apiResource('/users', UserController::class);
     Route::post('/users/import', [UserController::class, 'import']);
@@ -78,10 +83,11 @@ Route::middleware('auth:sanctum')->group(function () {
     // Habilidades Blandas
     Route::apiResource('habilidades-blandas', HabilidadBlandaController::class);
     Route::post('/habilidades-blandas/import', [HabilidadBlandaController::class, 'import']);
-    Route::post('/habilidades-blandas/actividades-globales', [App\Http\Controllers\Api\HabilidadBlandaController::class, 'syncGlobalActivities']);
+    Route::post('/habilidades-blandas/actividades-globales', [HabilidadBlandaController::class, 'syncGlobalActivities']);
     Route::post('/habilidades-blandas/metodologias-globales', [HabilidadBlandaController::class, 'syncGlobalMetodologias']);
-    Route::get('/actividades-globales', [App\Http\Controllers\Api\HabilidadBlandaController::class, 'getGlobalActividades']);
-Route::get('/metodologias-globales', [App\Http\Controllers\Api\HabilidadBlandaController::class, 'getGlobalMetodologias']);
+    Route::get('/actividades-globales', [HabilidadBlandaController::class, 'getGlobalActividades']);
+    Route::get('/metodologias-globales', [HabilidadBlandaController::class, 'getGlobalMetodologias']);
+    
     // --- COORDINADOR ---
     Route::get('/reportes/filtros', [CoordinadorController::class, 'filtrosReporte']);
     Route::get('/reportes/general', [CoordinadorController::class, 'reporteGeneral']);
@@ -93,32 +99,24 @@ Route::get('/metodologias-globales', [App\Http\Controllers\Api\HabilidadBlandaCo
     Route::post('/matriculas/import', [MatriculaController::class, 'import']);
 
     // --- DOCENTE ---
-    // Cursos y Listados
     Route::get('/docente/mis-cursos', [DocenteController::class, 'misCursos']);
-    
-    // [MODIFICADO] Ahora acepta el paralelo en la URL
     Route::get('/docente/curso/{asignaturaId}/{paralelo}/estudiantes', [DocenteController::class, 'misEstudiantes']);
-    
     Route::get('/docente/asignaturas', [DocenteController::class, 'misAsignaturas']); 
     Route::get('/docente/estudiantes/{asignatura}', [DocenteController::class, 'verEstudiantes']); 
     Route::get('/docente/habilidades/{asignatura}', [DocenteController::class, 'misHabilidades']);
     
-    // Gestión Manual de Estudiantes (Arrastres y Bajas)
     Route::post('/docente/agregar-estudiante', [DocenteController::class, 'agregarEstudianteManual']);
     Route::post('/docente/eliminar-estudiante', [DocenteController::class, 'eliminarEstudiante']);
 
-    // Planificación
     Route::get('/planificaciones/verificar/{asignatura_id}', [PlanificacionController::class, 'verificar']);
     Route::post('/planificaciones', [PlanificacionController::class, 'store']);
    
-    // Evaluación y Calificación
     Route::post('/docente/rubrica', [DocenteController::class, 'rubrica']);
     Route::post('/docente/guardar-notas', [DocenteController::class, 'guardarNotas']);
     Route::get('/docente/progreso', [DocenteController::class, 'verificarProgreso']); 
 
-    // Reportes Docente
+    // Reportes
     Route::post('/reportes/generar', [ReporteController::class, 'generar']);
-    
     Route::get('/reportes/general-coordinador', [ReporteGeneralController::class, 'index']);
     Route::post('/reportes/pdf-data', [ReporteController::class, 'datosParaPdf']); 
     Route::post('/reportes/pdf-data-general', [ReporteController::class, 'pdfDataGeneral']);
@@ -126,18 +124,12 @@ Route::get('/metodologias-globales', [App\Http\Controllers\Api\HabilidadBlandaCo
     Route::post('/fichas/datos', [ReporteController::class, 'obtenerFichaResumen']);
     Route::post('/reportes/promedio-habilidad', [ReporteGeneralController::class, 'getPromedioPorHabilidad']);
     Route::post('/reportes/estado-habilidades', [ReporteGeneralController::class, 'getEstadoHabilidades']);
-
-   
 });
 
- Route::get('/archivo-publico', function (\Illuminate\Http\Request $request) {
-    // Decodificamos la URL por si React envía %2F en lugar de /
+Route::get('/archivo-publico', function (\Illuminate\Http\Request $request) {
     $path = trim(urldecode($request->query('path')));
-    
-    // Usamos el motor nativo de Storage de Laravel que no falla con las rutas
     if ($path && \Illuminate\Support\Facades\Storage::disk('public')->exists($path)) {
         return \Illuminate\Support\Facades\Storage::disk('public')->response($path);
     }
-    
     return response()->json(['error' => 'Archivo fisico no encontrado: ' . $path], 404);
 });
