@@ -20,10 +20,12 @@ const GestionCarreras = () => {
     // --- ESTADOS DE FORMULARIOS ---
     const [isEditing, setIsEditing] = useState(false);
     
-    // Formulario Facultad
+    // Formulario Facultad (AHORA CON LOGO)
     const [facId, setFacId] = useState(null);
     const [facNombre, setFacNombre] = useState('');
     const [facTipo, setFacTipo] = useState('Facultad');
+    const [facLogoFile, setFacLogoFile] = useState(null);
+    const [facLogoPreview, setFacLogoPreview] = useState(null);
 
     // Formulario Carrera
     const [carId, setCarId] = useState(null);
@@ -61,23 +63,33 @@ const GestionCarreras = () => {
             setFacId(fac.id);
             setFacNombre(fac.nombre);
             setFacTipo(fac.tipo);
+            setFacLogoFile(null);
+            setFacLogoPreview(fac.logo ? `${backendUrl}/storage/${fac.logo}` : null);
         } else {
             setIsEditing(false);
             setFacId(null);
             setFacNombre('');
             setFacTipo('Facultad');
+            setFacLogoFile(null);
+            setFacLogoPreview(null);
         }
         setModalFacultadAbierto(true);
     };
 
     const submitFacultad = async (e) => {
         e.preventDefault();
+        const formData = new FormData();
+        formData.append('nombre', facNombre);
+        formData.append('tipo', facTipo);
+        if (facLogoFile) formData.append('logo', facLogoFile);
+
         try {
             if (isEditing) {
-                await api.put(`/facultades/${facId}`, { nombre: facNombre, tipo: facTipo });
+                formData.append('_method', 'PUT');
+                await api.post(`/facultades/${facId}`, formData, { headers: { 'Content-Type': 'multipart/form-data' }});
                 Swal.fire('Actualizado', 'La Facultad fue actualizada.', 'success');
             } else {
-                await api.post('/facultades', { nombre: facNombre, tipo: facTipo });
+                await api.post('/facultades', formData, { headers: { 'Content-Type': 'multipart/form-data' }});
                 Swal.fire('Creado', 'La Facultad fue creada.', 'success');
             }
             setModalFacultadAbierto(false);
@@ -248,7 +260,7 @@ const GestionCarreras = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                     {facultades.map((fac) => (
                         <div key={fac.id} className="bg-white shadow rounded-xl p-6 relative group border-t-4 border-blue-500 hover:shadow-lg transition-all">
-                            <div className="absolute top-3 right-3 flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="absolute top-3 right-3 flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                                 <button onClick={(e) => { e.stopPropagation(); abrirModalFacultad(fac); }} className="text-gray-400 hover:text-blue-600 bg-blue-50 p-1.5 rounded-md transition-colors">
                                     <PencilSquareIcon className="h-5 w-5" />
                                 </button>
@@ -258,11 +270,21 @@ const GestionCarreras = () => {
                             </div>
                             
                             <div 
-                                className="cursor-pointer mt-2 flex flex-col items-center justify-center text-center"
+                                className="cursor-pointer mt-2 flex flex-col items-center justify-center text-center relative"
                                 onClick={() => { setFacultadActiva(fac); setVistaActual('carreras'); }}
                             >
+                                {/* MUESTRA EL LOGO DE LA FACULTAD SI EXISTE */}
+                                {fac.logo ? (
+                                    <div className="w-16 h-16 mb-3 rounded-full border border-gray-200 overflow-hidden bg-white flex items-center justify-center shadow-sm">
+                                        <img src={`${backendUrl}/storage/${fac.logo}`} alt={fac.nombre} className="max-w-full max-h-full object-contain p-1" />
+                                    </div>
+                                ) : (
+                                    <div className="w-16 h-16 mb-3 rounded-full bg-blue-50 flex items-center justify-center shadow-sm">
+                                        <PhotoIcon className="h-8 w-8 text-blue-300" />
+                                    </div>
+                                )}
                                 <span className="text-xs font-semibold uppercase text-gray-500 tracking-wider mb-2">{fac.tipo}</span>
-                                <h3 className="text-lg font-bold text-gray-800">{fac.nombre}</h3>
+                                <h3 className="text-lg font-bold text-gray-800 line-clamp-2">{fac.nombre}</h3>
                                 <p className="text-sm text-gray-500 mt-3 bg-gray-50 px-3 py-1 rounded-full">{fac.carreras?.length || 0} Carreras registradas</p>
                             </div>
                         </div>
@@ -383,6 +405,49 @@ const GestionCarreras = () => {
                                         <option value="Facultad">Facultad</option>
                                         <option value="Extensión">Extensión Universitaria</option>
                                     </select>
+                                </div>
+                                {/* SUBIDA DE LOGO DE FACULTAD */}
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">Logo de la Facultad</label>
+                                    <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-xl hover:border-blue-400 hover:bg-blue-50/50 transition-all bg-gray-50 group relative">
+                                        <div className="space-y-1 text-center">
+                                            {facLogoPreview ? (
+                                                <div className="relative mx-auto h-24 w-24 mb-4">
+                                                    <img src={facLogoPreview} alt="Preview" className="h-full w-full object-contain rounded-lg shadow-sm bg-white p-1" />
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={(e) => { e.preventDefault(); setFacLogoFile(null); setFacLogoPreview(null); }} 
+                                                        className="absolute -top-2 -right-2 bg-red-100 text-red-600 rounded-full p-1 hover:bg-red-200 transition-colors shadow-sm"
+                                                    >
+                                                        <XMarkIcon className="h-4 w-4" />
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <PhotoIcon className="mx-auto h-12 w-12 text-gray-400 group-hover:text-blue-500 transition-colors" aria-hidden="true" />
+                                            )}
+                                            
+                                            <div className="flex text-sm text-gray-600 justify-center">
+                                                <label htmlFor="fac-file-upload" className="relative cursor-pointer rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
+                                                    <span>Seleccionar un archivo</span>
+                                                    <input 
+                                                        id="fac-file-upload" 
+                                                        name="fac-file-upload" 
+                                                        type="file" 
+                                                        className="sr-only" 
+                                                        accept="image/*" 
+                                                        onChange={(e) => {
+                                                            if(e.target.files[0]) {
+                                                                setFacLogoFile(e.target.files[0]);
+                                                                setFacLogoPreview(URL.createObjectURL(e.target.files[0]));
+                                                            }
+                                                        }} 
+                                                    />
+                                                </label>
+                                                <p className="pl-1">o arrastrar aquí</p>
+                                            </div>
+                                            <p className="text-xs text-gray-500">PNG, JPG, GIF hasta 2MB</p>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                             <div className="bg-gray-50 border-t border-gray-100 px-6 py-4 flex justify-end gap-3">

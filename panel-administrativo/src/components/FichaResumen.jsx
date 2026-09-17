@@ -48,7 +48,6 @@ const FichaResumen = () => {
     const [selectedPeriodo, setSelectedPeriodo] = useState('');
     const [selectedCarrera, setSelectedCarrera] = useState('Todas'); 
     
-    // --- EL PARCIAL AHORA INICIA EN 1 POR DEFECTO ---
     const [selectedParcialActa, setSelectedParcialActa] = useState('1');
 
     const [loadingGeneral, setLoadingGeneral] = useState(false);
@@ -137,17 +136,20 @@ const FichaResumen = () => {
                 hour: '2-digit', minute: '2-digit'
             });
 
+            // CARGAR LOGOS DINÁMICOS
             const logoDerecha = await obtenerLogoCarrera(info.carrera, info.logo);
+            const logoIzquierda = await obtenerLogoCarrera(info.facultad, info.logo_facultad);
 
             const imgW = 20; const imgH = 20; 
-            try { doc.addImage(logoIzq, 'PNG', 10, 5, imgW, imgH); } catch (e) {}
+            try { doc.addImage(logoIzquierda, 'PNG', 10, 5, imgW, imgH); } catch (e) {}
             try { doc.addImage(logoDerecha, 'PNG', pageWidth - 30, 5, imgW, imgH); } catch (e) {}
 
             doc.setFontSize(14); doc.setTextColor(40, 53, 147);
             doc.text("UNIVERSIDAD ESTATAL DE BOLIVAR", pageWidth / 2, 12, { align: "center" });
             
             doc.setFontSize(10); doc.setTextColor(80);
-            doc.text("FACULTAD DE CIENCIAS ADMINISTRATIVAS, GESTIÓN EMPRESARIAL E INFORMÁTICA", pageWidth / 2, 19, { align: "center", maxWidth: pageWidth - 70 });
+            const nombreFacultad = info.facultad ? info.facultad.toUpperCase() : "FACULTAD NO ASIGNADA";
+            doc.text(nombreFacultad, pageWidth / 2, 19, { align: "center", maxWidth: pageWidth - 70 });
             
             doc.setTextColor(0); doc.setFont("helvetica", "bold");
             doc.text("ANEXO 1: FICHA RESUMEN DE EJECUCIÓN", pageWidth / 2, 28, { align: "center" });
@@ -219,7 +221,7 @@ const FichaResumen = () => {
     };
 
     // ------------------------------------------------------------------------
-    // OPCIÓN 2: ACTAS INDIVIDUALES (AHORA CON FILTRO DE PARCIAL)
+    // OPCIÓN 2: ACTAS INDIVIDUALES 
     // ------------------------------------------------------------------------
     const descargarActasIndividuales = async () => {
         if (!selectedMateriaId || !selectedPeriodo || !selectedParalelo) return Swal.fire('Error', 'Selecciona una materia.', 'warning');
@@ -245,19 +247,22 @@ const FichaResumen = () => {
                 hour: '2-digit', minute: '2-digit'
             });
 
+            // CARGAR LOGOS DINÁMICOS
             const logoDerecha = await obtenerLogoCarrera(info.carrera, info.logo);
+            const logoIzquierda = await obtenerLogoCarrera(info.facultad, info.logo_facultad);
 
             const drawHeader = (doc) => {
                 const imgW = 20; const imgH = 20; 
 
-                try { doc.addImage(logoIzq, 'PNG', 10, 8, imgW, imgH); } catch (e) {}
+                try { doc.addImage(logoIzquierda, 'PNG', 10, 8, imgW, imgH); } catch (e) {}
                 try { doc.addImage(logoDerecha, 'PNG', pageWidth - 30, 8, imgW, imgH); } catch (e) {}
 
                 doc.setFontSize(13); doc.setTextColor(40, 53, 147); 
                 doc.text("UNIVERSIDAD ESTATAL DE BOLIVAR", pageWidth/2, 15, { align: "center" });
                 
                 doc.setFontSize(9); doc.setTextColor(80);
-                doc.text("FACULTAD DE CIENCIAS ADMINISTRATIVAS, GESTIÓN EMPRESARIAL E INFORMÁTICA", pageWidth/2, 22, { align: "center", maxWidth: pageWidth - 70 }); 
+                const nombreFacultad = info.facultad ? info.facultad.toUpperCase() : "FACULTAD NO ASIGNADA";
+                doc.text(nombreFacultad, pageWidth/2, 22, { align: "center", maxWidth: pageWidth - 70 }); 
                 
                 doc.setTextColor(0);
             };
@@ -315,31 +320,24 @@ const FichaResumen = () => {
                     const extraHeightHab = (habilidadLines.length - 1) * 5;
                     y += 10 + extraHeightHab; 
 
-                    // --- CAMPOS EN LÍNEA (MODIFICADO) ---
                     const drawLineField = (label, text, currentY) => {
                         doc.setFont("helvetica", "bold");
                         doc.text(label, xLabelL, currentY);
                         
-                        // Calculamos el ancho exacto del texto en negrita
                         const labelWidth = doc.getTextWidth(label);
 
                         doc.setFont("helvetica", "normal");
                         const content = text || 'No definido';
                         
-                        // Cortamos el texto para que no se salga de la página respetando el margen
                         const lines = doc.splitTextToSize(content, 180 - labelWidth);
-                        
-                        // Imprimimos el contenido de frente, usando el ancho calculado
                         doc.text(lines, xLabelL + labelWidth + 2, currentY);
                         
-                        // Devolvemos el Y actualizado (Y actual + el alto que ocuparon las líneas + margen)
                         return currentY + (lines.length * 5) + 2;
                     };
 
                     y = drawLineField("Resultado de Aprendizaje: ", rep.resultado_aprendizaje, y);
                     y = drawLineField("Metodología a aplicar: ", rep.metodologia, y);
                     y = drawLineField("Actividades: ", rep.actividades, y);
-                    // ------------------------------------
 
                     const body = ests.map((e) => [e.nombre, e.n1, e.n2, e.n3, e.n4, e.n5]);
 

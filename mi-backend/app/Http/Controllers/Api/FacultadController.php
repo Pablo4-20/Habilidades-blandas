@@ -5,54 +5,65 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Facultad;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class FacultadController extends Controller
 {
     public function index()
     {
-        // Traemos las facultades con sus carreras asociadas
-        $facultades = Facultad::with('carreras')->get();
-        return response()->json($facultades);
+        return response()->json(Facultad::with('carreras')->get());
     }
 
     public function store(Request $request)
     {
         $request->validate([
-            'nombre' => 'required|string|max:255',
-            'tipo' => 'required|in:Facultad,Extensión'
+            // Corregido: "facultades" en lugar de "facultads"
+            'nombre' => 'required|string|unique:facultades', 
+            'tipo' => 'required|string',
+            'logo' => 'nullable|image|max:2048'
         ]);
 
-        $facultad = Facultad::create($request->all());
-        return response()->json($facultad, 201);
-    }
+        $data = $request->only(['nombre', 'tipo']);
 
-    public function show($id)
-    {
-        $facultad = Facultad::with('carreras')->findOrFail($id);
-        return response()->json($facultad);
+        if ($request->hasFile('logo')) {
+            $data['logo'] = $request->file('logo')->store('logos_facultades', 'public');
+        }
+
+        return response()->json(Facultad::create($data), 201);
     }
 
     public function update(Request $request, $id)
     {
+        $facultad = Facultad::findOrFail($id);
+
         $request->validate([
-            'nombre' => 'required|string|max:255',
-            'tipo' => 'required|in:Facultad,Extensión'
+            // Corregido: "facultades" en lugar de "facultads"
+            'nombre' => 'required|string|unique:facultades,nombre,' . $id, 
+            'tipo' => 'required|string',
+            'logo' => 'nullable|image|max:2048'
         ]);
 
-        $facultad = Facultad::findOrFail($id);
-        $facultad->update($request->all());
+        $facultad->nombre = $request->nombre;
+        $facultad->tipo = $request->tipo;
 
+        if ($request->hasFile('logo')) {
+            if ($facultad->logo) {
+                Storage::disk('public')->delete($facultad->logo);
+            }
+            $facultad->logo = $request->file('logo')->store('logos_facultades', 'public');
+        }
+
+        $facultad->save();
         return response()->json($facultad);
     }
 
     public function destroy($id)
     {
         $facultad = Facultad::findOrFail($id);
-        
-        // Al eliminar, las carreras asociadas pondrán su facultad_id en null 
-        // gracias a "nullOnDelete()" que configuramos en la migración.
+        if ($facultad->logo) {
+            Storage::disk('public')->delete($facultad->logo);
+        }
         $facultad->delete();
-        
-        return response()->json(['message' => 'Eliminado correctamente']);
+        return response()->json(['message' => 'Eliminado']);
     }
 }

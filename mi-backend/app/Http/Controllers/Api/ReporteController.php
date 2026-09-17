@@ -20,18 +20,17 @@ class ReporteController extends Controller
 {
     private function _getEstudiantes($asignaturaId, $periodoId, $paralelo = null)
     {
-        $asignatura = Asignatura::with(['carrera', 'ciclo'])->find($asignaturaId);
+        // Traemos también la facultad asociada a la carrera
+        $asignatura = Asignatura::with(['carrera.facultad', 'ciclo'])->find($asignaturaId);
         if (!$asignatura) return collect();
 
         // 1. OBTENER ESTUDIANTES DIRECTOS (Inscritos por el docente)
         $estudiantesDirectos = DetalleMatricula::where('asignatura_id', $asignaturaId)
             ->where('estado_materia', '!=', 'Baja')
-            // EL CAMBIO CLAVE: Filtramos por el paralelo de la MATERIA, no el base.
             ->when($paralelo, function($q) use ($paralelo) {
                 return $q->where('paralelo', $paralelo); 
             })
             ->whereHas('matricula', function($q) use ($periodoId) {
-                // Aquí quitamos la restricción de paralelo base
                 $q->where('periodo_id', $periodoId)->where('estado', 'Activo');
             })
             ->with(['matricula.estudiante'])
@@ -39,7 +38,7 @@ class ReporteController extends Controller
             ->map(fn($d) => optional($d->matricula)->estudiante)
             ->filter();
 
-        // 2. IDENTIFICAR QUIÉNES YA ESTÁN EN LA MATERIA (En cualquier paralelo)
+        // 2. IDENTIFICAR QUIÉNES YA ESTÁN EN LA MATERIA
         $idsEstudiantesYaAsignados = DetalleMatricula::where('asignatura_id', $asignaturaId)
             ->whereHas('matricula', fn($q) => $q->where('periodo_id', $periodoId))
             ->join('matriculas', 'detalle_matriculas.matricula_id', '=', 'matriculas.id')
@@ -87,7 +86,7 @@ class ReporteController extends Controller
     }
 
     // ----------------------------------------------------
-    // ACTAS DE CALIFICACIONES (MODIFICADO PARA FILTRAR PARCIAL)
+    // ACTAS DE CALIFICACIONES
     // ----------------------------------------------------
     public function datosParaPdf(Request $request)
     {
@@ -95,7 +94,7 @@ class ReporteController extends Controller
             'asignatura_id' => 'required', 
             'periodo' => 'required',
             'paralelo' => 'required',
-            'parcial' => 'nullable|in:1,2,anual' // NUEVA VALIDACIÓN
+            'parcial' => 'nullable|in:1,2,anual'
         ]);
         
         $user = $request->user();
@@ -106,14 +105,13 @@ class ReporteController extends Controller
         $estudiantes = $this->_getEstudiantes($request->asignatura_id, $periodoObj->id, $request->paralelo);
         $idsEstudiantes = $estudiantes->pluck('id');
 
-        // Construir la consulta de Planificaciones
-        $queryPlanes = Planificacion::with(['asignatura', 'docente', 'detalles.habilidad'])
+        // Construir la consulta con carrera y facultad
+        $queryPlanes = Planificacion::with(['asignatura.carrera.facultad', 'docente', 'detalles.habilidad'])
             ->where('asignatura_id', $request->asignatura_id)
             ->where('docente_id', $user->id)
             ->where('periodo_academico', $request->periodo)
             ->where('paralelo', $request->paralelo);
 
-        // APLICAR EL FILTRO DE PARCIAL SI ES ENVIADO Y NO ES 'anual'
         if ($request->has('parcial') && in_array($request->parcial, ['1', '2'])) {
             $queryPlanes->where('parcial', $request->parcial);
         }
@@ -124,15 +122,18 @@ class ReporteController extends Controller
             return response()->json(['message' => 'No hay planificaciones para este paralelo/parcial.'], 404);
         }
 
-        $nombreCiclo = $planes[0]->asignatura->ciclo->nombre ?? 'N/A';
+        $asignaturaObj = $planes[0]->asignatura;
+        $nombreCiclo = $asignaturaObj->ciclo->nombre ?? 'N/A';
         $cicloNumerico = $this->_convertirCiclo($nombreCiclo);
 
+        // Dinamizamos la facultad y carrera
         $infoGeneral = [
-            'facultad' => 'CIENCIAS ADMINISTRATIVAS, GESTIÓN EMPRESARIAL E INFORMÁTICA',
-            'carrera' => $planes[0]->asignatura->carrera->nombre ?? 'N/A',
-            'logo' => $planes[0]->asignatura->carrera->logo ?? null,
+            'facultad' => $asignaturaObj->carrera && $asignaturaObj->carrera->facultad ? $asignaturaObj->carrera->facultad->nombre : 'Sin Asignar',
+            'logo_facultad' => $asignaturaObj->carrera && $asignaturaObj->carrera->facultad ? $asignaturaObj->carrera->facultad->logo : null, // <- LOGO DINÁMICO
+            'carrera' => $asignaturaObj->carrera->nombre ?? 'N/A',
+            'logo' => $asignaturaObj->carrera->logo ?? null,
             'docente' => $user->nombres . ' ' . $user->apellidos,
-            'asignatura' => $planes[0]->asignatura->nombre,
+            'asignatura' => $asignaturaObj->nombre,
             'paralelo' => $request->paralelo,
             'ciclo' => $cicloNumerico, 
             'periodo' => $request->periodo,
@@ -201,7 +202,8 @@ class ReporteController extends Controller
         $periodoObj = PeriodoAcademico::where('nombre', $request->periodo)->first();
         if (!$periodoObj) return response()->json(['message' => 'Periodo no encontrado'], 404);
 
-        $query = Asignacion::with(['asignatura.carrera', 'asignatura.ciclo', 'docente'])
+        // Agregamos carrera.facultad
+        $query = Asignacion::with(['asignatura.carrera.facultad', 'asignatura.ciclo', 'docente'])
             ->where('periodo', $request->periodo);
 
         if (!$request->es_coordinador) {
@@ -215,14 +217,14 @@ class ReporteController extends Controller
             $query->whereHas('asignatura.carrera', function($q) use ($user) {
                 $q->where('id', $user->carrera_id);
             });
-            $carreraObj = Carrera::find($user->carrera_id);
+            $carreraObj = Carrera::with('facultad')->find($user->carrera_id);
             $nombreCarreraReporte = $carreraObj ? $carreraObj->nombre : 'Tu Carrera';
         } elseif ($request->has('carrera') && $request->carrera !== 'Todas') {
             $nombre = $request->carrera;
             $query->whereHas('asignatura.carrera', function($q) use ($nombre) {
                 $q->where('nombre', $nombre);
             });
-            $carreraObj = Carrera::where('nombre', $nombre)->first(); 
+            $carreraObj = Carrera::with('facultad')->where('nombre', $nombre)->first(); 
             $nombreCarreraReporte = $nombre;
         }
 
@@ -315,6 +317,8 @@ class ReporteController extends Controller
         })->values();
 
         $info = [
+            'facultad' => $carreraObj && $carreraObj->facultad ? $carreraObj->facultad->nombre : 'Sin Asignar',
+            'logo_facultad' => $carreraObj && $carreraObj->facultad ? $carreraObj->facultad->logo : null, // <- LOGO DINÁMICO
             'carrera' => $nombreCarreraReporte,
             'logo' => $carreraObj ? $carreraObj->logo : null, 
             'periodo' => $request->periodo,
@@ -379,7 +383,7 @@ class ReporteController extends Controller
         if (!$periodoObj) return response()->json(['message' => 'Periodo no encontrado'], 404);
 
         $estudiantes = $this->_getEstudiantes($request->asignatura_id, $periodoObj->id, $request->paralelo);
-        $asignatura = Asignatura::with(['carrera', 'ciclo'])->find($request->asignatura_id);
+        $asignatura = Asignatura::with(['carrera.facultad', 'ciclo'])->find($request->asignatura_id);
         
         $planes = Planificacion::with(['detalles.habilidad'])
             ->where('asignatura_id', $request->asignatura_id)
@@ -445,6 +449,8 @@ class ReporteController extends Controller
                 'docente' => $user->nombres . ' ' . $user->apellidos,
                 'materia' => $asignatura->nombre,
                 'paralelo' => $request->paralelo,
+                'facultad' => $asignatura->carrera && $asignatura->carrera->facultad ? $asignatura->carrera->facultad->nombre : 'Sin Asignar',
+                'logo_facultad' => $asignatura->carrera && $asignatura->carrera->facultad ? $asignatura->carrera->facultad->logo : null, // <- LOGO DINÁMICO
                 'carrera' => $asignatura->carrera->nombre ?? 'N/A',
                 'logo' => $asignatura->carrera->logo ?? null, 
                 'ciclo' => $asignatura->ciclo->nombre ?? 'N/A',

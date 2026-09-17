@@ -145,9 +145,15 @@ const ReportesCoordinador = () => {
             try { doc.addImage(logoDerechoBase64, 'PNG', pageWidth - 40, 5, imgW, imgH); } catch (e) {}
 
             doc.setFontSize(14); doc.setTextColor(40, 53, 147);
-            doc.text("UNIVERSIDAD ESTATAL DE BOLIVAR", pageWidth / 2, 15, { align: "center" });
+            doc.text("UNIVERSIDAD ESTATAL DE BOLIVAR", pageWidth / 2, 12, { align: "center" });
+            
+            doc.setFontSize(9); doc.setTextColor(80);
+            const nombreFacultad = reporteInfo?.facultad ? reporteInfo.facultad.toUpperCase() : "FACULTAD NO ASIGNADA";
+            doc.text(nombreFacultad, pageWidth / 2, 18, { align: "center", maxWidth: pageWidth - 70 });
+
             doc.setFontSize(10); doc.setTextColor(0);
             doc.text("REPORTE DE CUMPLIMIENTO - HABILIDADES BLANDAS", pageWidth / 2, 25, { align: "center" });
+            
             doc.setFontSize(9); doc.setTextColor(100);
             doc.text(`Periodo: ${filtroPeriodo} | Carrera: ${nombreCarrera}`, pageWidth / 2, 32, { align: "center" });
         };

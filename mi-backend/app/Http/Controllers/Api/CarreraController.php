@@ -20,12 +20,11 @@ class CarreraController extends Controller
     {
         $request->validate([
             'nombre' => 'required|string|max:255|unique:carreras',
-            'facultad' => 'nullable|string|max:255',
-            'extension' => 'nullable|string|max:255',
+            'facultad_id' => 'nullable|exists:facultades,id', // Actualizado
             'logo' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
-        $data = $request->only(['nombre', 'facultad', 'extension']);
+        $data = $request->only(['nombre', 'facultad_id']);
 
         if ($request->hasFile('logo')) {
             $path = $request->file('logo')->store('logos', 'public');
@@ -49,14 +48,15 @@ class CarreraController extends Controller
 
         $request->validate([
             'nombre' => 'required|string|max:255|unique:carreras,nombre,' . $id,
-            'facultad' => 'nullable|string|max:255',
-            'extension' => 'nullable|string|max:255',
+            'facultad_id' => 'nullable|exists:facultades,id', // Actualizado
             'logo' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
         $carrera->nombre = $request->nombre;
-        $carrera->facultad = $request->facultad;
-        $carrera->extension = $request->extension;
+        
+        if ($request->has('facultad_id')) {
+            $carrera->facultad_id = $request->facultad_id;
+        }
 
         if ($request->hasFile('logo')) {
             if ($carrera->logo) {
@@ -81,7 +81,7 @@ class CarreraController extends Controller
     }
 
     /**
-     * Nuevo método para sincronizar habilidades con la carrera
+     * Sincronizar habilidades con la carrera
      */
     public function asignarHabilidades(Request $request, $id)
     {
@@ -100,6 +100,22 @@ class CarreraController extends Controller
             'carrera' => $carrera->load('habilidadesBlandas')
         ]);
     }
+
+    /**
+     * Desvincular una carrera de su facultad
+     */
+    public function desvincularFacultad($id)
+    {
+        $carrera = Carrera::findOrFail($id);
+        $carrera->facultad_id = null;
+        $carrera->save();
+
+        return response()->json(['message' => 'Carrera desvinculada correctamente']);
+    }
+
+    /**
+     * Asignar masivamente carreras a una facultad
+     */
     public function asignarFacultad(Request $request)
     {
         $request->validate([
@@ -113,13 +129,5 @@ class CarreraController extends Controller
                ->update(['facultad_id' => $request->facultad_id]);
 
         return response()->json(['message' => 'Carreras asignadas correctamente']);
-    }
-    public function desvincularFacultad($id)
-    {
-        $carrera = Carrera::findOrFail($id);
-        $carrera->facultad_id = null;
-        $carrera->save();
-
-        return response()->json(['message' => 'Carrera desvinculada correctamente']);
     }
 }

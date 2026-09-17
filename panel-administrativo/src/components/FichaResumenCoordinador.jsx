@@ -199,20 +199,27 @@ const FichaResumenCoordinador = () => {
         const pageHeight = doc.internal.pageSize.getHeight(); 
         const nombreCarrera = reporteInfo?.carrera || 'Carrera Desconocida';
 
-        // --- RESOLVER EL LOGO CORRECTO ---
+        // --- RESOLVER LOS LOGOS CORRECTOS ---
         const logoDerecho = await obtenerLogoCarrera(nombreCarrera, reporteInfo?.logo);
+        const logoIzquierdo = await obtenerLogoCarrera(reporteInfo?.facultad, reporteInfo?.logo_facultad);
 
         const dibujarEncabezado = () => {
-            try { doc.addImage(logoIzq, 'PNG', 15, 5, 20, 20); } catch (e) {}
+            try { doc.addImage(logoIzquierdo, 'PNG', 15, 5, 20, 20); } catch (e) {}
             try { doc.addImage(logoDerecho, 'PNG', pageWidth - 35, 5, 20, 20); } catch (e) {}
             
             doc.setFontSize(14); doc.setTextColor(0); doc.setFont("helvetica", "bold");
             doc.text("UNIVERSIDAD ESTATAL DE BOLIVAR", pageWidth / 2, 12, { align: "center" });
-            doc.setFontSize(11); doc.setFont("helvetica", "normal");
-            doc.text("REPORTE CONSOLIDADO POR CICLOS - HABILIDADES BLANDAS", pageWidth / 2, 18, { align: "center" });
+            
+            doc.setFontSize(9); doc.setTextColor(80); doc.setFont("helvetica", "normal");
+            const nombreFacultad = reporteInfo?.facultad ? reporteInfo.facultad.toUpperCase() : "FACULTAD NO ASIGNADA";
+            doc.text(nombreFacultad, pageWidth / 2, 18, { align: "center", maxWidth: pageWidth - 70 });
+            
+            doc.setFontSize(11); doc.setTextColor(0);
+            doc.text("REPORTE CONSOLIDADO POR CICLOS - HABILIDADES BLANDAS", pageWidth / 2, 25, { align: "center" });
+            
             doc.setFontSize(10); doc.setTextColor(80);
-            doc.text(`Periodo: ${filtroPeriodo} | Carrera: ${nombreCarrera}`, pageWidth / 2, 24, { align: "center" });
-            return 32;
+            doc.text(`Periodo: ${filtroPeriodo} | Carrera: ${nombreCarrera}`, pageWidth / 2, 31, { align: "center" });
+            return 38;
         };
 
         let finalY = dibujarEncabezado();
