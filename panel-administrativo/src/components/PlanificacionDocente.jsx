@@ -527,7 +527,7 @@ const PlanificacionDocente = () => {
                                                     <ul className="space-y-2 mb-4">
                                                         {(actividadesPorHabilidad[hab.id] || []).map((act, idx) => (
                                                             <li key={idx} className="flex justify-between items-start bg-white p-3 rounded-lg border border-purple-100 text-sm text-gray-700 shadow-sm">
-                                                                <span className="flex-1 break-words">• {act}</span>
+                                                                <span className="flex-1 break-words">{act}</span>
                                                                 <button onClick={() => eliminarActividad(hab.id, idx)} className="ml-2 text-red-400 hover:text-red-600 shrink-0"><TrashIcon className="h-4 w-4"/></button>
                                                             </li>
                                                         ))}

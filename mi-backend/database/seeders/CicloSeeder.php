@@ -9,7 +9,7 @@ class CicloSeeder extends Seeder
 {
     public function run(): void
     {
-        Ciclo::truncate();
+        
 
         // Ciclos del 1 al 10
         $ciclos = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];

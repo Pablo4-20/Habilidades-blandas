@@ -261,7 +261,14 @@ const AsignarMaterias = () => {
     }));
     
     const opcionesPeriodosForm = periodos.map(p => ({ value: p.nombre, label: p.nombre, subtext: p.activo ? 'Activo' : '' }));
-    const opcionesParalelos = [{ value: 'A', label: 'A' }, { value: 'B', label: 'B' }];
+    
+    // AQUÍ SE AGREGAN LOS PARALELOS C Y D
+    const opcionesParalelos = [
+        { value: 'A', label: 'A' }, 
+        { value: 'B', label: 'B' },
+        { value: 'C', label: 'C' },
+        { value: 'D', label: 'D' }
+    ];
 
     return (
         <div className="space-y-6 animate-fade-in flex flex-col h-full">
@@ -319,7 +326,11 @@ const AsignarMaterias = () => {
                                         <div className="w-full md:w-1/6">
                                             <span className="text-xs font-bold text-gray-400 uppercase">Paralelo</span>
                                             <select className="w-full text-sm border-gray-300 rounded-lg focus:ring-blue-500 bg-gray-50 p-2" value={item.paralelo} onChange={(e) => handleChangeEdicion(item.id, 'paralelo', e.target.value)}>
-                                                <option value="A">A</option><option value="B">B</option>
+                                                {/* AQUÍ SE AGREGAN LOS PARALELOS C Y D EN EDICIÓN */}
+                                                <option value="A">A</option>
+                                                <option value="B">B</option>
+                                                <option value="C">C</option>
+                                                <option value="D">D</option>
                                             </select>
                                         </div>
 
