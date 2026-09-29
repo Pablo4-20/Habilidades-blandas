@@ -11,8 +11,8 @@ class CicloSeeder extends Seeder
     {
         Ciclo::truncate();
 
-        // Ciclos del 1 al 8
-        $ciclos = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'];
+        // Ciclos del 1 al 10
+        $ciclos = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
 
         foreach ($ciclos as $nombre) {
             Ciclo::create(['nombre' => $nombre]);
